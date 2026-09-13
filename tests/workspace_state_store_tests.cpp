@@ -2,6 +2,8 @@
 
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -20,6 +22,7 @@ private slots:
     void migratesVersionFourWithoutSftpListingPreferences();
     void migratesVersionFiveWithoutTerminalWorkspaces();
     void migratesVersionSixWithoutRestoreGuardState();
+    void migratesVersionSevenToWindowOwnership();
     void togglesAndBoundsSftpBookmarks();
     void rejectsMalformedDuplicateAndInvalidState();
     void rejectsMalformedTerminalWorkspaceTopology();
@@ -67,6 +70,8 @@ void WorkspaceStateStoreTests::savesAndLoadsVersionedNonSecretState()
     auto workspace = ztermy::workbench::makeSinglePaneTerminalWorkspace("workspace-a", "pane-a",
                                                                         {.id = "intent-a", .title = "PowerShell"});
     workspace.title = "Operations";
+    workspace.windowId = "detached-window";
+    workspace.returnWorkspaceId = "original-tab";
     QVERIFY(ztermy::workbench::splitTerminalPane(workspace, "pane-a", "split-a", "pane-b",
                                                  {.id = "intent-b",
                                                   .profileId = "host-a",
@@ -86,7 +91,7 @@ void WorkspaceStateStoreTests::savesAndLoadsVersionedNonSecretState()
     QFile file(path);
     QVERIFY(file.open(QIODevice::ReadOnly));
     const QByteArray payload = file.readAll();
-    QVERIFY(payload.contains("schemaVersion"));
+    QCOMPARE(QJsonDocument::fromJson(payload).object().value(QStringLiteral("schemaVersion")).toInt(), 8);
     QVERIFY(payload.contains("terminalWorkspaces"));
     QVERIFY(payload.contains("activeTerminalWorkspaceId"));
     QVERIFY(!payload.contains("password"));
@@ -109,6 +114,32 @@ void WorkspaceStateStoreTests::migratesVersionSixWithoutRestoreGuardState()
     QVERIFY(loaded);
     QVERIFY(loaded->quarantinedRestoreIntentIds.empty());
     QVERIFY(loaded->restoreAttemptIntentId.empty());
+}
+
+void WorkspaceStateStoreTests::migratesVersionSevenToWindowOwnership()
+{
+    QTemporaryDir directory;
+    const QString path = directory.filePath(QStringLiteral("workspace.json"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    const QByteArray payload = R"({"schemaVersion":7,"profiles":[],"collapsedHostSections":["recent"],
+"activeTerminalWorkspaceId":"tab","quarantinedRestoreIntentIds":[],"restoreAttemptIntentId":"",
+"terminalWorkspaces":[{"id":"tab","title":"Saved","rootNodeId":"pane","activePaneId":"pane",
+"nodes":[{"id":"pane","kind":"leaf","restoreIntentId":"intent","firstChildId":"","secondChildId":"","orientation":"horizontal","ratio":0.5}],
+"restoreIntents":[{"id":"intent","kind":"ssh-profile","profileId":"host","title":"Saved"}]}]})";
+    QCOMPARE(file.write(payload), payload.size());
+    file.close();
+    const ztermy::workbench::WorkspaceStateStore store(path);
+    const auto loaded = store.load();
+    QVERIFY(loaded);
+    QCOMPARE(loaded->terminalWorkspaces.front().windowId, std::string("main"));
+    QVERIFY(loaded->terminalWorkspaces.front().returnWorkspaceId.empty());
+    QCOMPARE(loaded->collapsedHostSections, std::vector<std::string>{"recent"});
+    QCOMPARE(loaded->terminalWorkspaces.front().restoreIntents.front().profileId, std::string("host"));
+    QVERIFY(store.save(*loaded));
+    QCOMPARE(*store.load(), *loaded);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value(QStringLiteral("schemaVersion")).toInt(), 8);
 }
 
 void WorkspaceStateStoreTests::migratesVersionFiveWithoutTerminalWorkspaces()

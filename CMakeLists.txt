@@ -351,6 +351,7 @@ add_library(ztermy_workbench_domain STATIC
     src/domain/workbench/ScriptRecorder.cpp
     src/domain/workbench/ScriptRecorder.h
     src/domain/workbench/WorkspaceState.cpp
+    src/domain/workbench/TerminalWorkspaceTransfer.cpp
     src/domain/workbench/WorkspaceState.h
 )
 
@@ -895,6 +896,7 @@ target_link_libraries(ztermy_icon_rendering
 
 add_library(ztermy_application_controller STATIC
     src/application/AppController.cpp
+    src/application/AppControllerWorkspaceTransfers.cpp
     src/application/AppControllerWorkspace.cpp
     src/application/ApplicationInstance.cpp
     src/application/ApplicationInstance.h
@@ -1289,6 +1291,7 @@ set_source_files_properties(
 
 set_source_files_properties(src/ui/qml/TerminalPaneToolbar.qml PROPERTIES QT_RESOURCE_ALIAS TerminalPaneToolbar.qml)
 set_source_files_properties(src/ui/qml/DetachedTerminalWindow.qml PROPERTIES QT_RESOURCE_ALIAS DetachedTerminalWindow.qml)
+set_source_files_properties(src/ui/qml/TerminalWindowCoordinator.qml PROPERTIES QT_RESOURCE_ALIAS TerminalWindowCoordinator.qml)
 set_source_files_properties(src/ui/qml/WindowBehaviorSettings.qml PROPERTIES QT_RESOURCE_ALIAS WindowBehaviorSettings.qml)
 set_source_files_properties(src/ui/qml/TitleWindowActions.qml PROPERTIES QT_RESOURCE_ALIAS TitleWindowActions.qml)
 
@@ -1355,6 +1358,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/TerminalSplitNode.qml
         src/ui/qml/TerminalPaneToolbar.qml
         src/ui/qml/DetachedTerminalWindow.qml
+        src/ui/qml/TerminalWindowCoordinator.qml
         src/ui/qml/WindowBehaviorSettings.qml
         src/ui/qml/TitleWindowActions.qml
         src/ui/qml/TerminalRecordingPopover.qml

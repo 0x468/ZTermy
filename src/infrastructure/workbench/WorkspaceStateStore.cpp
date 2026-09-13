@@ -17,7 +17,7 @@ namespace ztermy::workbench
 namespace
 {
 
-constexpr int currentSchemaVersion = 7;
+constexpr int currentSchemaVersion = 8;
 
 QString text(const std::string &value)
 {
@@ -87,6 +87,8 @@ QJsonObject serializeTerminalWorkspace(const TerminalWorkspaceLayout &layout)
         {QStringLiteral("activePaneId"), text(layout.activePaneId)},
         {QStringLiteral("nodes"), nodes},
         {QStringLiteral("restoreIntents"), intents},
+        {QStringLiteral("windowId"), text(layout.windowId)},
+        {QStringLiteral("returnWorkspaceId"), text(layout.returnWorkspaceId)},
     };
 }
 
@@ -148,7 +150,7 @@ std::optional<TerminalSplitOrientation> parseOrientation(const QJsonValue &value
     return std::nullopt;
 }
 
-std::optional<TerminalWorkspaceLayout> parseTerminalWorkspace(const QJsonValue &value)
+std::optional<TerminalWorkspaceLayout> parseTerminalWorkspace(const QJsonValue &value, const int schemaVersion)
 {
     if (!value.isObject())
     {
@@ -170,6 +172,14 @@ std::optional<TerminalWorkspaceLayout> parseTerminalWorkspace(const QJsonValue &
         .activePaneId = bytes(object.value(QStringLiteral("activePaneId")).toString()),
     };
     const QJsonArray nodes = nodesValue.toArray();
+    if (schemaVersion >= 8)
+    {
+        if (!object.value(QStringLiteral("windowId")).isString()
+            || !object.value(QStringLiteral("returnWorkspaceId")).isString())
+            return std::nullopt;
+        layout.windowId = bytes(object.value(QStringLiteral("windowId")).toString());
+        layout.returnWorkspaceId = bytes(object.value(QStringLiteral("returnWorkspaceId")).toString());
+    }
     layout.nodes.reserve(static_cast<std::size_t>(nodes.size()));
     for (const QJsonValue nodeValue : nodes)
     {
@@ -395,7 +405,7 @@ std::expected<WorkspaceState, WorkspaceStateStoreError> parseWorkspacePayload(co
         state.terminalWorkspaces.reserve(static_cast<std::size_t>(workspaces.size()));
         for (const QJsonValue workspaceValue : workspaces)
         {
-            auto workspace = parseTerminalWorkspace(workspaceValue);
+            auto workspace = parseTerminalWorkspace(workspaceValue, schemaVersion);
             if (!workspace)
             {
                 return std::unexpected(WorkspaceStateStoreError::InvalidDocument);

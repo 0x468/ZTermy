@@ -83,6 +83,8 @@ struct TerminalWorkspaceLayout final
     std::string activePaneId;
     std::vector<TerminalLayoutNode> nodes;
     std::vector<TerminalRestoreIntent> restoreIntents;
+    std::string windowId = "main";
+    std::string returnWorkspaceId;
 
     [[nodiscard]] friend bool operator==(const TerminalWorkspaceLayout &, const TerminalWorkspaceLayout &) = default;
 };

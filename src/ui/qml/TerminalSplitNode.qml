@@ -26,6 +26,7 @@ Item {
     property string defaultCursor: "terminal"
     property string zoomedPaneId: ""
     property bool detachedPane: false
+    property bool managedPaneDrag: false
     property int paneCount: 1
     property bool headersVisible: false
     // Dynamic self-loading is required because QML rejects static recursive type instantiation.
@@ -79,6 +80,11 @@ Item {
         }
     }
 
+    function startQuickSelect() {
+        if (activeViewport)
+            activeViewport.startQuickSelect();
+    }
+
     function scrollLines(rows) {
         if (activeViewport) {
             activeViewport.scrollLines(rows);
@@ -121,7 +127,7 @@ Item {
             readonly property var activeViewport: node.active ? viewport : null
             readonly property bool aiConfigured: !!root.controller && root.controller.aiModel.trim().length > 0 && (root.controller.aiProviderPreference === "openai-chatgpt" ? root.controller.aiChatGptConfigured : root.controller.aiBaseUrl.trim().length > 0 && (root.controller.aiProviderPreference === "ollama" || root.controller.aiApiKeyConfigured))
             readonly property bool connectionProgressRequested: tab.kind === "ssh" && (!!tab.connecting || !!tab.reconnecting)
-            readonly property bool paneHeaderVisible: root.detachedPane || root.headersVisible
+            readonly property bool paneHeaderVisible: root.headersVisible
             property bool connectionProgressVisible: false
             property bool connectionProgressWasReconnect: false
             property int connectionProgressLastStep: 0
@@ -416,7 +422,7 @@ Item {
                     }
                 }
                 onActiveFocusChanged: {
-                    if (activeFocus) {
+                    if (activeFocus && root.Window.window && root.Window.window.active) {
                         root.controller.activateTerminalPane(leaf.node.id);
                     }
                 }
@@ -535,6 +541,8 @@ Item {
 
                 property string paneId: leaf.node.id || ""
                 property bool dropCompleted: false
+                readonly property string paneTitle: leaf.tab.title || leaf.tab.identity || qsTr("Terminal pane")
+                readonly property real dragAreaWidth: width - (paneActions.visible ? paneActions.implicitWidth + 12 : 0)
 
                 anchors.left: parent.left
                 anchors.right: parent.right
@@ -553,12 +561,32 @@ Item {
                 }
                 Item {
                     id: paneDragProxy
-                    x: paneDetachDrag.centroid.position.x
-                    y: paneDetachDrag.centroid.position.y
+                    parent: Overlay.overlay
+                    readonly property point pointerPosition: paneHeader.mapToItem(parent, paneDetachDrag.centroid.position.x, paneDetachDrag.centroid.position.y)
+                    x: pointerPosition.x
+                    y: pointerPosition.y
                     width: 1
                     height: 1
                     Drag.source: paneHeader
                     Drag.keys: ["ztermy-terminal-pane"]
+                    Rectangle {
+                        x: 16
+                        y: 18
+                        width: 220
+                        height: 32
+                        radius: 5
+                        color: Theme.elevatedBackground
+                        border.color: Theme.accent
+                        visible: paneDetachDrag.active && !paneHeader.dropCompleted && !root.detachedPane
+                        Text {
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            text: leaf.tab.title || qsTr("Terminal pane")
+                            elide: Text.ElideRight
+                            color: Theme.text
+                            font.family: Theme.uiFont
+                        }
+                    }
                 }
 
                 Text {
@@ -581,10 +609,19 @@ Item {
                     target: null
                     acceptedButtons: Qt.LeftButton
                     dragThreshold: 10
-                    enabled: !root.detachedPane
+                    enabled: !root.managedPaneDrag
                     onActiveChanged: {
                         if (active) {
+                            if (paneActions.visible && centroid.pressPosition.x > paneHeader.width - paneActions.implicitWidth - 12) {
+                                paneHeader.dropCompleted = true;
+                                return;
+                            }
                             paneHeader.dropCompleted = false;
+                            if (root.detachedPane) {
+                                paneHeader.dropCompleted = true;
+                                root.Window.window.startSystemMove();
+                                return;
+                            }
                             paneDragProxy.Drag.active = true;
                         } else {
                             const point = paneDragProxy.mapToItem(null, 0, 0);
@@ -596,6 +633,15 @@ Item {
                     }
                     onCanceled: paneDragProxy.Drag.cancel()
                 }
+
+                Shortcut {
+                    sequence: "Escape"
+                    enabled: paneDetachDrag.active
+                    onActivated: {
+                        paneHeader.dropCompleted = true;
+                        paneDragProxy.Drag.cancel();
+                    }
+                }
             }
 
             DropArea {
@@ -603,6 +649,7 @@ Item {
 
                 anchors.fill: parent
                 keys: ["ztermy-terminal-pane"]
+                enabled: !root.detachedPane && !root.managedPaneDrag
                 z: 11
                 onEntered: drag => {
                     // qmllint disable missing-property
@@ -611,7 +658,7 @@ Item {
                 }
                 onDropped: drop => {
                     // qmllint disable missing-property
-                    if (!drop.source || drop.source["paneId"] === leaf.node.id)
+                    if (!drop.source || drop.source["dropCompleted"] || drop.source["paneId"] === leaf.node.id)
                         return;
                     const horizontalEdge = drop.x < width * 0.25 || drop.x > width * 0.75;
                     const center = !horizontalEdge && drop.y >= height * 0.25 && drop.y <= height * 0.75;
@@ -621,7 +668,9 @@ Item {
                     const targetId = leaf.node.id;
                     drop.source["dropCompleted"] = true;
                     drop.acceptProposedAction();
-                    Qt.callLater(() => root.controller.moveTerminalPane(sourceId, targetId, orientation, placeAfter));
+                    Qt.callLater(() => {
+                        root.controller.moveTerminalPane(sourceId, targetId, orientation, placeAfter);
+                    });
                     // qmllint enable missing-property
                 }
 
@@ -1115,6 +1164,7 @@ Item {
                         item.defaultCursor = root.defaultCursor;
                         item.zoomedPaneId = root.zoomedPaneId;
                         item.detachedPane = root.detachedPane;
+                        item.managedPaneDrag = Qt.binding(() => root.managedPaneDrag);
                         item.paneCount = Qt.binding(() => root.paneCount);
                         item.headersVisible = Qt.binding(() => root.headersVisible);
                     }
@@ -1284,6 +1334,7 @@ Item {
                         item.defaultCursor = root.defaultCursor;
                         item.zoomedPaneId = root.zoomedPaneId;
                         item.detachedPane = root.detachedPane;
+                        item.managedPaneDrag = Qt.binding(() => root.managedPaneDrag);
                         item.paneCount = Qt.binding(() => root.paneCount);
                         item.headersVisible = Qt.binding(() => root.headersVisible);
                     }

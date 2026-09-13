@@ -1,5 +1,6 @@
 #include "domain/workbench/ScriptRecorder.h"
 #include "domain/workbench/ShellHistory.h"
+#include "domain/workbench/TerminalWorkspaceTransfer.h"
 #include "domain/workbench/WorkspaceState.h"
 
 #include <QTest>
@@ -21,7 +22,96 @@ private slots:
     void recordsOnlyStructuredCommandsWithBoundedDelays();
     void mutatesBoundedTerminalWorkspaceTreeAtomically();
     void rejectsInvalidTerminalWorkspaceTopology();
+    void transfersWholeTreesAndLeavesWithoutChangingIdentity();
+    void rejectsTransfersAtomically();
 };
+
+void WorkbenchDomainTests::transfersWholeTreesAndLeavesWithoutChangingIdentity()
+{
+    using namespace ztermy::workbench;
+    WorkspaceState state;
+    auto first = makeSinglePaneTerminalWorkspace("first", "a", {.id = "session-a"});
+    QVERIFY(splitTerminalPane(first, "a", "ab", "b", {.id = "session-b"}, TerminalSplitOrientation::Vertical, 0.63));
+    state.terminalWorkspaces = {first, makeSinglePaneTerminalWorkspace("second", "c", {.id = "session-c"})};
+    state.activeTerminalWorkspaceId = "first";
+    TerminalWorkspaceTransfer transfer{.kind = TerminalTransferKind::MergeWorkspace,
+                                       .sourceWorkspaceId = "first",
+                                       .targetWorkspaceId = "second",
+                                       .targetPaneId = "c",
+                                       .splitNodeId = "merged"};
+    QVERIFY(transferTerminalWorkspace(state, transfer));
+    QCOMPARE(state.terminalWorkspaces.size(), std::size_t{1});
+    QCOMPARE(terminalPaneOrder(state.terminalWorkspaces.front()), (std::vector<std::string>{"c", "a", "b"}));
+    const auto &nodes = state.terminalWorkspaces.front().nodes;
+    QVERIFY(std::ranges::find(nodes, first.nodes.back()) != nodes.end());
+    const auto merged = state;
+    QVERIFY(!transferTerminalWorkspace(state, transfer));
+    QCOMPARE(state, merged);
+
+    transfer = {.kind = TerminalTransferKind::ExtractPane,
+                .sourceWorkspaceId = "second",
+                .sourcePaneId = "b",
+                .targetWorkspaceId = "third"};
+    QVERIFY(transferTerminalWorkspace(state, transfer));
+    QCOMPARE(state.terminalWorkspaces.back().restoreIntents.front().id, std::string("session-b"));
+    transfer = {.kind = TerminalTransferKind::SwapPanes,
+                .sourceWorkspaceId = "third",
+                .sourcePaneId = "b",
+                .targetWorkspaceId = "second",
+                .targetPaneId = "a"};
+    QVERIFY(transferTerminalWorkspace(state, transfer));
+    QCOMPARE(state.terminalWorkspaces.back().rootNodeId, std::string("a"));
+    QCOMPARE(state.terminalWorkspaces.back().restoreIntents.front().id, std::string("session-a"));
+    QCOMPARE(terminalPaneOrder(state.terminalWorkspaces.front()), (std::vector<std::string>{"c", "b"}));
+    transfer = {.kind = TerminalTransferKind::SwapPanes,
+                .sourceWorkspaceId = "second",
+                .sourcePaneId = "b",
+                .targetWorkspaceId = "second",
+                .targetPaneId = "c"};
+    const auto intents = state.terminalWorkspaces.front().restoreIntents;
+    QVERIFY(transferTerminalWorkspace(state, transfer));
+    QCOMPARE(state.terminalWorkspaces.front().restoreIntents, intents);
+    QCOMPARE(terminalPaneOrder(state.terminalWorkspaces.front()), (std::vector<std::string>{"b", "c"}));
+    transfer = {.sourceWorkspaceId = "third",
+                .sourcePaneId = "a",
+                .targetWorkspaceId = "second",
+                .targetPaneId = "b",
+                .splitNodeId = "return"};
+    QVERIFY(transferTerminalWorkspace(state, transfer));
+    QCOMPARE(state.terminalWorkspaces.size(), std::size_t{1});
+    QCOMPARE(terminalPaneOrder(state.terminalWorkspaces.front()), (std::vector<std::string>{"b", "a", "c"}));
+    QVERIFY(validWorkspaceState(state));
+}
+
+void WorkbenchDomainTests::rejectsTransfersAtomically()
+{
+    using namespace ztermy::workbench;
+    WorkspaceState state;
+    auto full = makeSinglePaneTerminalWorkspace("full", "a", {.id = "session-a"});
+    for (int i = 0; i < 7; ++i)
+        QVERIFY(splitTerminalPane(full, "a", "split" + std::to_string(i), "pane" + std::to_string(i),
+                                  {.id = "session" + std::to_string(i)}, TerminalSplitOrientation::Horizontal));
+    state.terminalWorkspaces = {full, makeSinglePaneTerminalWorkspace("source", "b", {.id = "session-b"})};
+    state.activeTerminalWorkspaceId = "full";
+    const auto before = state;
+    TerminalWorkspaceTransfer transfer{.kind = TerminalTransferKind::MergeWorkspace,
+                                       .sourceWorkspaceId = "source",
+                                       .targetWorkspaceId = "full",
+                                       .targetPaneId = "a",
+                                       .splitNodeId = "new"};
+    QVERIFY(!transferTerminalWorkspace(state, transfer));
+    QCOMPARE(state, before);
+    transfer.kind = TerminalTransferKind::MovePane;
+    transfer.sourcePaneId = "b";
+    QVERIFY(!transferTerminalWorkspace(state, transfer));
+    QCOMPARE(state, before);
+    transfer.targetPaneId = "gone";
+    QVERIFY(!transferTerminalWorkspace(state, transfer));
+    QCOMPARE(state, before);
+    transfer.kind = TerminalTransferKind::ExtractPane;
+    QVERIFY(!transferTerminalWorkspace(state, transfer));
+    QCOMPARE(state, before);
+}
 
 void WorkbenchDomainTests::recordsOnlyStructuredCommandsWithBoundedDelays()
 {

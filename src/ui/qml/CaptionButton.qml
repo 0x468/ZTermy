@@ -8,6 +8,7 @@ Control {
     required property var chrome
     property bool externallyHovered: false
     property bool externallyPressed: false
+    property bool nativeMaximizeHandling: true
     property string accessibleName: ""
     readonly property bool effectiveHovered: externallyHovered || control.hovered || mouseArea.containsMouse
     readonly property bool effectivePressed: externallyPressed || mouseArea.pressed
@@ -107,7 +108,7 @@ Control {
     MouseArea {
         id: mouseArea
         anchors.fill: parent
-        enabled: control.kind !== "maximize"
+        enabled: control.kind !== "maximize" || !control.nativeMaximizeHandling
         hoverEnabled: true
         onContainsMouseChanged: icon.requestPaint()
         onClicked: control.activated()

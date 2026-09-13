@@ -9,12 +9,13 @@ Rectangle {
 
     required property var controller
     required property color iconColor
+    property var tabs: controller.terminalTabs
     signal terminalActivated(string tabId)
     signal terminalCloseRequested(var tab)
 
     implicitWidth: visible ? 26 : 0
     implicitHeight: Theme.titleBarHeight
-    visible: controller.terminalTabs.length > 1
+    visible: tabs.length > 1
     color: "transparent"
 
     Row {
@@ -57,7 +58,7 @@ Rectangle {
         width: 320
 
         Instantiator {
-            model: control.controller.terminalTabs
+            model: control.tabs
             delegate: AppMenuItem {
                 id: entry
                 required property var modelData
@@ -91,7 +92,13 @@ Rectangle {
                         Layout.preferredWidth: 28
                         Layout.preferredHeight: 28
                         focusPolicy: Qt.TabFocus
-                        background: Item {}
+                        hoverEnabled: true
+                        background: Rectangle {
+                            radius: 5
+                            color: close.down ? Theme.controlPressed : close.hovered || close.visualFocus ? Theme.borderStrong : "transparent"
+                            border.color: close.visualFocus ? Theme.focus : "transparent"
+                            border.width: close.visualFocus ? 1 : 0
+                        }
                         Accessible.name: qsTr("Close %1").arg(entry.modelData.title)
                         contentItem: AppIcon {
                             name: "close"

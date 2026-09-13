@@ -2,8 +2,9 @@
 
 ## Status
 
-Proposed — design review only. No implementation, schema change, or replacement
-of ADR 0008 / ADR 0050 is authorized until the owner approves this proposal.
+Accepted on 2026-09-13. Implementation is authorized and tracked under V5.5.
+This decision supersedes the one-session-per-tab ownership assumption in ADR
+0008 and extends ADR 0050; acceptance does not imply implementation is complete.
 
 ## Context
 
@@ -20,7 +21,7 @@ The owner wants pane reordering and conversion among pane, tab, and native
 window, but terminal input, independent connections, and the current fast
 background shutdown take priority over a rich drag animation.
 
-## Proposed decision
+## Decision
 
 Use five distinct identities, with one-way ownership and stable IDs:
 
@@ -107,15 +108,17 @@ and offer a safe fallback tab instead of repeatedly crashing startup.
 3. Give two panes the same session. Reject: input ownership, resize, copy mode,
    and selection would become ambiguous and violate connection independence.
 
-## Boundaries and approval questions
+## Boundaries and owner decisions
 
 - No external Agent/harness integration and no third-party icon/code copying.
 - No new Shell input interception; completion and editing remain with Shells.
-- No implementation of cross-tab/window ownership before explicit approval.
-- Approval must settle the user-facing choices in the companion interaction
-  proposal: where a one-pane window reattaches, whether whole-tab merge is
-  enabled initially, and what confirmation closes a window containing active
-  sessions.
+- A single-pane detached window reattaches to its original tab if that tab
+  still exists; otherwise it becomes a new tab. If the original tab is full,
+  use a new tab without discarding or closing sessions.
+- Whole multi-pane tab merging is included in the first implementation stage.
+- Confirm window closure only when it will end active sessions. Moving,
+  reattaching, or closing a window containing only ended sessions needs no
+  confirmation.
 
 ## Implementation gates after approval
 
@@ -129,6 +132,43 @@ and offer a safe fallback tab instead of repeatedly crashing startup.
    the milestone. Preserve a downgrade/backup path for schema changes.
 
 ## Evidence and references
+
+### Implementation checkpoint (2026-09-13, in progress)
+
+Later owner decision on 2026-09-13 supersedes close confirmation and whole-tab
+drag gestures: explicit tab/window close and tray Exit no longer require a second
+confirmation. Tab-title dragging only reorders tabs; pane-title dragging owns
+insertion, layout transfer and detachment. Embedded pane drags are captured by
+the stable main-window surface so hovering another tab cannot destroy the drag's
+source identity. Default product accent colors now use purple variants; custom
+and system accent choices remain unchanged.
+
+Owner feedback amendment, later on 2026-09-13: new detached windows are temporarily
+single-pane surfaces, with hidden-by-default pane headers and custom frameless
+window controls. They cannot receive additional panes; whole-tree merges between
+main-window tabs remain in scope. Dropping between tabs inserts a new tab at that
+position; dropping on a tab or pane merges there. The restore button retains the
+original-tab fallback policy. See [feedback and manual checklist](../testing/V5_TAB_DRAG_OWNER_FEEDBACK.md).
+These latest changes are compile-only by owner request, not runtime-accepted.
+
+- `TerminalSessionState` now holds the existing independently owned backend and
+  sidecars. `AppController` retains its `TerminalTab` alias during the transition;
+  layout moves preserve the same owning `unique_ptr` and session IDs.
+- `TerminalWorkspaceTransfer` operates on a candidate `WorkspaceState`, covering
+  same/cross-workspace leaf movement, stable-ID swaps, extraction and subtree
+  merge. Controller persistence succeeds before publishing new membership.
+- Workspace schema 8 records `windowId` and `returnWorkspaceId`. Schema 7 defaults
+  to the main window; restore intent, quarantine and unrelated fields survive.
+- `TerminalWindowCoordinator` creates independent Qt windows for detached
+  workspaces. It no longer removes a pane only from a QML projection. Window
+  geometry persistence and the full cross-window gesture matrix remain open
+  verification/implementation items; do not infer completion from this checkpoint.
+- View signal connections use a QObject context destroyed on rebinding, so Qt
+  drops queued deliveries to retired bindings. Transfers reject ongoing IME
+  preedit and pending host-key decisions instead of moving their input target.
+- The current in-process UI marks each drop as completed before scheduling it.
+  A general command-ID/revision protocol is not yet implemented; duplicate or
+  stale gesture coverage remains an explicit gate.
 
 - Current ownership: `src/application/AppController.h` (`TerminalTab`),
   `src/domain/workbench/WorkspaceState.h` (`TerminalWorkspaceLayout`),

@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Controls
 
 Rectangle {
     id: control
@@ -21,6 +22,8 @@ Rectangle {
     property string closeButtonMode: "hover"
     property string actionObjectName: ""
     property string closeActionObjectName: ""
+    property string workspaceId: ""
+    property bool dropCompleted: false
     readonly property bool hovered: activateAction.hovered || closeAction.hovered
     signal activated
     signal closeRequested
@@ -32,7 +35,7 @@ Rectangle {
     signal moveLeftRequested
     signal moveRightRequested
     signal dragMoved(real sceneX)
-    signal dragFinished(real sceneX)
+    signal dragFinished(real sceneX, real sceneY)
 
     implicitWidth: compact ? 38 : 112
     implicitHeight: Theme.titleBarHeight
@@ -121,19 +124,62 @@ Rectangle {
         }
     }
 
+    Item {
+        id: workspaceDragProxy
+        parent: Overlay.overlay
+        readonly property point pointerPosition: control.mapToItem(parent, reorderDrag.centroid.position.x, reorderDrag.centroid.position.y)
+        x: pointerPosition.x
+        y: pointerPosition.y
+        width: 1
+        height: 1
+        Rectangle {
+            x: 16
+            y: 18
+            width: 220
+            height: 32
+            radius: 5
+            color: Theme.elevatedBackground
+            border.color: Theme.accent
+            visible: reorderDrag.active && !control.dropCompleted
+            Text {
+                anchors.fill: parent
+                anchors.margins: 8
+                text: control.title
+                elide: Text.ElideRight
+                color: Theme.text
+                font.family: Theme.uiFont
+            }
+        }
+    }
+
     DragHandler {
         id: reorderDrag
 
         target: null
         acceptedButtons: Qt.LeftButton
         dragThreshold: 8
+        enabled: control.workspaceId.length > 0
         onCentroidChanged: {
             if (active)
                 control.dragMoved(centroid.scenePosition.x);
         }
         onActiveChanged: {
-            if (!active)
-                control.dragFinished(centroid.scenePosition.x);
+            if (active) {
+                control.dropCompleted = false;
+            } else {
+                control.dragFinished(centroid.scenePosition.x, centroid.scenePosition.y);
+            }
+        }
+        onCanceled: {
+            control.dropCompleted = true;
+        }
+    }
+
+    Shortcut {
+        sequence: "Escape"
+        enabled: reorderDrag.active
+        onActivated: {
+            control.dropCompleted = true;
         }
     }
 

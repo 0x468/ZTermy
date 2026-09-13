@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Window
 
 RowLayout {
     id: root
@@ -16,7 +17,7 @@ RowLayout {
     signal detachRequested
     signal toggleHeadersRequested
     spacing: 2
-    opacity: headersVisible || hover.hovered || newPaneMenu.visible || !dimmed ? 1 : 0.18
+    opacity: headersVisible || hover.hovered || activeFocus || newPaneMenu.visible || !dimmed ? 1 : detached ? 0 : 0.18
 
     Behavior on opacity {
         NumberAnimation {
@@ -55,7 +56,7 @@ RowLayout {
                 id: "headers",
                 icon: "list",
                 label: root.headersVisible ? qsTr("Hide headers") : qsTr("Show headers"),
-                shown: !root.detached
+                shown: true
             },
             {
                 id: "zoom",
@@ -122,6 +123,34 @@ RowLayout {
                         root.controller.closeActiveTerminalPane();
                     break;
                 }
+            }
+        }
+    }
+    QtObject {
+        id: detachedChrome
+        readonly property bool maximized: root.Window.window && root.Window.window.visibility === Window.Maximized
+    }
+    Repeater {
+        model: root.detached ? ["minimize", "maximize", "close"] : []
+        delegate: CaptionButton {
+            required property string modelData
+            Layout.preferredWidth: 32
+            Layout.preferredHeight: 28
+            kind: modelData
+            chrome: detachedChrome
+            nativeMaximizeHandling: false
+            accessibleName: modelData === "minimize" ? qsTranslate("TitleWindowActions", "Minimize") : modelData === "close" ? qsTranslate("TitleWindowActions", "Close") : detachedChrome.maximized ? qsTranslate("TitleWindowActions", "Restore") : qsTranslate("TitleWindowActions", "Maximize")
+            onActivated: {
+                const window = root.Window.window;
+                if (modelData === "minimize")
+                    window.showMinimized();
+                else if (modelData === "maximize") {
+                    if (detachedChrome.maximized)
+                        window.showNormal();
+                    else
+                        window.showMaximized();
+                } else
+                    window.close();
             }
         }
     }

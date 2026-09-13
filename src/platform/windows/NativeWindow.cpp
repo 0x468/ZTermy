@@ -1,4 +1,6 @@
 #include "platform/windows/NativeWindow.h"
+#include <QCursor>
+#include <QTimer>
 
 #include "platform/windows/WindowHitTest.h"
 
@@ -120,6 +122,7 @@ NativeWindow::NativeWindow(const bool performanceMode, const bool opaqueSurface,
 
 NativeWindow::~NativeWindow()
 {
+    QCoreApplication::instance()->removeNativeEventFilter(this);
     removeTrayIcon();
     uninstallWindowProcedure();
 }
@@ -369,6 +372,13 @@ bool NativeWindow::event(QEvent *event)
         hide();
         event->ignore();
         return true;
+    }
+
+    if (event->type() == QEvent::Close && rootObject())
+    {
+        emit windowClosing(m_exitingFromTray);
+        if (m_exitingFromTray)
+            QTimer::singleShot(0, QCoreApplication::instance(), &QCoreApplication::quit);
     }
 
     const bool handled = QQuickView::event(event);
@@ -906,9 +916,57 @@ void NativeWindow::restoreFromTray()
 void NativeWindow::exitFromTray()
 {
     m_exitingFromTray = true;
-    removeTrayIcon();
     close();
-    QCoreApplication::quit();
+}
+
+bool NativeWindow::nativeEventFilter(const QByteArray &, void *message, qintptr *result)
+{
+    const auto *native = static_cast<MSG *>(message);
+    if (!native)
+        return false;
+    const auto window = m_detachedWindows.value(reinterpret_cast<WId>(native->hwnd));
+    if (!window)
+        return false;
+    if (native->message == WM_ENTERSIZEMOVE)
+        window->setProperty("transferStartPosition", window->position());
+    if (native->message == WM_MOVING)
+        emit detachedWindowMoving(window, QCursor::pos());
+    if (native->message == WM_EXITSIZEMOVE)
+        emit detachedWindowMoved(window, QCursor::pos(),
+                                 GetAsyncKeyState(VK_ESCAPE) < 0
+                                     || window->property("transferStartPosition").toPoint() == window->position());
+    if (native->message == WM_NCCALCSIZE && native->wParam != FALSE)
+    {
+        if (IsZoomed(native->hwnd) != FALSE)
+        {
+            MONITORINFO monitor{.cbSize = sizeof(MONITORINFO)};
+            if (GetMonitorInfoW(MonitorFromWindow(native->hwnd, MONITOR_DEFAULTTONEAREST), &monitor) != FALSE)
+            {
+                auto *parameters =
+                    reinterpret_cast<NCCALCSIZE_PARAMS *>(native->lParam); // NOLINT(performance-no-int-to-ptr)
+                parameters->rgrc[0] = monitor.rcWork;
+            }
+        }
+        *result = 0;
+        return true;
+    }
+    if (native->message == WM_NCHITTEST)
+    {
+        RECT bounds{};
+        if (GetWindowRect(native->hwnd, &bounds) == FALSE)
+            return false;
+        const windowing::HitTestMetrics metrics{
+            .resizeBorder = GetSystemMetricsForDpi(SM_CXSIZEFRAME, GetDpiForWindow(native->hwnd))
+                            + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, GetDpiForWindow(native->hwnd)),
+            .caption = {},
+            .maximizeButton = {}};
+        *result = toNativeHitArea(windowing::classifyHitTest(
+            {.x = GET_X_LPARAM(native->lParam) - bounds.left, .y = GET_Y_LPARAM(native->lParam) - bounds.top},
+            {.width = bounds.right - bounds.left, .height = bounds.bottom - bounds.top}, metrics,
+            IsZoomed(native->hwnd) != FALSE));
+        return true;
+    }
+    return false;
 }
 
 bool NativeWindow::configureDetachedWindow(QQuickWindow *window)
@@ -916,6 +974,22 @@ bool NativeWindow::configureDetachedWindow(QQuickWindow *window)
     if (!window)
         return false;
     window->setIcon(icon());
+    const WId id = window->winId();
+    if (!m_detachedWindows.contains(id))
+    {
+        m_detachedWindows.insert(id, window);
+        connect(window, &QObject::destroyed, this, [this, id] {
+            m_detachedWindows.remove(id);
+        });
+        QCoreApplication::instance()->installNativeEventFilter(this);
+        const auto handle = reinterpret_cast<HWND>(id); // NOLINT(performance-no-int-to-ptr)
+        auto style = GetWindowLongPtrW(handle, GWL_STYLE);
+        style |= WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
+        style &= ~WS_SYSMENU;
+        SetWindowLongPtrW(handle, GWL_STYLE, style);
+        SetWindowPos(handle, nullptr, 0, 0, 0, 0,
+                     SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
     return applyBackdrop(window);
 }
 

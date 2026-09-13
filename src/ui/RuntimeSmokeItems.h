@@ -11,32 +11,6 @@ namespace ztermy::ui
     return rootObject == nullptr ? nullptr : rootObject->findChild<QQuickItem *>(QString::fromLatin1(objectName));
 }
 
-[[nodiscard]] inline QQuickItem *visualQuickItem(QQuickItem *rootObject, const char *objectName)
-{
-    if (rootObject == nullptr)
-    {
-        return nullptr;
-    }
-    const QString expectedName = QString::fromLatin1(objectName);
-    std::vector<QQuickItem *> pending{rootObject};
-    QQuickItem *fallback = nullptr;
-    for (std::size_t index = 0; index < pending.size(); ++index)
-    {
-        QQuickItem *candidate = pending[index];
-        if (candidate->objectName() == expectedName)
-        {
-            fallback = fallback == nullptr ? candidate : fallback;
-            if (candidate->isVisible())
-            {
-                return candidate;
-            }
-        }
-        const QList<QQuickItem *> children = candidate->childItems();
-        pending.insert(pending.end(), children.cbegin(), children.cend());
-    }
-    return fallback;
-}
-
 [[nodiscard]] inline QString namedFocusItem(const ztermy::NativeWindow &window)
 {
     for (QQuickItem *item = window.activeFocusItem(); item != nullptr; item = item->parentItem())

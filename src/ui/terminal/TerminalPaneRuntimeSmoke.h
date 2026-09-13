@@ -9,6 +9,7 @@
 #include <QGuiApplication>
 #include <QQuickItem>
 #include <QTimer>
+#include <vector>
 
 QT_BEGIN_NAMESPACE
 Q_GUI_EXPORT void qt_handleMouseEvent(QWindow *window, const QPointF &local, const QPointF &global,
@@ -18,6 +19,31 @@ QT_END_NAMESPACE
 
 namespace ztermy::ui
 {
+[[nodiscard]] inline QQuickItem *visualQuickItem(QQuickItem *rootObject, const char *objectName)
+{
+    if (rootObject == nullptr)
+    {
+        return nullptr;
+    }
+    const QString expectedName = QString::fromLatin1(objectName);
+    std::vector<QQuickItem *> pending{rootObject};
+    QQuickItem *fallback = nullptr;
+    for (std::size_t index = 0; index < pending.size(); ++index)
+    {
+        QQuickItem *candidate = pending[index];
+        if (candidate->objectName() == expectedName)
+        {
+            fallback = fallback == nullptr ? candidate : fallback;
+            if (candidate->isVisible())
+            {
+                return candidate;
+            }
+        }
+        const QList<QQuickItem *> children = candidate->childItems();
+        pending.insert(pending.end(), children.cbegin(), children.cend());
+    }
+    return fallback;
+}
 inline void processWindowEventsFor(const std::chrono::milliseconds duration)
 {
     QEventLoop loop;
@@ -36,6 +62,14 @@ inline void settleWindowLayout(QQuickWindow &window)
         processWindowEventsFor(std::chrono::milliseconds{50});
     }
     static_cast<void>(window.grabWindow());
+}
+
+inline bool terminalWorkspaceViewsReady(NativeWindow &window, AppController &controller)
+{
+    const auto workspace = controller.activeTerminalWorkspace();
+    const auto paneId = workspace.value(QStringLiteral("activePaneId")).toString();
+    return workspace.value(QStringLiteral("paneCount")).toInt() == 2
+           && window.findChild<TerminalItem *>(QStringLiteral("terminalViewport-") + paneId) != nullptr;
 }
 inline bool verifyWorkbenchResizeWhileDragging(NativeWindow &window, AppController &controller)
 {
@@ -77,6 +111,50 @@ inline bool verifyWorkbenchResizeWhileDragging(NativeWindow &window, AppControll
     return liveResize && committed;
 }
 // In-process Qt regression check; uses an isolated smoke data directory and
+inline bool verifyWholeTabMouseMerge(NativeWindow &window, AppController &controller, const QString &workspaceId,
+                                     const QString &otherId, const QString &paneId)
+{
+    bool passed = true;
+    controller.activateTerminalTab(otherId);
+    settleWindowLayout(window);
+    const QString destinationPaneId =
+        controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString();
+    auto *sourceTab =
+        visualQuickItem(window.rootObject(), (QStringLiteral("workspaceTitle-") + workspaceId).toLatin1().constData());
+    auto *destinationView = window.findChild<TerminalItem *>(QStringLiteral("terminalViewport-") + destinationPaneId);
+    if (sourceTab && destinationView)
+    {
+        const QPointF start = sourceTab->mapToScene({sourceTab->width() / 2, sourceTab->height() / 2});
+        const QPointF end =
+            destinationView->mapToScene({destinationView->width() / 2, destinationView->height() * 0.1});
+        const auto send = [&window](const QPointF &point, Qt::MouseButtons buttons, Qt::MouseButton button,
+                                    QEvent::Type type) {
+            qt_handleMouseEvent(&window, point, window.mapToGlobal(point.toPoint()), buttons, button, type,
+                                Qt::NoModifier, static_cast<int>(GetTickCount()));
+            processWindowEventsFor(std::chrono::milliseconds{40});
+        };
+        send(start, Qt::LeftButton, Qt::LeftButton, QEvent::MouseButtonPress);
+        for (int step = 1; step <= 12; ++step)
+            send(start + (end - start) * (static_cast<double>(step) / 12.0), Qt::LeftButton, Qt::NoButton,
+                 QEvent::MouseMove);
+        send(end, Qt::NoButton, Qt::LeftButton, QEvent::MouseButtonRelease);
+        processWindowEventsFor(std::chrono::milliseconds{250});
+        const bool unchanged = controller.terminalWorkspace(workspaceId).value(QStringLiteral("paneCount")).toInt() == 2
+                               && controller.terminalWorkspace(otherId).value(QStringLiteral("paneCount")).toInt() == 1;
+        qInfo() << "Tab drag into terminal does not merge or detach workspaces:" << unchanged;
+        passed = passed && unchanged;
+        controller.closeTerminalTab(otherId);
+    }
+    else
+    {
+        qWarning() << "Workspace drag source or destination was not found";
+        passed = false;
+        controller.closeTerminalTab(otherId);
+    }
+    controller.activateTerminalPane(paneId);
+    processWindowEventsFor(std::chrono::milliseconds{250});
+    return passed;
+}
 // creates no remote sessions or additional terminal input.
 inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppController &controller,
                                                  const QString &outputDirectory)
@@ -93,11 +171,29 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
     settle();
     auto *pane = window.findChild<TerminalItem *>(QStringLiteral("terminalViewport-") + paneId);
     bool passed = pane && pane->y() >= 32;
+    qInfo() << "Window transfer header geometry:" << passed;
     const auto layout = controller.activeTerminalWorkspace().value(QStringLiteral("root")).toMap();
     const QString firstId = layout.value(QStringLiteral("first")).toMap().value(QStringLiteral("id")).toString();
     const QString secondId = layout.value(QStringLiteral("second")).toMap().value(QStringLiteral("id")).toString();
     auto *header = window.findChild<QQuickItem *>(QStringLiteral("terminalPaneHeader-") + firstId);
     auto *targetPane = window.findChild<TerminalItem *>(QStringLiteral("terminalViewport-") + secondId);
+    if (targetPane)
+    {
+        TerminalItem replacement;
+        controller.attachTerminalViewport(secondId, &replacement);
+        controller.activateTerminalPane(firstId);
+        // Empty input checks activation routing without injecting shell input.
+        targetPane->inputGenerated({});
+        const bool staleIgnored =
+            controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString() == firstId;
+        replacement.inputGenerated({});
+        const bool currentAccepted =
+            controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString() == secondId;
+        controller.detachTerminalViewport(secondId, &replacement);
+        controller.attachTerminalViewport(secondId, targetPane);
+        passed = passed && staleIgnored && currentAccepted;
+        qInfo() << "Replaced viewport cannot activate or send input:" << staleIgnored << currentAccepted;
+    }
     if (header && targetPane)
     {
         const auto send = [&window](const QPointF &point, Qt::MouseButtons buttons, Qt::MouseButton button,
@@ -148,6 +244,7 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
     settle();
     passed = passed && !otherId.isEmpty() && root->property("zoomedTerminalPaneId").toString().isEmpty()
              && !root->property("paneHeadersVisible").toBool();
+    qInfo() << "Window transfer isolated zoom/header state:" << passed;
     QMetaObject::invokeMethod(root, "toggleTerminalPaneHeaders");
     settle();
     const QString singlePaneId = controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString();
@@ -169,6 +266,7 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
         send(end, Qt::NoButton, Qt::LeftButton, QEvent::MouseButtonRelease);
         settle();
         passed = passed && root->property("detachedTerminalPaneId").toString() == singlePaneId;
+        qInfo() << "Window transfer single-pane detach:" << passed;
         QMetaObject::invokeMethod(root, "reattachTerminalPane");
         settle();
     }
@@ -177,15 +275,23 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
     controller.activateTerminalTab(workspaceId);
     settle();
     passed = passed && root->property("zoomedTerminalPaneId").toString() == paneId;
+    qInfo() << "Window transfer original zoom restored:" << passed;
     QMetaObject::invokeMethod(root, "toggleTerminalPaneZoom", Q_ARG(QVariant, paneId));
     QMetaObject::invokeMethod(root, "detachTerminalPane", Q_ARG(QVariant, paneId));
     settle();
+    const QString detachedWorkspaceId = root->property("detachedTerminalWorkspaceId").toString();
+    passed = passed && detachedWorkspaceId != workspaceId
+             && controller.terminalWorkspace(workspaceId).value(QStringLiteral("paneCount")).toInt() == 1
+             && controller.terminalWorkspace(detachedWorkspaceId).value(QStringLiteral("paneCount")).toInt() == 1;
+    qInfo() << "Window transfer extracted model ownership:" << passed;
 
     QQuickWindow *detached = nullptr;
     for (auto *candidate : QGuiApplication::allWindows())
-        if (candidate->objectName() == QStringLiteral("detachedTerminalWindow"))
+        if (candidate->objectName() == QStringLiteral("detachedTerminalWindow")
+            && candidate->property("workspaceId").toString() == detachedWorkspaceId)
             detached = qobject_cast<QQuickWindow *>(candidate);
     passed = passed && detached && detached->isVisible() && !detached->transientParent();
+    qInfo() << "Window transfer independent native window:" << passed;
     if (detached)
     {
         const auto handle = reinterpret_cast<HWND>(detached->winId()); // NOLINT(performance-no-int-to-ptr)
@@ -206,14 +312,31 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
         detached->resize(originalSize);
         controller.activateTerminalTab(otherId);
         settle();
-        passed =
-            passed && detached->isVisible() && root->property("detachedTerminalWorkspaceId").toString() == workspaceId;
+        passed = passed && detached->isVisible()
+                 && root->property("detachedTerminalWorkspaceId").toString() == detachedWorkspaceId;
     }
     QMetaObject::invokeMethod(root, "reattachTerminalPane");
-    controller.closeTerminalTab(otherId);
-    controller.activateTerminalTab(workspaceId);
-    settle();
+    qInfo() << "Window transfer native material and reattachment:" << passed;
+    passed = verifyWholeTabMouseMerge(window, controller, workspaceId, otherId, paneId) && passed;
     qInfo() << "Pane headers, per-workspace zoom, detached taskbar/resize regression:" << passed;
     return passed;
+}
+inline bool runWorkspaceTransferRuntimeSmoke(NativeWindow &window, AppController &controller,
+                                             const QString &outputDirectory)
+{
+    if (controller.startLocalTerminalWithShell(QStringLiteral("commandPrompt")).isEmpty()
+        || !controller.splitActiveTerminal(QStringLiteral("horizontal"), true))
+        return false;
+    window.rootObject()->setProperty("currentPage", QStringLiteral("terminal"));
+    settleWindowLayout(window);
+    if (QCoreApplication::arguments().contains(QStringLiteral("--workspace-merge-only")))
+    {
+        const auto workspaceId = controller.activeTerminalTabId();
+        const auto paneId = controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString();
+        const auto otherId = controller.startLocalTerminalWithShell(QStringLiteral("commandPrompt"));
+        return verifyWholeTabMouseMerge(window, controller, workspaceId, otherId, paneId);
+    }
+    return terminalWorkspaceViewsReady(window, controller)
+           && verifyTerminalPaneWindowInteractions(window, controller, outputDirectory);
 }
 } // namespace ztermy::ui

@@ -2,7 +2,10 @@
 
 #include "platform/windows/WindowsUiSettings.h"
 
+#include <QAbstractNativeEventFilter>
 #include <QColor>
+#include <QHash>
+#include <QPointer>
 #include <QQuickView>
 #include <QVariantMap>
 #include <qt_windows.h>
@@ -10,7 +13,7 @@
 namespace ztermy
 {
 
-class NativeWindow final : public QQuickView
+class NativeWindow final : public QQuickView, public QAbstractNativeEventFilter
 {
     Q_OBJECT
     Q_PROPERTY(bool maximized READ maximized NOTIFY maximizedChanged)
@@ -67,6 +70,9 @@ public:
 
 signals:
     void restartRequested();
+    void windowClosing(bool quitApplication);
+    void detachedWindowMoved(QQuickWindow *window, QPoint globalPosition, bool cancelled = false);
+    void detachedWindowMoving(QQuickWindow *window, QPoint globalPosition);
     void maximizedChanged();
     void maximizeButtonHoveredChanged();
     void maximizeButtonPressedChanged();
@@ -79,6 +85,7 @@ signals:
 protected:
     bool event(QEvent *event) override;
     bool nativeEvent(const QByteArray &eventType, void *message, qintptr *result) override;
+    bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result) override;
 
 private:
     static LRESULT CALLBACK windowProcedure(HWND windowHandle, UINT message, WPARAM wParam, LPARAM lParam);
@@ -112,6 +119,7 @@ private:
     QString m_backdropPreference = QStringLiteral("acrylic");
     bool m_darkMode = true;
     bool m_closeToTrayEnabled = false;
+    QHash<WId, QPointer<QQuickWindow>> m_detachedWindows;
     bool m_trayIconVisible = false;
     bool m_exitingFromTray = false;
     bool m_performanceMode = false;

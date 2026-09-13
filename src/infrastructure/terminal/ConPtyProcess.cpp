@@ -362,6 +362,14 @@ void ConPtyProcess::close() noexcept
     }
     m_impl->outputRead.reset();
     m_impl->pseudoConsole.reset();
+    // Since Windows 11 24H2, ClosePseudoConsole returns before its clients exit.
+    // Keep the owned process handle long enough to finish an explicit close;
+    // otherwise an interactive shell can outlive the tab and even the host.
+    if (m_impl->process && WaitForSingleObject(m_impl->process.get(), 500) == WAIT_TIMEOUT
+        && TerminateProcess(m_impl->process.get(), ERROR_CANCELLED) != FALSE)
+    {
+        WaitForSingleObject(m_impl->process.get(), 5'000);
+    }
     m_impl->processThread.reset();
     m_impl->process.reset();
 }

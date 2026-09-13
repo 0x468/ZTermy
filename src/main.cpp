@@ -3822,6 +3822,8 @@ void sendText(ztermy::NativeWindow &window, const QStringView text)
         processWindowEventsFor(std::chrono::milliseconds{250});
     }
 
+    if (QCoreApplication::arguments().contains(QStringLiteral("--workspace-transfers-only")))
+        return ztermy::ui::runWorkspaceTransferRuntimeSmoke(window, controller, outputDirectory);
     if (controller.startLocalTerminal().isEmpty())
     {
         qCWarning(applicationLog) << "Terminal render smoke could not start the local terminal";
@@ -3970,10 +3972,8 @@ void sendText(ztermy::NativeWindow &window, const QStringView text)
     else if (baselinePassed && controller.splitActiveTerminal(QStringLiteral("horizontal"), false))
     {
         const bool secondPaneRunning = processWindowEventsUntil(
-            [&controller] {
-                const QVariantMap workspace = controller.activeTerminalWorkspace();
-                return workspace.value(QStringLiteral("paneCount")).toInt() == 2 && !controller.terminalTabs().isEmpty()
-                       && controller.terminalTabs().front().toMap().value(QStringLiteral("running")).toBool();
+            [&controller, &window] {
+                return ztermy::ui::terminalWorkspaceViewsReady(window, controller);
             },
             std::chrono::seconds{5});
         const QVariantMap workspace = controller.activeTerminalWorkspace();

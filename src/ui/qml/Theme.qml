@@ -72,13 +72,13 @@ QtObject {
 
     readonly property bool ztermyAccent: accentPreference === "ztermy"
     readonly property color accentBase: accentPreference === "system" ? systemAccent : customAccent
-    readonly property color accent: highContrast ? highContrastHighlight : ztermyAccent ? (dark ? "#22C55E" : "#15803D") : accentBase
-    readonly property color accentText: highContrast ? highContrastHighlightText : ztermyAccent ? (dark ? "#07130B" : "#FFFFFF") : contrastText(accentBase)
-    readonly property color accentHover: ztermyAccent ? (dark ? "#4ADE80" : "#166534") : mixColor(accentBase, accentText, 0.14)
-    readonly property color accentPressed: ztermyAccent ? (dark ? "#16A34A" : "#14532D") : mixColor(accentBase, "#000000", 0.18)
-    readonly property color focus: highContrast ? highContrastHighlight : ztermyAccent ? (dark ? "#86EFAC" : "#16A34A") : mixColor(accentBase, accentText, 0.34)
-    readonly property color selectedBackground: highContrast ? mixColor(highContrastBackground, highContrastText, 0.22) : ztermyAccent ? (dark ? "#173A2B" : "#DCFCE7") : mixColor(accentBase, dark ? "#0B1017" : "#FFFFFF", dark ? 0.72 : 0.84)
-    readonly property color selectedHover: highContrast ? mixColor(highContrastBackground, highContrastText, 0.30) : ztermyAccent ? (dark ? "#1F513A" : "#BBF7D0") : mixColor(accentBase, dark ? "#0B1017" : "#FFFFFF", dark ? 0.58 : 0.72)
+    readonly property color accent: highContrast ? highContrastHighlight : ztermyAccent ? (dark ? "#A78BFA" : "#7C3AED") : accentBase
+    readonly property color accentText: highContrast ? highContrastHighlightText : ztermyAccent ? (dark ? "#160D2B" : "#FFFFFF") : contrastText(accentBase)
+    readonly property color accentHover: ztermyAccent ? (dark ? "#C4B5FD" : "#6D28D9") : mixColor(accentBase, accentText, 0.14)
+    readonly property color accentPressed: ztermyAccent ? (dark ? "#8B5CF6" : "#5B21B6") : mixColor(accentBase, "#000000", 0.18)
+    readonly property color focus: highContrast ? highContrastHighlight : ztermyAccent ? (dark ? "#DDD6FE" : "#7C3AED") : mixColor(accentBase, accentText, 0.34)
+    readonly property color selectedBackground: highContrast ? mixColor(highContrastBackground, highContrastText, 0.22) : ztermyAccent ? (dark ? "#2E2147" : "#EDE9FE") : mixColor(accentBase, dark ? "#0B1017" : "#FFFFFF", dark ? 0.72 : 0.84)
+    readonly property color selectedHover: highContrast ? mixColor(highContrastBackground, highContrastText, 0.30) : ztermyAccent ? (dark ? "#443166" : "#DDD6FE") : mixColor(accentBase, dark ? "#0B1017" : "#FFFFFF", dark ? 0.58 : 0.72)
     readonly property color success: highContrast ? highContrastHighlight : dark ? "#22C55E" : "#15803D"
     readonly property color successText: highContrast ? highContrastText : dark ? "#86EFAC" : "#15803D"
     readonly property color warning: highContrast ? highContrastHighlight : dark ? "#F59E0B" : "#D97706"

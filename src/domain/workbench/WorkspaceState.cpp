@@ -182,6 +182,7 @@ bool validWorkspaceState(const WorkspaceState &state) noexcept
 bool validTerminalWorkspaceLayout(const TerminalWorkspaceLayout &layout) noexcept
 {
     if (!validBoundedText(layout.id, 128, false) || !validBoundedText(layout.title, 256, true)
+        || !validBoundedText(layout.windowId, 128, false) || !validBoundedText(layout.returnWorkspaceId, 128, true)
         || !validBoundedText(layout.rootNodeId, 128, false) || !validBoundedText(layout.activePaneId, 128, false)
         || layout.nodes.empty() || layout.nodes.size() > maximumTerminalNodesPerWorkspace
         || layout.restoreIntents.empty() || layout.restoreIntents.size() > maximumTerminalPanesPerWorkspace

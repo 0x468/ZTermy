@@ -7,29 +7,37 @@ Window {
     id: detachedTerminalWindow
     objectName: "detachedTerminalWindow"
     required property var hostRoot
+    property string workspaceId: ""
+    property var workspace: ({})
     property var pendingPasteViewport: null
     property int pendingPasteLineCount: 0
+    property bool paneHeadersVisible: false
 
     transientParent: null
-    flags: Qt.Window
+    flags: Qt.Window | Qt.FramelessWindowHint
     width: 920
     height: 620
     minimumWidth: 480
     minimumHeight: 320
     visible: false
-    title: qsTr("%1 — Detached pane").arg(detachedTerminalWindow.hostRoot.detachedTerminalWorkspace.title || qsTr("Terminal"))
+    onActiveChanged: {
+        if (active && workspaceId.length > 0)
+            hostRoot.controller.activateTerminalTab(workspaceId);
+    }
+    title: qsTr("%1 — Detached pane").arg(workspace.title || qsTr("Terminal"))
     color: Theme.windowBackground
     onClosing: close => {
-        if (detachedTerminalWindow.hostRoot.detachedTerminalPaneId.length > 0) {
-            close.accepted = false;
-            detachedTerminalWindow.hostRoot.reattachTerminalPane();
-        }
+        close.accepted = false;
+        Qt.callLater(() => hostRoot.controller.closeTerminalTab(workspaceId));
     }
 
     TerminalSplitNode {
+        id: detachedViewport
         anchors.fill: parent
         controller: detachedTerminalWindow.hostRoot.controller
-        node: detachedTerminalWindow.hostRoot.findTerminalPane(detachedTerminalWindow.hostRoot.detachedTerminalWorkspace.root, detachedTerminalWindow.hostRoot.detachedTerminalPaneId) || ({})
+        node: detachedTerminalWindow.workspace.root || ({})
+        paneCount: detachedTerminalWindow.workspace.paneCount || 1
+        headersVisible: detachedTerminalWindow.paneHeadersVisible
         detachedPane: true
         defaultFontFamily: detachedTerminalWindow.hostRoot.controller.terminalFontFamily
         defaultFontSize: detachedTerminalWindow.hostRoot.controller.terminalFontSize
@@ -46,8 +54,14 @@ Window {
         middleClickBehavior: detachedTerminalWindow.hostRoot.controller.terminalMiddleClickBehavior
         wordDelimiters: detachedTerminalWindow.hostRoot.controller.terminalWordDelimiters
         scrollRowsPerWheel: detachedTerminalWindow.hostRoot.controller.terminalScrollRows
-        onDetachPaneRequested: paneId => detachedTerminalWindow.hostRoot.reattachTerminalPane()
+        onDetachPaneRequested: paneId => {
+            if (paneId.length > 0)
+                detachedTerminalWindow.hostRoot.detachTerminalPane(paneId);
+            else
+                detachedTerminalWindow.hostRoot.reattachWorkspace(detachedTerminalWindow.workspaceId);
+        }
         onZoomPaneRequested: paneId => {}
+        onToggleHeadersRequested: detachedTerminalWindow.paneHeadersVisible = !detachedTerminalWindow.paneHeadersVisible
         onMultilinePasteConfirmationRequested: (viewport, lineCount) => {
             detachedTerminalWindow.pendingPasteViewport = viewport;
             detachedTerminalWindow.pendingPasteLineCount = lineCount;
@@ -55,7 +69,7 @@ Window {
         }
         onTerminalSearchRequested: detachedTerminalWindow.hostRoot.openTerminalSearch()
         onBrowseHostsRequested: {
-            detachedTerminalWindow.hostRoot.reattachTerminalPane();
+            detachedTerminalWindow.hostRoot.reattachWorkspace(detachedTerminalWindow.workspaceId);
             detachedTerminalWindow.hostRoot.currentPage = "hosts";
         }
     }

@@ -93,6 +93,7 @@ public:
     [[nodiscard]] QString statusText() const;
     [[nodiscard]] QString fontFamily() const;
     [[nodiscard]] int fontPixelSize() const noexcept;
+    [[nodiscard]] bool hasPreeditText() const noexcept { return !m_preeditText.isEmpty(); }
     [[nodiscard]] bool ligaturesEnabled() const noexcept;
     [[nodiscard]] qreal backgroundOpacity() const noexcept;
     [[nodiscard]] QString cursorPreference() const;

@@ -1,13 +1,18 @@
 #include "infrastructure/terminal/ConPtyProcess.h"
 
 #include <QByteArray>
+#include <QScopeGuard>
 #include <QTest>
+
+#include <Windows.h>
+#include <TlHelp32.h>
 
 #include <array>
 #include <chrono>
 #include <future>
 #include <span>
 #include <string_view>
+#include <vector>
 
 using namespace std::chrono_literals;
 
@@ -21,6 +26,7 @@ class ConPtyProcessTests final : public QObject
 private slots:
     void rejectsInvalidDimensions();
     void capturesUtf8OutputFromChildProcess();
+    void closingParallelConsolesEndsOwnedShellProcesses();
 };
 
 void ConPtyProcessTests::rejectsInvalidDimensions()
@@ -77,6 +83,43 @@ void ConPtyProcessTests::capturesUtf8OutputFromChildProcess()
 
     process.close();
     QVERIFY(!process.running());
+}
+
+void ConPtyProcessTests::closingParallelConsolesEndsOwnedShellProcesses()
+{
+    ztermy::terminal::ConPtyProcess first;
+    ztermy::terminal::ConPtyProcess second;
+    QVERIFY(!first.start(L"C:\\Windows\\System32\\cmd.exe", L"cmd.exe /d /q", {.columns = 80, .rows = 24}));
+    QVERIFY(!second.start(L"C:\\Windows\\System32\\cmd.exe", L"cmd.exe /d /q", {.columns = 80, .rows = 24}));
+    const HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    QVERIFY(snapshot != INVALID_HANDLE_VALUE);
+    const auto closeSnapshot = qScopeGuard([snapshot] {
+        CloseHandle(snapshot);
+    });
+    std::vector<HANDLE> children;
+    const auto cleanup = qScopeGuard([&children] {
+        for (const HANDLE child : children)
+        {
+            if (WaitForSingleObject(child, 0) == WAIT_TIMEOUT)
+                TerminateProcess(child, ERROR_CANCELLED);
+            CloseHandle(child);
+        }
+    });
+    PROCESSENTRY32W entry{.dwSize = sizeof(PROCESSENTRY32W)};
+    for (BOOL more = Process32FirstW(snapshot, &entry); more; more = Process32NextW(snapshot, &entry))
+    {
+        if (entry.th32ParentProcessID == GetCurrentProcessId() && _wcsicmp(entry.szExeFile, L"cmd.exe") == 0)
+        {
+            const HANDLE handle = OpenProcess(SYNCHRONIZE | PROCESS_TERMINATE, FALSE, entry.th32ProcessID);
+            QVERIFY(handle != nullptr);
+            children.push_back(handle);
+        }
+    }
+    QCOMPARE(children.size(), std::size_t{2});
+    first.close();
+    second.close();
+    for (const HANDLE child : children)
+        QCOMPARE(WaitForSingleObject(child, 5'000), DWORD{WAIT_OBJECT_0});
 }
 
 } // namespace

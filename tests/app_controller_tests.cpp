@@ -257,6 +257,9 @@ private slots:
     void managesFreshTerminalTabWorkflows();
     void managesPersistentTerminalWorkspaceSplits();
     void preservesSessionRoutingForNoOpPaneMove();
+    void transfersTerminalTreesWithoutRestartingSessions();
+    void scopesTabCommandsToTheirOwningWindow();
+    void resolvesWorkspaceIdsAfterOriginalSessionMoves();
     void importsExportsAndQuarantinesFailedWorkspaceRestore();
     void importsOpenSshProfilesAndJumpRoutes();
     void restoresSavedSshWorkspaceWithoutConnecting();
@@ -2761,6 +2764,107 @@ void AppControllerTests::preservesSessionRoutingForNoOpPaneMove()
     QCOMPARE(sessions[1]->starts, 1);
 }
 
+void AppControllerTests::resolvesWorkspaceIdsAfterOriginalSessionMoves()
+{
+    QTemporaryDir directory;
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")), [] {
+                                         return std::make_unique<FakeLocalTerminalSession>(
+                                             std::make_shared<FakeLocalSessionState>());
+                                     });
+    const auto original = controller.startLocalTerminal();
+    const auto pane = controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString();
+    QVERIFY(controller.splitActiveTerminal(QStringLiteral("horizontal"), true));
+    const auto detached = controller.detachTerminalPane(pane);
+    QVERIFY(!detached.isEmpty());
+    QVERIFY(controller.activateTerminalTab(original));
+    QCOMPARE(controller.activeTerminalTabId(), original);
+    QVERIFY(controller.setTerminalTabTitle(original, QStringLiteral("Original workspace")));
+    QCOMPARE(controller.terminalWorkspace(original).value(QStringLiteral("title")).toString(),
+             QStringLiteral("Original workspace"));
+    QVERIFY(controller.insertTerminalWorkspace(detached, 0));
+    QCOMPARE(controller.terminalTabs().first().toMap().value(QStringLiteral("id")).toString(), detached);
+    QVERIFY(controller.activateTerminalTab(original));
+    QCOMPARE(controller.activeTerminalTabId(), original);
+    QVERIFY(controller.closeTerminalTab(original));
+    QVERIFY(controller.terminalWorkspace(original).isEmpty());
+    QVERIFY(!controller.terminalWorkspace(detached).isEmpty());
+}
+
+void AppControllerTests::transfersTerminalTreesWithoutRestartingSessions()
+{
+    QTemporaryDir directory;
+    std::vector<std::shared_ptr<FakeLocalSessionState>> sessions;
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")), [&] {
+                                         auto state = std::make_shared<FakeLocalSessionState>();
+                                         sessions.push_back(state);
+                                         return std::make_unique<FakeLocalTerminalSession>(std::move(state));
+                                     });
+    const auto first = controller.startLocalTerminal();
+    QVERIFY(controller.splitActiveTerminal(QStringLiteral("vertical"), true));
+    const auto firstRoot = controller.activeTerminalWorkspace().value(QStringLiteral("root")).toMap();
+    const auto a = firstRoot.value(QStringLiteral("first")).toMap().value(QStringLiteral("id")).toString();
+    const auto b = firstRoot.value(QStringLiteral("second")).toMap().value(QStringLiteral("id")).toString();
+    const auto second = controller.startLocalTerminal();
+    const auto c = controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString();
+    QVERIFY(controller.mergeTerminalWorkspace(first, c, QStringLiteral("horizontal"), true));
+    QCOMPARE(controller.terminalTabs().size(), 1);
+    QCOMPARE(controller.activeTerminalTabId(), second);
+    QCOMPARE(controller.activeTerminalWorkspace().value(QStringLiteral("paneCount")).toInt(), 3);
+    QVERIFY(controller.moveTerminalPane(b, a, QStringLiteral("swap"), true));
+    QVERIFY(controller.activateTerminalPane(a));
+    QVERIFY(controller.insertTerminalCommand(QStringLiteral("a-after-swap")));
+    QCOMPARE(sessions[0]->pastes, QList<QByteArray>{"a-after-swap"});
+    QVERIFY(sessions[1]->pastes.isEmpty());
+    const auto extracted = controller.extractTerminalPaneToTab(b);
+    QVERIFY(!extracted.isEmpty());
+    QVERIFY(extracted != second);
+    QCOMPARE(controller.terminalTabs().size(), 2);
+    QVERIFY(controller.insertTerminalCommand(QStringLiteral("b-after-extract")));
+    QCOMPARE(sessions[1]->pastes, QList<QByteArray>{"b-after-extract"});
+    QVERIFY(controller.moveTerminalPane(b, c, QStringLiteral("vertical"), false));
+    QCOMPARE(controller.terminalTabs().size(), 1);
+    QVERIFY(controller.insertTerminalCommand(QStringLiteral("b-after-return")));
+    QCOMPARE(sessions[1]->pastes.size(), 2);
+    const auto detached = controller.detachTerminalPane(b);
+    QVERIFY(!detached.isEmpty());
+    QVERIFY(detached != second);
+    QVERIFY(controller.terminalWorkspace(detached).value(QStringLiteral("windowId")).toString()
+            != QStringLiteral("main"));
+    QCOMPARE(controller.terminalWorkspace(second).value(QStringLiteral("paneCount")).toInt(), 2);
+    QVERIFY(controller.terminalWorkspaceHasActiveSessions(detached));
+    QVERIFY(controller.reattachTerminalWorkspace(detached));
+    QCOMPARE(controller.activeTerminalTabId(), second);
+    QCOMPARE(controller.terminalWorkspace(second).value(QStringLiteral("paneCount")).toInt(), 3);
+    QVERIFY(controller.terminalWorkspace(detached).isEmpty());
+    QVERIFY(!controller.detachTerminalWorkspace(second));
+    QCOMPARE(controller.terminalWorkspace(second).value(QStringLiteral("paneCount")).toInt(), 3);
+    QCOMPARE(controller.terminalWorkspace(second).value(QStringLiteral("windowId")).toString(), QStringLiteral("main"));
+    for (const auto &session : sessions)
+    {
+        QCOMPARE(session->starts, 1);
+        QCOMPARE(session->stops, 0);
+    }
+    QVERIFY(!controller.mergeTerminalWorkspace(first, c, QStringLiteral("horizontal"), true));
+    QCOMPARE(controller.activeTerminalWorkspace().value(QStringLiteral("paneCount")).toInt(), 3);
+    const auto orphan = controller.detachTerminalPane(b);
+    QVERIFY(!orphan.isEmpty());
+    QVERIFY(controller.closeTerminalTab(second));
+    QVERIFY(controller.reattachTerminalWorkspace(orphan));
+    QCOMPARE(controller.activeTerminalTabId(), orphan);
+    QCOMPARE(controller.terminalTabs().size(), 1);
+    QCOMPARE(sessions[1]->starts, 1);
+    QCOMPARE(sessions[1]->stops, 0);
+    const auto beforeFailedSave = controller.terminalWorkspace(orphan);
+    QFile future(directory.filePath(QStringLiteral("workspace_state.json")));
+    QVERIFY(future.open(QIODevice::WriteOnly));
+    QVERIFY(future.write(R"({"schemaVersion":999})") > 0);
+    future.close();
+    QVERIFY(!controller.detachTerminalWorkspace(orphan));
+    QCOMPARE(controller.terminalWorkspace(orphan), beforeFailedSave);
+}
+
 void AppControllerTests::restoresSavedSshWorkspaceWithoutConnecting()
 {
     QTemporaryDir directory;
@@ -2830,6 +2934,36 @@ void AppControllerTests::restoresSavedSshWorkspaceWithoutConnecting()
     QVERIFY(!controller.startLocalTerminal().isEmpty());
     QVERIFY(workspaceChanged.count() >= 1);
     QCOMPARE(localState->starts, 1);
+}
+
+void AppControllerTests::scopesTabCommandsToTheirOwningWindow()
+{
+    QTemporaryDir directory;
+    std::vector<std::shared_ptr<FakeLocalSessionState>> sessions;
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")), [&] {
+                                         auto state = std::make_shared<FakeLocalSessionState>();
+                                         sessions.push_back(state);
+                                         return std::make_unique<FakeLocalTerminalSession>(state);
+                                     });
+    const auto a = controller.startLocalTerminal();
+    const auto b = controller.startLocalTerminal();
+    const auto c = controller.startLocalTerminal();
+    QVERIFY(controller.detachTerminalWorkspace(b));
+    QVERIFY(controller.moveTerminalTab(c, 0));
+    QCOMPARE(controller.terminalTabs().front().toMap().value(QStringLiteral("id")).toString(), c);
+    QCOMPARE(controller.terminalTabs()[1].toMap().value(QStringLiteral("id")).toString(), b);
+    QVERIFY(controller.closeOtherTerminalTabs(c));
+    QVERIFY(controller.terminalWorkspace(a).isEmpty());
+    QVERIFY(!controller.terminalWorkspace(b).isEmpty());
+    QVERIFY(!controller.closeTerminalTabsToRight(c));
+    QCOMPARE(sessions[0]->stops, 1);
+    QCOMPARE(sessions[1]->stops, 0);
+    QCOMPARE(sessions[2]->stops, 0);
+    QVERIFY(controller.reattachTerminalWorkspace(b));
+    QVERIFY(controller.closeTerminalTabsToRight(c));
+    QCOMPARE(sessions[1]->stops, 1);
+    QCOMPARE(sessions[2]->stops, 0);
 }
 
 void AppControllerTests::managesSessionAppearanceAndStructuredRecording()
