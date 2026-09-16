@@ -56,6 +56,26 @@ foreach ($row in $rows | Where-Object OverBudget) {
     }
 }
 
+# Window state ownership: only src/core/windowing may change a top-level window's
+# minimized/maximized state or show it directly. QWindow::show*() replaces the
+# whole state set and silently drops the maximized flag. Runtime smokes drive
+# absolute states on purpose and are exempt.
+$windowStateOwner = "src/core/windowing/"
+$windowStateExemptPattern = 'RuntimeSmoke\.h$'
+$windowStatePattern = '(\.|->|^|[^A-Za-z0-9_.])(show|showNormal|showMinimized|showMaximized|showFullScreen|setWindowStates?)\s*\('
+$windowStateViolations = @()
+foreach ($match in Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Include *.cpp, *.h, *.qml |
+    Select-String -Pattern $windowStatePattern) {
+    $relative = $match.Path.Substring($root.Length + 1).Replace([char]92, [char]47)
+    if ($relative.StartsWith($windowStateOwner) -or $relative -match $windowStateExemptPattern) {
+        continue
+    }
+    if ($match.Line.Trim() -match '^(//|/\*|\*)') {
+        continue
+    }
+    $windowStateViolations += "$relative`:$($match.LineNumber): $($match.Line.Trim())"
+}
+
 $report = @(
     "# Ztermy code health report",
     "",
@@ -79,9 +99,13 @@ $report += @(
     "",
     $(if ($dependencyViolations.Count -eq 0) { "No direct include-direction violations found for core, domain, or infrastructure layers." } else { $dependencyViolations -join "`n" }),
     "",
+    "## Window state ownership",
+    "",
+    $(if ($windowStateViolations.Count -eq 0) { "All window show/minimize/maximize transitions go through ``src/core/windowing``." } else { $windowStateViolations -join "`n" }),
+    "",
     "## Gate result",
     "",
-    $(if ($budgetViolations.Count -eq 0 -and $dependencyViolations.Count -eq 0) { "PASS" } else { "FAIL" })
+    $(if ($budgetViolations.Count -eq 0 -and $dependencyViolations.Count -eq 0 -and $windowStateViolations.Count -eq 0) { "PASS" } else { "FAIL" })
 )
 
 if ($OutputPath.Length -gt 0) {
@@ -94,12 +118,15 @@ if ($OutputPath.Length -gt 0) {
 }
 $report -join "`n"
 
-if ($Check -and ($budgetViolations.Count -gt 0 -or $dependencyViolations.Count -gt 0)) {
+if ($Check -and ($budgetViolations.Count -gt 0 -or $dependencyViolations.Count -gt 0 -or $windowStateViolations.Count -gt 0)) {
     if ($budgetViolations.Count -gt 0) {
         Write-Error ("Code size budget regressions:`n" + ($budgetViolations -join "`n"))
     }
     if ($dependencyViolations.Count -gt 0) {
         Write-Error ("Dependency direction violations:`n" + ($dependencyViolations -join "`n"))
+    }
+    if ($windowStateViolations.Count -gt 0) {
+        Write-Error ("Window state ownership violations (use ztermy::windowing / WindowControl):`n" + ($windowStateViolations -join "`n"))
     }
     exit 1
 }
