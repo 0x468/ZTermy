@@ -11,7 +11,7 @@ build/msvc-dynamic-debug/ztermy.exe
 Perform the checks on Windows 11 with the system Snap windows setting enabled.
 Repeat the DPI checks on every available monitor.
 
-## Automated maximized-work-area gate
+## Automated maximized-work-area and state-round-trip gate
 
 Build and run the opt-in runtime gate from a Visual Studio developer shell:
 
@@ -19,14 +19,22 @@ Build and run the opt-in runtime gate from a Visual Studio developer shell:
 cmake --build --preset msvc-dynamic-debug --target ztermy_window_runtime_smoke
 ```
 
-The target briefly shows the real ztermy window, maximizes it, compares the
-Win32 client rectangle in screen coordinates with `MONITORINFO::rcWork`,
-restores it, and exits. It fails when either the maximized state or the exact
-work-area bounds do not match. The result is also written below:
+The target briefly shows the real ztermy window, maximizes it, and compares the
+Win32 client rectangle in screen coordinates with `MONITORINFO::rcWork`. It
+then minimizes the window through `ztermy::windowing::minimize()` and requires
+`IsIconic()`, the retained `Qt::WindowMaximized` flag, and the native
+`WPF_RESTORETOMAXIMIZED` placement flag; presents it through
+`ztermy::windowing::present()` and requires `IsZoomed()`; and finally toggles
+back to a normal window and exits. It fails when either the maximized bounds or
+any step of the minimize/present/restore round trip does not match. The result
+is also written below:
 
 ```text
 build/msvc-dynamic-debug/test-data/window-runtime-smoke/logs/ztermy.log
 ```
+
+The pure state rules and the `QWindow` behaviour behind this gate are covered
+by the offscreen `window-state` and `application-instance` CTest cases.
 
 This gate proves the current monitor path. It does not replace the mixed-DPI
 and per-monitor manual checks below.
@@ -79,16 +87,21 @@ minimum-size feel, and terminal/IME behavior during resize.
 
 1. Click minimize.
    Expected: the window minimizes to the taskbar and restores from the taskbar.
-2. Click maximize.
+2. Maximize the window, click minimize, then restore it from the taskbar.
+   Expected: the window comes back maximized. Repeat the restore by launching
+   ztermy again while single-instance mode is enabled, and by using the tray
+   "show" command after close-to-tray; both must also return a maximized
+   window.
+3. Click maximize.
    Expected: the window fills the current monitor work area without covering
    the taskbar; all four content edges and the complete bottom status bar
    remain visible; the glyph changes to Restore.
-3. Click restore.
+4. Click restore.
    Expected: the previous window geometry returns and the glyph changes to
    Maximize.
-4. Double-click empty title-bar space twice.
+5. Double-click empty title-bar space twice.
    Expected: the first double-click maximizes and the second restores.
-5. Click close.
+6. Click close.
    Expected: the process exits normally.
 
 ## Windows 11 Snap Layouts

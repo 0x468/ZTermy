@@ -19,6 +19,8 @@
 - `infrastructure` 实现文件、网络、SSH、系统配置等边界；解析不可信输入时有尺寸和数量上限。
 - `ui/qml` 负责呈现与轻量交互胶水，不拥有持久化真源、后台线程或 SSH 状态机。
 - `platform/windows` 封装 Win32、ConPTY、凭据管理器、通知区、窗口材质和命中测试；上层通过窄接口使用。
+- 顶层窗口的最小化、最大化/还原和唤出只能经由 `core/windowing`（C++ 调 `ztermy::windowing::present/minimize/toggleMaximize`，QML 调 `WindowControl` 单例）；
+  `QWindow::show*()` 会整体覆盖窗口状态并丢失最大化标志，`src/` 内除 `WindowStateRuntimeSmoke.h` 的命名 smoke 辅助函数外禁止直接调用，由 `ztermy_code_structure_gate` 检查（ADR 0051）。
 - 禁止反向依赖和跨层“顺手 include”。新增依赖必须能解释其所有权和替换边界。
 - 自动门禁禁止 `core` 反向依赖上层、`domain` 依赖 application/infrastructure/platform/ui，以及
   `infrastructure` 依赖 application/ui；无法由直接 include 扫描表达的运行时依赖仍由评审负责。

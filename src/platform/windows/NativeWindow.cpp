@@ -2,6 +2,7 @@
 #include <QCursor>
 #include <QTimer>
 
+#include "core/windowing/WindowPresenter.h"
 #include "platform/windows/WindowHitTest.h"
 
 #include <QCoreApplication>
@@ -269,16 +270,6 @@ bool NativeWindow::maximizedClientMatchesWorkArea() const noexcept
                       << "workArea=" << workArea.left << workArea.top << workArea.right << workArea.bottom
                       << "matches=" << matches;
     return matches;
-}
-
-void NativeWindow::minimizeWindow()
-{
-    showMinimized();
-}
-
-void NativeWindow::toggleMaximize()
-{
-    maximized() ? showNormal() : showMaximized();
 }
 
 void NativeWindow::closeWindow()
@@ -908,9 +899,9 @@ void NativeWindow::showTrayMenu()
 
 void NativeWindow::restoreFromTray()
 {
-    show();
-    raise();
-    requestActivate();
+    // Hiding to the tray keeps the window states, so presenting restores a
+    // maximized window as maximized instead of resetting it to normal.
+    windowing::present(*this);
 }
 
 void NativeWindow::exitFromTray()

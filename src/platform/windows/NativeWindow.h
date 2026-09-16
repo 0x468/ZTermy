@@ -55,8 +55,6 @@ public:
     [[nodiscard]] QColor highContrastHighlightText() const noexcept;
     [[nodiscard]] bool maximizedClientMatchesWorkArea() const noexcept;
 
-    Q_INVOKABLE void minimizeWindow();
-    Q_INVOKABLE void toggleMaximize();
     Q_INVOKABLE void closeWindow();
     Q_INVOKABLE bool beginSystemMove();
     Q_INVOKABLE void setAlwaysOnTop(bool enabled);

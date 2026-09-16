@@ -6,6 +6,24 @@ The project has not published a release.
 
 ## Unreleased
 
+### 0.4.6 local validation build — 2026-09-15
+
+- Keep the maximized state when a window is minimized and later restored from
+  the taskbar, the tray, single-instance activation or a workspace transfer.
+  `QWindow::showMinimized()`/`showNormal()` replaced the whole state set and
+  cleared the native `WPF_RESTORETOMAXIMIZED` flag.
+- Introduce `ztermy::windowing` (`WindowStateTransitions`, `WindowPresenter`)
+  and the `WindowControl` QML singleton as the single owner of minimize,
+  maximize/restore and present transitions; all title-bar, detached-window,
+  tray, activation and workspace callers route through it (ADR 0051).
+- Extend the code structure gate to reject direct `show*()`/`setWindowStates()`
+  calls outside `src/core/windowing` and named runtime-smoke helpers.
+- Add offscreen `window-state` and `application-instance` tests, and extend
+  `ztermy_window_runtime_smoke` with a maximize/minimize/present round trip
+  that checks `IsIconic`, `IsZoomed` and `WPF_RESTORETOMAXIMIZED`.
+- Show newly detached windows during workspace synchronization without an
+  explicit raise; only explicit present actions raise and focus a window.
+
 ### 0.4.5 local validation build — 2026-09-13
 
 - Align detached-window minimize, maximize and close controls flush with the

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 project(
     ztermy
-    VERSION 0.4.5
+    VERSION 0.4.6
     DESCRIPTION "A native Windows SSH terminal"
     LANGUAGES C CXX RC
 )
@@ -179,6 +179,13 @@ add_library(ztermy_core_persistence STATIC
     src/core/persistence/LastKnownGoodFile.h
 )
 
+add_library(ztermy_core_windowing STATIC
+    src/core/windowing/WindowPresenter.cpp
+    src/core/windowing/WindowPresenter.h
+    src/core/windowing/WindowStateTransitions.cpp
+    src/core/windowing/WindowStateTransitions.h
+)
+
 add_library(ztermy_application_actions STATIC
     src/application/actions/ActionRegistry.cpp
     src/application/actions/ActionRegistry.h
@@ -247,6 +254,10 @@ target_link_libraries(ztermy_core_config PUBLIC ztermy_core_persistence Qt6::Cor
 target_compile_features(ztermy_core_persistence PUBLIC cxx_std_23)
 target_include_directories(ztermy_core_persistence PUBLIC src)
 target_link_libraries(ztermy_core_persistence PUBLIC Qt6::Core)
+
+target_compile_features(ztermy_core_windowing PUBLIC cxx_std_23)
+target_include_directories(ztermy_core_windowing PUBLIC src)
+target_link_libraries(ztermy_core_windowing PUBLIC Qt6::Core Qt6::Gui)
 
 add_library(ztermy_terminal_transport STATIC
     src/infrastructure/terminal/ConPtyProcess.cpp
@@ -925,6 +936,7 @@ target_link_libraries(ztermy_application_controller
         ztermy_application_diagnostics
         ztermy_credential_vault
         ztermy_core_config
+        ztermy_core_windowing
         ztermy_forwarding_persistence
         ztermy_forwarding_session
         ztermy_known_hosts_application
@@ -966,6 +978,8 @@ qt_add_executable(ztermy WIN32
     src/platform/windows/WindowHitTest.h
     src/platform/windows/WindowsUiSettings.cpp
     src/platform/windows/WindowsUiSettings.h
+    src/ui/WindowControl.cpp
+    src/ui/WindowControl.h
     resources/windows/ztermy.manifest
     "${ZTERMY_GENERATED_DIRECTORY}/ztermy.rc"
 )
@@ -1469,6 +1483,7 @@ target_link_libraries(ztermy PRIVATE
     ztermy_application_diagnostics
     ztermy_credential_vault
     ztermy_core_config
+    ztermy_core_windowing
     ztermy_forwarding_persistence
     ztermy_forwarding_session
     ztermy_ssh_persistence
@@ -1498,7 +1513,7 @@ add_custom_target(ztermy_window_runtime_smoke
             --window-runtime-smoke
             --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/window-runtime-smoke"
     DEPENDS ztermy
-    COMMENT "Checking the real maximized client area against the Windows monitor work area"
+    COMMENT "Checking the real window keeps its maximized state across minimize, present and restore"
     USES_TERMINAL
     VERBATIM
 )
@@ -1870,6 +1885,13 @@ if(MSVC)
     )
 
     target_compile_options(ztermy_core_config PRIVATE
+        /permissive-
+        /utf-8
+        /W4
+        /Zc:__cplusplus
+    )
+
+    target_compile_options(ztermy_core_windowing PRIVATE
         /permissive-
         /utf-8
         /W4
@@ -4457,6 +4479,53 @@ if(BUILD_TESTING)
 
     add_test(NAME app-controller COMMAND ztermy_app_controller_tests)
 
+    qt_add_executable(ztermy_application_instance_tests
+        tests/application_instance_tests.cpp
+    )
+    target_compile_features(ztermy_application_instance_tests PRIVATE cxx_std_23)
+    target_include_directories(ztermy_application_instance_tests PRIVATE src)
+    target_compile_definitions(ztermy_application_instance_tests PRIVATE
+        NOMINMAX
+        UNICODE
+        WIN32_LEAN_AND_MEAN
+        _UNICODE
+    )
+    target_link_libraries(ztermy_application_instance_tests PRIVATE
+        ztermy_application_controller
+        Qt6::Gui
+        Qt6::Network
+        Qt6::Test
+    )
+    if(MSVC)
+        target_compile_options(ztermy_application_instance_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+    add_test(NAME application-instance COMMAND ztermy_application_instance_tests)
+    set_tests_properties(application-instance PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    qt_add_executable(ztermy_window_state_tests
+        tests/window_state_tests.cpp
+    )
+    target_compile_features(ztermy_window_state_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_window_state_tests PRIVATE
+        ztermy_core_windowing
+        Qt6::Test
+    )
+    if(MSVC)
+        target_compile_options(ztermy_window_state_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+    add_test(NAME window-state COMMAND ztermy_window_state_tests)
+    set_tests_properties(window-state PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
     qt_add_executable(ztermy_windows_protected_clipboard_tests
         tests/windows_protected_clipboard_tests.cpp
     )
@@ -4776,6 +4845,8 @@ if(BUILD_TESTING)
             ztermy_ai_agent_scenario_tests
             ztermy_ai_agent_real_host_tests
             ztermy_app_controller_tests
+            ztermy_application_instance_tests
+            ztermy_window_state_tests
             ztermy_windows_protected_clipboard_tests
             ztermy_terminal_item_tests
             ztermy_font_catalog_tests

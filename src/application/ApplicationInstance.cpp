@@ -1,5 +1,6 @@
 #include "application/ApplicationInstance.h"
 #include "core/config/ApplicationSettings.h"
+#include "core/windowing/WindowPresenter.h"
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
@@ -90,12 +91,7 @@ ApplicationInstance::Result ApplicationInstance::claimConfigured(const QString &
 void ApplicationInstance::setWindow(QWindow *window)
 {
     connect(this, &ApplicationInstance::activationRequested, window, [window] {
-        if (window->windowState() == Qt::WindowMinimized)
-            window->showNormal();
-        else
-            window->show();
-        window->raise();
-        window->requestActivate();
+        windowing::present(*window);
     });
 }
 

@@ -6,9 +6,11 @@
 #include "application/diagnostics/DiagnosticReporter.h"
 #include "core/config/ApplicationPaths.h"
 #include "core/logging/Logging.h"
+#include "core/windowing/WindowPresenter.h"
 #include "platform/windows/CrashDiagnostics.h"
 #include "platform/windows/NativeWindow.h"
 #include "ui/RuntimeSmokeItems.h"
+#include "ui/WindowStateRuntimeSmoke.h"
 #include "ui/WorkbenchRuntimeSmoke.h"
 #include "ui/icons/SvgIconImageProvider.h"
 #include "ui/terminal/TerminalItem.h"
@@ -141,37 +143,7 @@ template <typename Predicate>
 
 [[nodiscard]] bool runWindowRuntimeSmoke(ztermy::NativeWindow &window)
 {
-    window.show();
-    if (!processWindowEventsUntil(
-            [&window]() {
-                return window.isVisible();
-            },
-            std::chrono::seconds{2}))
-    {
-        qCWarning(applicationLog) << "Window runtime smoke did not become visible";
-        return false;
-    }
-
-    window.showMaximized();
-    const bool workAreaMatches = processWindowEventsUntil(
-        [&window]() {
-            return window.maximized() && window.maximizedClientMatchesWorkArea();
-        },
-        std::chrono::seconds{3});
-    if (!workAreaMatches)
-    {
-        qCWarning(applicationLog) << "Window runtime smoke did not reach the maximized work area"
-                                  << "maximized=" << window.maximized()
-                                  << "workAreaMatches=" << window.maximizedClientMatchesWorkArea();
-    }
-
-    window.showNormal();
-    const bool restored = processWindowEventsUntil(
-        [&window]() {
-            return !window.maximized();
-        },
-        std::chrono::seconds{2});
-    return workAreaMatches && restored;
+    return ztermy::ui::verifyWindowStateRoundTrip(window);
 }
 
 struct ResizeHitRuntimeCase
@@ -201,7 +173,7 @@ struct ResizeHitRuntimeCase
 [[nodiscard]] bool runWindowResizeRuntimeSmoke(ztermy::NativeWindow &window)
 {
     window.resize(QSize{1120, 800});
-    window.show();
+    ztermy::ui::showForRuntimeSmoke(window);
     window.requestActivate();
     processWindowEventsFor(std::chrono::milliseconds{250});
 
@@ -271,7 +243,7 @@ struct ResizeHitRuntimeCase
         normalStatePassed = normalStatePassed && hitMatches && cursorMatches;
     }
 
-    window.showMaximized();
+    ztermy::ui::maximizeForRuntimeSmoke(window);
     processWindowEventsFor(std::chrono::milliseconds{250});
     bool maximizedStatePassed = window.maximized();
     RECT maximizedClientRect{};
@@ -304,7 +276,7 @@ struct ResizeHitRuntimeCase
                                << "resizeDisabled=" << resizeDisabled;
         maximizedStatePassed = maximizedStatePassed && resizeDisabled;
     }
-    window.showNormal();
+    ztermy::ui::restoreForRuntimeSmoke(window);
     processWindowEventsFor(std::chrono::milliseconds{250});
     const bool restored = !window.maximized();
     qCInfo(applicationLog) << "Window resize runtime summary"
@@ -325,7 +297,7 @@ struct ResizeHitRuntimeCase
 
     constexpr QSize logicalSize{800, 600};
     window.resize(logicalSize);
-    window.show();
+    ztermy::ui::showForRuntimeSmoke(window);
     window.requestActivate();
     processWindowEventsFor(std::chrono::milliseconds{350});
 
@@ -435,7 +407,7 @@ struct ResizeHitRuntimeCase
 [[nodiscard]] bool runWindowAppearanceRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller)
 {
     window.resize(QSize{1120, 800});
-    window.show();
+    ztermy::ui::showForRuntimeSmoke(window);
     processWindowEventsFor(std::chrono::milliseconds{250});
 
     const bool defaultAlphaBuffer = QQuickWindow::hasDefaultAlphaBuffer();
@@ -800,7 +772,7 @@ struct ResizeHitRuntimeCase
 [[nodiscard]] bool runUiLayoutRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller,
                                            const QString &outputDirectory)
 {
-    window.show();
+    ztermy::ui::showForRuntimeSmoke(window);
     processWindowEventsFor(std::chrono::milliseconds{250});
     QQuickItem *initialRootObject = window.rootObject();
     auto *titleBrandIcon = initialRootObject == nullptr
@@ -1425,9 +1397,9 @@ void sendText(ztermy::NativeWindow &window, const QStringView text)
 [[nodiscard]] bool runTitleNavigationMouseSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller)
 {
     // Exercise hit testing, not signals or keyboard activation, in an isolated data directory.
-    window.show();
+    ztermy::ui::showForRuntimeSmoke(window);
     window.hide();
-    window.show(); // Override an inherited STARTUPINFO/SW_HIDE in automated launches.
+    ztermy::ui::showForRuntimeSmoke(window); // Override an inherited STARTUPINFO/SW_HIDE in automated launches.
     window.requestActivate();
     auto *root = window.rootObject();
     if (root == nullptr || !controller.terminalTabs().isEmpty())
@@ -2017,7 +1989,7 @@ void sendText(ztermy::NativeWindow &window, const QStringView text)
                                              const QString &outputDirectory)
 {
     window.resize(QSize{1120, 800});
-    window.show();
+    ztermy::ui::showForRuntimeSmoke(window);
     window.requestActivate();
     processWindowEventsFor(std::chrono::milliseconds{250});
 
@@ -3239,7 +3211,7 @@ void sendText(ztermy::NativeWindow &window, const QStringView text)
     }
 
     window.resize(QSize{1120, 800});
-    window.show();
+    ztermy::ui::showForRuntimeSmoke(window);
     window.requestActivate();
     processWindowEventsFor(std::chrono::milliseconds{250});
 
@@ -3706,7 +3678,7 @@ void sendText(ztermy::NativeWindow &window, const QStringView text)
 [[nodiscard]] bool runLifecycleRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller)
 {
     window.resize(QSize{1120, 800});
-    window.show();
+    ztermy::ui::showForRuntimeSmoke(window);
     window.requestActivate();
     processWindowEventsFor(std::chrono::milliseconds{200});
 
@@ -3788,12 +3760,12 @@ void sendText(ztermy::NativeWindow &window, const QStringView text)
                                                  const QString &outputDirectory, const bool exerciseSplitWorkspace)
 {
     window.resize(QSize{1120, 800});
-    window.show();
+    ztermy::ui::showForRuntimeSmoke(window);
     if (!IsWindowVisible(reinterpret_cast<HWND>(window.winId()))) // NOLINT(performance-no-int-to-ptr)
     {
         // A CLI launch can inherit STARTUPINFO's SW_HIDE for the first show.
         window.hide();
-        window.show();
+        ztermy::ui::showForRuntimeSmoke(window);
     }
     window.requestActivate();
     window.raise();
@@ -4168,7 +4140,7 @@ void sendText(ztermy::NativeWindow &window, const QStringView text)
                                              const QString &outputDirectory, const qint64 qmlLoadMilliseconds)
 {
     window.resize(QSize{1120, 800});
-    window.show();
+    ztermy::ui::showForRuntimeSmoke(window);
     window.requestActivate();
     if (!processWindowEventsUntil(
             [&window] {
@@ -4604,7 +4576,7 @@ int main(int argc, char *argv[])
     if (QCoreApplication::arguments().contains(QStringLiteral("--smoke-test")))
     {
         QTimer::singleShot(50, &window, &QWindow::close);
-        window.show();
+        ztermy::ui::showForRuntimeSmoke(window);
         const int smokeExitCode = application.exec();
         appController.shutdown();
         window.releaseResources();
@@ -4623,10 +4595,10 @@ int main(int argc, char *argv[])
         window.releaseResources();
         if (!passed)
         {
-            qCCritical(applicationLog) << "Maximized work-area runtime smoke test failed";
+            qCCritical(applicationLog) << "Window state runtime smoke test failed";
             return EXIT_FAILURE;
         }
-        qCInfo(applicationLog) << "Maximized work-area runtime smoke test completed";
+        qCInfo(applicationLog) << "Window state runtime smoke test completed";
         return EXIT_SUCCESS;
     }
     if (windowAppearanceSmoke)
@@ -4772,7 +4744,10 @@ int main(int argc, char *argv[])
         return EXIT_SUCCESS;
     }
 
-    window.show();
+    // Startup goes through the window state owner too, so a state restored
+    // before the window first appears (for example maximized) survives instead
+    // of being reset the way the plain QWindow show helper would.
+    ztermy::windowing::present(window);
     const int exitCode = application.exec();
 
     qCInfo(applicationLog) << "Application event loop stopped; beginning orderly shutdown";

@@ -182,9 +182,7 @@ Rectangle {
             return;
         }
         currentPage = "terminal";
-        windowChrome.show();
-        windowChrome.raise();
-        windowChrome.requestActivate();
+        WindowControl.present(windowChrome);
         Qt.callLater(terminalViewport.forceActiveFocus);
     }
 

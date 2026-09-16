@@ -60,10 +60,8 @@ QtObject {
             preparedWindow = null;
         }
         syncWindows();
-        if (id && windows[id]) {
-            windows[id].raise();
-            windows[id].requestActivate();
-        }
+        if (id && windows[id])
+            WindowControl.present(windows[id]);
     }
 
     function syncWindows() {
@@ -85,7 +83,7 @@ QtObject {
             }
             windows[tab.id].workspace = hostRoot.controller.terminalWorkspace(tab.id);
             if (!windows[tab.id].visible)
-                windows[tab.id].show();
+                WindowControl.reveal(windows[tab.id]);
         }
         for (const id in windows) {
             if (!live[id]) {
@@ -103,10 +101,8 @@ QtObject {
 
     function activateWorkspace(workspaceId) {
         syncWindows();
-        if (windows[workspaceId]) {
-            windows[workspaceId].raise();
-            windows[workspaceId].requestActivate();
-        }
+        if (windows[workspaceId])
+            WindowControl.present(windows[workspaceId]);
     }
 
     function viewportAt(item, globalPosition, prefix = "terminalViewport-") {
@@ -259,9 +255,7 @@ QtObject {
             const ok = target.mode === "insert" ? hostRoot.controller.insertTerminalWorkspace(id, target.index) : hostRoot.controller.mergeTerminalWorkspace(id, target.paneId, target.orientation, target.after);
             if (ok) {
                 hostRoot.activateMainTerminal(hostRoot.controller.activeTerminalTabId);
-                hostRoot.windowChrome.show();
-                hostRoot.windowChrome.raise();
-                hostRoot.windowChrome.requestActivate();
+                WindowControl.present(hostRoot.windowChrome);
             }
         });
     }

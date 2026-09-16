@@ -136,6 +136,25 @@ Hit-test classification is kept in a Qt-independent helper so resize, caption,
 client, and maximize-button regions can be unit tested without creating a
 native window.
 
+## Window state ownership
+
+`src/core/windowing` is the only place that minimizes, maximizes/restores, or
+presents a top-level window (ADR 0051). `WindowStateTransitions` holds pure
+rules that change exactly one flag and preserve the rest; `WindowPresenter`
+applies them to a `QWindow` with `setWindowStates()` and `setVisible(true)`.
+`reveal()` makes a hidden window visible while preserving its current state
+without an explicit raise or activation request; `present()` is reserved for explicit user
+actions that should bring the window to the foreground.
+`QWindow::show*()` helpers replace the whole state set and drop the maximized
+flag, which is why they are not used for these transitions.
+
+Every caller routes through the presenter: title-bar and detached-window
+caption buttons via the `WindowControl` QML singleton, tray restore in
+`NativeWindow`, single-instance activation in `ApplicationInstance`, and
+workspace reattach/merge in QML. The code structure gate rejects direct
+`show*()` or `setWindowStates()` calls elsewhere in `src/`, except in the
+named runtime-smoke helpers that deliberately drive absolute states.
+
 ## Logging
 
 Qt logging categories provide subsystem-specific diagnostics. Debug builds

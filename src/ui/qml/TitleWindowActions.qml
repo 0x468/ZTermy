@@ -303,7 +303,7 @@ Row {
         kind: "minimize"
         chrome: controls.hostRoot.windowChrome
         accessibleName: qsTr("Minimize")
-        onActivated: controls.hostRoot.windowChrome.minimizeWindow()
+        onActivated: WindowControl.minimize(controls.hostRoot.windowChrome)
     }
 
     CaptionButton {
@@ -315,7 +315,7 @@ Row {
         accessibleName: controls.hostRoot.windowChrome.maximized ? qsTr("Restore") : qsTr("Maximize")
         externallyHovered: controls.hostRoot.windowChrome.maximizeButtonHovered
         externallyPressed: controls.hostRoot.windowChrome.maximizeButtonPressed
-        onActivated: controls.hostRoot.windowChrome.toggleMaximize()
+        onActivated: WindowControl.toggleMaximize(controls.hostRoot.windowChrome)
     }
 
     CaptionButton {

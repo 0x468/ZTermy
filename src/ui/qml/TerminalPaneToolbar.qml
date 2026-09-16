@@ -143,13 +143,10 @@ RowLayout {
             onActivated: {
                 const window = root.Window.window;
                 if (modelData === "minimize")
-                    window.showMinimized();
-                else if (modelData === "maximize") {
-                    if (detachedChrome.maximized)
-                        window.showNormal();
-                    else
-                        window.showMaximized();
-                } else
+                    WindowControl.minimize(window);
+                else if (modelData === "maximize")
+                    WindowControl.toggleMaximize(window);
+                else
                     window.close();
             }
         }
