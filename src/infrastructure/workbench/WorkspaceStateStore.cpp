@@ -469,6 +469,7 @@ bool WorkspaceStateStore::lastLoadRecoveredFromBackup() const noexcept
 std::expected<WorkspaceState, WorkspaceStateStoreError> WorkspaceStateStore::load() const
 {
     m_lastLoadRecoveredFromBackup = false;
+    m_knownGoodPayload.clear();
     const QString backupPath = m_filePath + QStringLiteral(".bak");
     if (!QFileInfo::exists(m_filePath))
     {
@@ -479,6 +480,10 @@ std::expected<WorkspaceState, WorkspaceStateStoreError> WorkspaceStateStore::loa
             {
                 auto backup = parseWorkspacePayload(*backupPayload);
                 m_lastLoadRecoveredFromBackup = backup.has_value();
+                if (backup)
+                {
+                    m_knownGoodPayload = *backupPayload;
+                }
                 return backup;
             }
         }
@@ -489,6 +494,10 @@ std::expected<WorkspaceState, WorkspaceStateStoreError> WorkspaceStateStore::loa
         primaryPayload
             ? parseWorkspacePayload(*primaryPayload)
             : std::expected<WorkspaceState, WorkspaceStateStoreError>{std::unexpected(primaryPayload.error())};
+    if (primary)
+    {
+        m_knownGoodPayload = *primaryPayload;
+    }
     if (primary || primary.error() == WorkspaceStateStoreError::UnsupportedVersion || !QFileInfo::exists(backupPath))
     {
         return primary;
@@ -500,6 +509,7 @@ std::expected<WorkspaceState, WorkspaceStateStoreError> WorkspaceStateStore::loa
         if (backup)
         {
             m_lastLoadRecoveredFromBackup = true;
+            m_knownGoodPayload = *backupPayload;
             return backup;
         }
     }
@@ -516,27 +526,6 @@ std::expected<void, WorkspaceStateStoreError> WorkspaceStateStore::save(const Wo
     if (!directory.exists() && !directory.mkpath(QStringLiteral(".")))
     {
         return std::unexpected(WorkspaceStateStoreError::Io);
-    }
-    const QString backupPath = m_filePath + QStringLiteral(".bak");
-    if (QFileInfo::exists(m_filePath))
-    {
-        auto previousPayload = readWorkspacePayload(m_filePath);
-        if (previousPayload)
-        {
-            auto previous = parseWorkspacePayload(*previousPayload);
-            if (!previous && previous.error() == WorkspaceStateStoreError::UnsupportedVersion)
-            {
-                return std::unexpected(WorkspaceStateStoreError::UnsupportedVersion);
-            }
-            if (previous)
-            {
-                auto backupWritten = writeWorkspacePayload(backupPath, *previousPayload);
-                if (!backupWritten)
-                {
-                    return backupWritten;
-                }
-            }
-        }
     }
     QJsonArray profiles;
     for (const ProfileWorkspaceState &profile : state.profiles)
@@ -565,7 +554,46 @@ std::expected<void, WorkspaceStateStoreError> WorkspaceStateStore::save(const Wo
                                   {QStringLiteral("quarantinedRestoreIntentIds"), quarantinedRestoreIntentIds},
                                   {QStringLiteral("restoreAttemptIntentId"), text(state.restoreAttemptIntentId)}})
             .toJson(QJsonDocument::Indented);
-    return writeWorkspacePayload(m_filePath, payload);
+    const bool fileExists = QFileInfo::exists(m_filePath);
+    if (fileExists && payload == m_knownGoodPayload)
+    {
+        return {};
+    }
+    const QString backupPath = m_filePath + QStringLiteral(".bak");
+    if (fileExists && !m_knownGoodPayload.isEmpty())
+    {
+        auto backupWritten = writeWorkspacePayload(backupPath, m_knownGoodPayload);
+        if (!backupWritten)
+        {
+            return backupWritten;
+        }
+    }
+    else if (fileExists)
+    {
+        auto previousPayload = readWorkspacePayload(m_filePath);
+        if (previousPayload)
+        {
+            auto previous = parseWorkspacePayload(*previousPayload);
+            if (!previous && previous.error() == WorkspaceStateStoreError::UnsupportedVersion)
+            {
+                return std::unexpected(WorkspaceStateStoreError::UnsupportedVersion);
+            }
+            if (previous)
+            {
+                auto backupWritten = writeWorkspacePayload(backupPath, *previousPayload);
+                if (!backupWritten)
+                {
+                    return backupWritten;
+                }
+            }
+        }
+    }
+    auto written = writeWorkspacePayload(m_filePath, payload);
+    if (written)
+    {
+        m_knownGoodPayload = payload;
+    }
+    return written;
 }
 
 } // namespace ztermy::workbench

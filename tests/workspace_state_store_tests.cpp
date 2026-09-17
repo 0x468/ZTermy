@@ -28,6 +28,7 @@ private slots:
     void rejectsMalformedTerminalWorkspaceTopology();
     void recoversTheLastKnownGoodStateFromBackup();
     void refusesToOverwriteANewerWorkspaceSchema();
+    void skipsRewritingAnUnchangedStateAndBacksUpFromMemory();
 };
 
 void WorkspaceStateStoreTests::missingFileLoadsEmptyState()
@@ -339,6 +340,55 @@ void WorkspaceStateStoreTests::refusesToOverwriteANewerWorkspaceSchema()
 
     QVERIFY(file.open(QIODevice::ReadOnly));
     QCOMPARE(file.readAll(), futurePayload);
+}
+
+void WorkspaceStateStoreTests::skipsRewritingAnUnchangedStateAndBacksUpFromMemory()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("workspace.json"));
+    const QString backupPath = path + QStringLiteral(".bak");
+    const ztermy::workbench::WorkspaceStateStore store(path);
+
+    ztermy::workbench::WorkspaceState first;
+    first.profiles.push_back({.profileId = "host-a", .lastRemotePath = "/first"});
+    QVERIFY(store.save(first).has_value());
+    QVERIFY(!QFileInfo::exists(backupPath));
+
+    // Saving the same state again is a no-op: no rewrite, no backup.
+    QFile marker(path);
+    QVERIFY(marker.open(QIODevice::ReadOnly));
+    const QByteArray firstPayload = marker.readAll();
+    marker.close();
+    QVERIFY(store.save(first).has_value());
+    QVERIFY(!QFileInfo::exists(backupPath));
+    QVERIFY(marker.open(QIODevice::ReadOnly));
+    QCOMPARE(marker.readAll(), firstPayload);
+    marker.close();
+
+    // A changed state backs up the previously written payload without
+    // re-reading the file: corrupting it on disk first must not matter.
+    QFile corrupted(path);
+    QVERIFY(corrupted.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    QCOMPARE(corrupted.write("{corrupted"), qint64{10});
+    corrupted.close();
+    ztermy::workbench::WorkspaceState second;
+    second.profiles.push_back({.profileId = "host-a", .lastRemotePath = "/second"});
+    QVERIFY(store.save(second).has_value());
+    QFile backup(backupPath);
+    QVERIFY(backup.open(QIODevice::ReadOnly));
+    QCOMPARE(backup.readAll(), firstPayload);
+
+    // A fresh store that loads the file also backs up from memory.
+    const ztermy::workbench::WorkspaceStateStore reopened(path);
+    const auto loaded = reopened.load();
+    QVERIFY(loaded.has_value());
+    QCOMPARE(*loaded, second);
+    QVERIFY(reopened.save(second).has_value());
+    QVERIFY(reopened.save(first).has_value());
+    const auto recoveredBackup = ztermy::workbench::WorkspaceStateStore(backupPath).load();
+    QVERIFY(recoveredBackup.has_value());
+    QCOMPARE(*recoveredBackup, second);
 }
 
 QTEST_GUILESS_MAIN(WorkspaceStateStoreTests)

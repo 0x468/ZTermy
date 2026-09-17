@@ -40,6 +40,15 @@ The project has not published a release.
   AI frame/command wait timers use coarse timers so a 50 ms wait no longer
   pins the Windows timer resolution. `conpty-process` gains a test for the
   event-interrupted wait.
+- Stop re-reading and re-parsing `workspace.json` on every save. The store
+  used to read the current file, parse the whole document and rewrite the
+  `.bak` copy before serializing the new state, on every SFTP directory
+  change, pane resize or tab switch. It now remembers the payload it last
+  wrote or loaded, skips the write entirely when the serialized state is
+  unchanged, and produces `.bak` from the remembered payload; the read/parse
+  path only remains for files it has never seen (still refusing to overwrite
+  a newer schema). `workspace-state-store` gains a regression test for the
+  no-op save and the in-memory backup.
 
 ### 0.4.6 local validation build — 2026-09-15
 
