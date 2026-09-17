@@ -51,6 +51,37 @@ inline void processWindowEventsFor(const std::chrono::milliseconds duration)
     loop.exec();
 }
 
+// Synthesizes one mouse event in window scene coordinates and lets the scene react.
+inline void sendMouse(QQuickWindow &window, const QPointF &point, const Qt::MouseButtons buttons,
+                      const Qt::MouseButton button, const QEvent::Type type,
+                      const std::chrono::milliseconds settle = std::chrono::milliseconds{30})
+{
+    qt_handleMouseEvent(&window, point, window.mapToGlobal(point.toPoint()), buttons, button, type, Qt::NoModifier,
+                        static_cast<int>(GetTickCount()));
+    processWindowEventsFor(settle);
+}
+
+// A real pointer hovers before it presses. The pane drag capture layer in
+// Main.qml only enables itself while a header drag area is hovered, so a
+// synthetic press without the preceding move never reaches it.
+inline void clickMouse(QQuickWindow &window, const QPointF &point)
+{
+    sendMouse(window, point, Qt::NoButton, Qt::NoButton, QEvent::MouseMove);
+    sendMouse(window, point, Qt::LeftButton, Qt::LeftButton, QEvent::MouseButtonPress);
+    sendMouse(window, point, Qt::NoButton, Qt::LeftButton, QEvent::MouseButtonRelease);
+}
+
+inline void dragMouse(QQuickWindow &window, const QPointF &start, const QPointF &end, const int steps,
+                      const std::chrono::milliseconds settle = std::chrono::milliseconds{30})
+{
+    sendMouse(window, start, Qt::NoButton, Qt::NoButton, QEvent::MouseMove, settle);
+    sendMouse(window, start, Qt::LeftButton, Qt::LeftButton, QEvent::MouseButtonPress, settle);
+    for (int step = 1; step <= steps; ++step)
+        sendMouse(window, start + (end - start) * (static_cast<double>(step) / steps), Qt::LeftButton, Qt::NoButton,
+                  QEvent::MouseMove, settle);
+    sendMouse(window, end, Qt::NoButton, Qt::LeftButton, QEvent::MouseButtonRelease, settle);
+}
+
 inline void settleWindowLayout(QQuickWindow &window)
 {
     // An occluded smoke window may not receive render frames. Explicitly render
@@ -85,14 +116,8 @@ inline bool verifyWorkbenchResizeWhileDragging(NativeWindow &window, AppControll
         controller.terminalTabs().constFirst().toMap().value(QStringLiteral("workbenchWidth")).toReal();
     const QPointF start = grip->mapToScene({grip->width() / 2, grip->height() / 2});
     const QPointF end = start + QPointF{60, 0};
-    const auto send = [&window](const QPointF &point, Qt::MouseButtons buttons, Qt::MouseButton button,
-                                QEvent::Type type) {
-        qt_handleMouseEvent(&window, point, window.mapToGlobal(point.toPoint()), buttons, button, type, Qt::NoModifier,
-                            static_cast<int>(GetTickCount()));
-        processWindowEventsFor(std::chrono::milliseconds{30});
-    };
-    send(start, Qt::LeftButton, Qt::LeftButton, QEvent::MouseButtonPress);
-    send(end, Qt::LeftButton, Qt::NoButton, QEvent::MouseMove);
+    sendMouse(window, start, Qt::LeftButton, Qt::LeftButton, QEvent::MouseButtonPress);
+    sendMouse(window, end, Qt::LeftButton, Qt::NoButton, QEvent::MouseMove);
     const qreal live = root->property("activeTerminalWorkbenchWidth").toReal();
     const bool liveResize =
         root->property("workbenchResizeInProgress").toBool() && qAbs(live - original - 60) < 2
@@ -100,7 +125,7 @@ inline bool verifyWorkbenchResizeWhileDragging(NativeWindow &window, AppControll
         && qAbs(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("workbenchWidth")).toReal()
                 - original)
                < 1;
-    send(end, Qt::NoButton, Qt::LeftButton, QEvent::MouseButtonRelease);
+    sendMouse(window, end, Qt::NoButton, Qt::LeftButton, QEvent::MouseButtonRelease);
     const bool committed =
         !root->property("workbenchResizeInProgress").toBool()
         && qAbs(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("workbenchWidth")).toReal() - live)
@@ -127,17 +152,7 @@ inline bool verifyWholeTabMouseMerge(NativeWindow &window, AppController &contro
         const QPointF start = sourceTab->mapToScene({sourceTab->width() / 2, sourceTab->height() / 2});
         const QPointF end =
             destinationView->mapToScene({destinationView->width() / 2, destinationView->height() * 0.1});
-        const auto send = [&window](const QPointF &point, Qt::MouseButtons buttons, Qt::MouseButton button,
-                                    QEvent::Type type) {
-            qt_handleMouseEvent(&window, point, window.mapToGlobal(point.toPoint()), buttons, button, type,
-                                Qt::NoModifier, static_cast<int>(GetTickCount()));
-            processWindowEventsFor(std::chrono::milliseconds{40});
-        };
-        send(start, Qt::LeftButton, Qt::LeftButton, QEvent::MouseButtonPress);
-        for (int step = 1; step <= 12; ++step)
-            send(start + (end - start) * (static_cast<double>(step) / 12.0), Qt::LeftButton, Qt::NoButton,
-                 QEvent::MouseMove);
-        send(end, Qt::NoButton, Qt::LeftButton, QEvent::MouseButtonRelease);
+        dragMouse(window, start, end, 12, std::chrono::milliseconds{40});
         processWindowEventsFor(std::chrono::milliseconds{250});
         const bool unchanged = controller.terminalWorkspace(workspaceId).value(QStringLiteral("paneCount")).toInt() == 2
                                && controller.terminalWorkspace(otherId).value(QStringLiteral("paneCount")).toInt() == 1;
@@ -196,15 +211,7 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
     }
     if (header && targetPane)
     {
-        const auto send = [&window](const QPointF &point, Qt::MouseButtons buttons, Qt::MouseButton button,
-                                    QEvent::Type type) {
-            qt_handleMouseEvent(&window, point, window.mapToGlobal(point.toPoint()), buttons, button, type,
-                                Qt::NoModifier, static_cast<int>(GetTickCount()));
-            processWindowEventsFor(std::chrono::milliseconds{30});
-        };
-        const QPointF clickPoint = header->mapToScene(QPointF(12, 16));
-        send(clickPoint, Qt::LeftButton, Qt::LeftButton, QEvent::MouseButtonPress);
-        send(clickPoint, Qt::NoButton, Qt::LeftButton, QEvent::MouseButtonRelease);
+        clickMouse(window, header->mapToScene(QPointF(12, 16)));
         settle();
         const bool headerFocused =
             controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString() == firstId;
@@ -215,12 +222,11 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
         if (!header || !targetPane)
             return false;
         const QPointF start = header->mapToScene(QPointF(12, 16));
-        const QPointF end = targetPane->mapToScene(QPointF(targetPane->width() / 2, -16));
-        send(start, Qt::LeftButton, Qt::LeftButton, QEvent::MouseButtonPress);
-        for (int step = 1; step <= 8; ++step)
-            send(start + (end - start) * (static_cast<double>(step) / 8.0), Qt::LeftButton, Qt::NoButton,
-                 QEvent::MouseMove);
-        send(end, Qt::NoButton, Qt::LeftButton, QEvent::MouseButtonRelease);
+        // Land in the upper band of the target viewport: the drop-target
+        // resolver only recognizes viewports, and that band means a vertical
+        // split placed before the target.
+        const QPointF end = targetPane->mapToScene(QPointF(targetPane->width() / 2, targetPane->height() * 0.1));
+        dragMouse(window, start, end, 8);
         settle();
         const auto moved = controller.activeTerminalWorkspace();
         const bool reordered =
@@ -253,17 +259,7 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
     {
         const QPointF start = singleHeader->mapToScene({12, 16});
         const QPointF end{-30, start.y()};
-        const auto send = [&window](const QPointF &point, Qt::MouseButtons buttons, Qt::MouseButton button,
-                                    QEvent::Type type) {
-            qt_handleMouseEvent(&window, point, window.mapToGlobal(point.toPoint()), buttons, button, type,
-                                Qt::NoModifier, static_cast<int>(GetTickCount()));
-            processWindowEventsFor(std::chrono::milliseconds{30});
-        };
-        send(start, Qt::LeftButton, Qt::LeftButton, QEvent::MouseButtonPress);
-        for (int step = 1; step <= 8; ++step)
-            send(start + (end - start) * (static_cast<double>(step) / 8.0), Qt::LeftButton, Qt::NoButton,
-                 QEvent::MouseMove);
-        send(end, Qt::NoButton, Qt::LeftButton, QEvent::MouseButtonRelease);
+        dragMouse(window, start, end, 8);
         settle();
         passed = passed && root->property("detachedTerminalPaneId").toString() == singlePaneId;
         qInfo() << "Window transfer single-pane detach:" << passed;

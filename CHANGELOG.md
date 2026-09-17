@@ -23,6 +23,12 @@ The project has not published a release.
   that checks `IsIconic`, `IsZoomed` and `WPF_RESTORETOMAXIMIZED`.
 - Show newly detached windows during workspace synchronization without an
   explicit raise; only explicit present actions raise and focus a window.
+- Repair `ztermy_terminal_render_runtime_smoke` and
+  `ztermy_lifecycle_runtime_smoke` after the on-demand terminal page and the
+  hover-gated pane drag capture: synthetic drags now hover before pressing and
+  drop inside the target viewport, and the lifecycle smoke opens the terminal
+  page before looking for a viewport. The lifecycle smoke now reaches its
+  close-latency measurement and reports a tab close above its 3 s budget.
 
 ### 0.4.5 local validation build — 2026-09-13
 

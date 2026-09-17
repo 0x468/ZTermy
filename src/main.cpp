@@ -3681,6 +3681,15 @@ void sendText(ztermy::NativeWindow &window, const QStringView text)
     ztermy::ui::showForRuntimeSmoke(window);
     window.requestActivate();
     processWindowEventsFor(std::chrono::milliseconds{200});
+    // The terminal page loads on demand; open it the way the render smoke does
+    // before looking for a viewport.
+    const auto showTerminalPage = [&window] {
+        if (auto *rootObject = window.rootObject(); rootObject != nullptr)
+        {
+            rootObject->setProperty("currentPage", QStringLiteral("terminal"));
+        }
+        processWindowEventsFor(std::chrono::milliseconds{100});
+    };
 
     constexpr int sequentialCycles = 8;
     qint64 maximumCloseMilliseconds = 0;
@@ -3697,9 +3706,11 @@ void sendText(ztermy::NativeWindow &window, const QStringView text)
             qCWarning(applicationLog) << "Lifecycle smoke could not start local terminal" << "cycle=" << cycle;
             return false;
         }
+        showTerminalPage();
         auto *terminalItem = window.findChild<ztermy::ui::TerminalItem *>();
         if (terminalItem == nullptr)
         {
+            qCWarning(applicationLog) << "Lifecycle smoke found no terminal viewport" << "cycle=" << cycle;
             return false;
         }
         terminalItem->inputGenerated(QByteArrayLiteral("Write-Output ('ZTERMY_LIFECYCLE_' + 'READY')\r"));
@@ -3742,9 +3753,11 @@ void sendText(ztermy::NativeWindow &window, const QStringView text)
         std::chrono::seconds{8});
     if (allRunning)
     {
+        showTerminalPage();
         auto *terminalItem = window.findChild<ztermy::ui::TerminalItem *>();
         if (terminalItem == nullptr)
         {
+            qCWarning(applicationLog) << "Lifecycle smoke found no terminal viewport for concurrent tabs";
             return false;
         }
         terminalItem->inputGenerated(QByteArrayLiteral("1..2000 | ForEach-Object { \"ztermy lifecycle line $_\" }\r"));
@@ -3899,6 +3912,15 @@ void sendText(ztermy::NativeWindow &window, const QStringView text)
         return position > 0.9;
     });
     const bool scrollbarPassed = scrollbarExposed && scrollbarReachedHistory && scrollbarReturnedToBottom;
+    if (!scrollbarPassed)
+    {
+        qCWarning(applicationLog) << "Terminal render scrollbar check" << "exposed=" << scrollbarExposed
+                                  << "reachedHistory=" << scrollbarReachedHistory
+                                  << "returnedToBottom=" << scrollbarReturnedToBottom
+                                  << "visible=" << terminalItem->scrollbarVisible()
+                                  << "pageRatio=" << terminalItem->scrollbarPageRatio()
+                                  << "position=" << terminalItem->scrollbarPosition();
+    }
     heartbeat.stop();
     QObject::disconnect(frameConnection);
 
