@@ -39,9 +39,9 @@ keep `reduced` and `off` tiers for low-end machines and the Windows
 | # | Chapter | Deliverable | Status |
 |---|---------|-------------|--------|
 | 1 | Material scope + effects tier | Opaque content pages/popups, material limited to chrome + workspace, `effectsTier` token, ADR 0120 | ☑ 2026-09-18 |
-| 2 | Token layers + Elevation | `Theme` split into palette/skin, `AppSurface`/`AppShadow`, hard-coded radii removed | ☐ |
+| 2 | Elevation library | `AppSurface` elevation 0–3 with built-in shadow, radius tokens, hard-coded radii removed | ☑ 2026-09-18 |
 | 3 | Motion library | `Motion` singleton, shared transitions for page/tab/pane/menu/toast, respects tier and Windows animation preference | ☐ |
-| 4 | Theme library + picker | Built-in themes, JSON custom themes, Windows Terminal/Ghostty import, picker dialog with hover preview, ADR 0121 | ☐ |
+| 4 | Theme library + picker | `Theme` split into palette/skin, built-in themes, JSON custom themes, Windows Terminal/Ghostty import, picker dialog with hover preview, ADR 0121 | ☐ |
 | 5 | Settings reorganisation | Grouped navigation, search, per-row reset, appearance page rebuilt around the theme strip | ☐ |
 | 6 | Chrome polish | Tab strip, caption buttons, pane headers, drag previews on the new library | ☐ |
 
@@ -68,3 +68,17 @@ runtime smokes passing; a before/after screenshot pair per chapter goes under
   `--pane-scrollbar-smoke` exit 0; code health gate PASS; captures in
   `docs/design/ui-v2/ch1/` (the "before" state is reproducible from `main`
   at 713ee66 with `--ui-layout-smoke`).
+- 2026-09-18: Chapter 2 landed. `AppSurface` (elevation 0 panel, 1 card,
+  2 floating, 3 dialog) owns fill, hairline, radius and a `MultiEffect`
+  shadow gated by `Theme.shadowsEnabled`; SectionCard, SidePanelSurface,
+  StatePanel, AppMenu, AppToolTip, combo/suggestion/font popups, toasts,
+  transfer center, terminal popovers, ConfirmationDialog, CommandPalette,
+  Main.qml dialogs, search panel and drag previews all sit on it.
+  `Theme.radiusCompact` and shadow tokens added; no numeric `radius:` remains
+  in QML (dots and pills use `height / 2`). `QtQuick.Effects` is a module
+  dependency; the portable and MSI verifications require
+  `Qt6QuickEffects.dll` and `effectsplugin.dll`. The palette/skin split moves
+  to Chapter 4 where the theme data model is introduced. Evidence:
+  `ztermy_qml_format_check`, `ztermy_qmllint`, `ztermy_dynamic_deploy`;
+  `--ui-layout-smoke` and `--pane-scrollbar-smoke` exit 0; code health gate
+  PASS; captures in `docs/design/ui-v2/ch2/`.

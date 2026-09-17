@@ -33,22 +33,37 @@ roles instead of page-owned color literals.
 From lowest to highest:
 
 1. `windowBackground`: native-window clear surface.
-2. `chromeBackground`: title bar and fixed application chrome.
-3. `panelBackground`: navigation rail and persistent secondary panels.
-4. `workspaceBackground`: page and terminal workspace.
-5. `elevatedBackground`: cards, editors, prompts, and grouped settings.
-6. `floatingBackground`: transient menus and overlays.
+2. `chromeBackground`: title bar and tab strip; the only chrome that shows
+   the Windows material.
+3. `workspaceBackground`: terminal workspace; also shows the material.
+4. `contentBackground`: opaque page body (Hosts, Settings, AI, SFTP, logs).
+5. `panelBackground`: navigation rail and docked side panels (elevation 0).
+6. `elevatedBackground`: cards, editors and state panels (elevation 1).
+7. `floatingBackground`: menus, tool tips, popovers, toasts, drawers and
+   dialogs (elevation 2 and 3).
 
 `controlBackground`, `controlHover`, and `controlPressed` are interaction
 surfaces. They must not be substituted with page-specific blues or greens.
 
-The Windows backdrop is one native layer behind these semantic surfaces.
-Acrylic and Transparent background opacity applies exactly to chrome, panels,
-content, and workspaces: 0% is transparent and 100% is opaque. Cards retain a
-readable tint at 0%, controls and fields retain a stronger tint, and popups
-remain the strongest surface. Light glass uses a higher minimum tint than dark
-glass. Mica and Mica Alt use fixed surface strengths and do not expose an
-opacity control.
+Every opaque surface is an `AppSurface { elevation: n }` (ADR 0120). The
+component owns the fill, hairline (`border` below elevation 2, `borderStrong`
+from elevation 2), radius (`radiusPanel`, or `radiusControl` when `compact`)
+and the shadow. Elevation 2 casts a short shadow, elevation 3 a deeper one;
+both are dropped when `Theme.shadowsEnabled` is false (`reduced`/`off` tiers
+and high contrast). Nothing else may draw a shadow or a translucent fill.
+Depth comes from elevation, never from stacked alpha.
+
+The Windows backdrop is one native layer behind the chrome and workspace only.
+Acrylic and Transparent background opacity scales exactly those two tints: 0%
+is transparent and 100% is opaque. Mica and Mica Alt use fixed tints and do
+not expose an opacity control. Content pages never reveal the material, so
+lowering the opacity cannot make settings text unreadable.
+
+Radii come from four tokens: `radiusSmall` (chips, focus rings, drop
+targets), `radiusCompact` (tab and pane affordances), `radiusControl`
+(buttons, fields, menus, navigation rows) and `radiusPanel` (cards, dialogs).
+Dots, pills and round buttons use `height / 2`; numeric radii are not
+allowed in QML.
 
 Draft window appearance is previewed live on the whole native window. A QML
 child cannot reveal the Windows backdrop through already painted ancestors,
