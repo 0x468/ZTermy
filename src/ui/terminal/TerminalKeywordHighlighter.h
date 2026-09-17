@@ -31,6 +31,7 @@ inline constexpr std::size_t maximumKeywordRules = 16;
 inline constexpr qsizetype maximumKeywordPatternLength = 128;
 inline constexpr std::size_t maximumKeywordMatchesPerViewport = 512;
 
+// Returns one style per cell, or an empty vector when no rule can match.
 [[nodiscard]] std::vector<TerminalKeywordCellStyle>
 highlightTerminalKeywords(const terminal::TerminalSnapshot &snapshot, const std::vector<TerminalKeywordRule> &rules);
 

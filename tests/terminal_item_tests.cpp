@@ -73,6 +73,7 @@ class TerminalItemTests final : public QObject
 
 private slots:
     void positionsImeAtTerminalCursor();
+    void skipsKeywordStylesWithoutRulesAndReportsScrollbarChanges();
     void tracksPreeditCursorWithoutSendingInput();
     void usesWideImeCursorAndShiftsSuffix();
     void commitsImeTextExactlyOnce();
@@ -340,6 +341,39 @@ void TerminalItemTests::recordsOptInRenderMetrics()
 
     metrics.reset();
     QCOMPARE(metrics.snapshot().renderedFrames, std::uint64_t{0});
+}
+
+void TerminalItemTests::skipsKeywordStylesWithoutRulesAndReportsScrollbarChanges()
+{
+    // No rules: the highlighter must not allocate a per-cell style table.
+    QVERIFY(ztermy::ui::highlightTerminalKeywords(*snapshotAt(0, 0), {}).empty());
+    const std::vector<ztermy::ui::TerminalKeywordRule> rules{{.id = QStringLiteral("x"),
+                                                              .pattern = QStringLiteral("x"),
+                                                              .foreground = {},
+                                                              .background = QColor(QStringLiteral("#d13438")),
+                                                              .enabled = true,
+                                                              .caseSensitive = false}};
+    const auto snapshot = snapshotAt(0, 0);
+    QCOMPARE(ztermy::ui::highlightTerminalKeywords(*snapshot, rules).size(),
+             static_cast<std::size_t>(snapshot->columns) * snapshot->rows);
+
+    // scrollbarChanged is only emitted when the scrollbar geometry moves.
+    TestableTerminalItem item;
+    QSignalSpy scrollbarSpy(&item, &ztermy::ui::TerminalItem::scrollbarChanged);
+    auto first = snapshotAt(0, 0);
+    first->scrollbar = {.total = 100, .offset = 0, .visible = 24};
+    item.setSnapshot(first);
+    QCOMPARE(scrollbarSpy.size(), 1);
+    auto same = snapshotAt(1, 0);
+    same->scrollbar = first->scrollbar;
+    item.setSnapshot(same);
+    QCOMPARE(scrollbarSpy.size(), 1);
+    auto moved = snapshotAt(1, 0);
+    moved->scrollbar = {.total = 100, .offset = 10, .visible = 24};
+    item.setSnapshot(moved);
+    QCOMPARE(scrollbarSpy.size(), 2);
+    item.setSnapshot(nullptr);
+    QCOMPARE(scrollbarSpy.size(), 3);
 }
 
 void TerminalItemTests::highlightsWideAndCaseInsensitiveKeywords()

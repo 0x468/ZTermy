@@ -16,6 +16,9 @@
 #include <QVariantList>
 #include <QtQmlIntegration/qqmlintegration.h>
 
+#include <array>
+#include <bitset>
+#include <cstddef>
 #include <cstdint>
 
 class QInputMethodEvent;
@@ -257,6 +260,10 @@ private:
     void notifyInputMethod() const;
     [[nodiscard]] qreal cellWidth() const;
     [[nodiscard]] qreal cellHeight() const;
+    void refreshFontMetrics();
+    [[nodiscard]] const QFont &styledFont(std::size_t styleBits);
+    void refreshKeywordStyles();
+    void refreshSearchStyles();
     [[nodiscard]] ztermy::terminal::TerminalCursorStyle effectiveCursorStyle() const noexcept;
     void setHasSelection(bool selected);
     void showSelectionAction(const QPointF &position, const bool preferBelow)
@@ -282,8 +289,23 @@ private:
     void reportFocus(bool focused);
     void requestPasteBytes(const QByteArray &bytes);
 
+    static constexpr std::size_t styleBold = 1U << 0U;
+    static constexpr std::size_t styleItalic = 1U << 1U;
+    static constexpr std::size_t styleUnderline = 1U << 2U;
+    static constexpr std::size_t styleStrikeOut = 1U << 3U;
+    static constexpr std::size_t styleOverline = 1U << 4U;
+    static constexpr std::size_t styledFontCount = 1U << 5U;
+
     ztermy::terminal::TerminalSnapshotPtr m_snapshot;
     QFont m_font;
+    qreal m_cellWidth = 1.0;
+    qreal m_cellHeight = 1.0;
+    qreal m_fontAscent = 0.0;
+    std::array<QFont, styledFontCount> m_styledFonts;
+    std::bitset<styledFontCount> m_styledFontsReady;
+    std::vector<TerminalKeywordCellStyle> m_keywordStyles;
+    std::vector<TerminalKeywordCellStyle> m_searchStyles;
+    bool m_searchStylesDirty = false;
     QTimer m_cursorBlinkTimer;
     QTimer m_selectionAutoscrollTimer;
     QTimer m_focusOutTimer;

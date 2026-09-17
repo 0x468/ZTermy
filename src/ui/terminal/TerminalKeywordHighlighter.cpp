@@ -11,11 +11,13 @@ std::vector<TerminalKeywordCellStyle> highlightTerminalKeywords(const terminal::
                                                                 const std::vector<TerminalKeywordRule> &rules)
 {
     const std::size_t cellCount = static_cast<std::size_t>(snapshot.columns) * snapshot.rows;
-    std::vector<TerminalKeywordCellStyle> styles(cellCount);
+    // No rules means no styles: callers treat an empty result as "nothing
+    // highlighted" and skip the per-cell allocation on every frame.
     if (snapshot.columns == 0 || snapshot.rows == 0 || rules.empty())
     {
-        return styles;
+        return {};
     }
+    std::vector<TerminalKeywordCellStyle> styles(cellCount);
 
     std::size_t matchCount = 0;
     std::vector<bool> claimed(cellCount, false);

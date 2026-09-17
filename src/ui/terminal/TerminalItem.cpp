@@ -91,8 +91,6 @@ public:
     QSize pixelSize;
     QImage image;
     ztermy::terminal::TerminalSnapshotPtr previousDiagnosticSnapshot;
-    std::vector<ztermy::ui::TerminalKeywordCellStyle> keywordStyles;
-    std::vector<ztermy::ui::TerminalKeywordCellStyle> searchStyles;
     QSGSimpleTextureNode *cursorNode = nullptr;
     QRectF cursorRect;
 
@@ -154,7 +152,7 @@ void configureLigatures(QFont &font, const bool enabled)
     return first.selected == second.selected && first.bold == second.bold && first.italic == second.italic
            && first.underline == second.underline && first.strikethrough == second.strikethrough
            && first.overline == second.overline && first.hyperlinkId == second.hyperlinkId
-           && color(first.foreground) == color(second.foreground);
+           && first.foreground == second.foreground;
 }
 
 [[nodiscard]] ztermy::terminal::TerminalMouseButton terminalMouseButton(const Qt::MouseButton button) noexcept
@@ -201,6 +199,7 @@ TerminalItem::TerminalItem(QQuickItem *parent) : QQuickItem(parent)
     m_font.setPixelSize(14);
     m_font.setStyleHint(QFont::Monospace);
     m_font.setFixedPitch(true);
+    refreshFontMetrics();
 
     m_cursorBlinkTimer.setInterval(530);
     QObject::connect(&m_cursorBlinkTimer, &QTimer::timeout, this, [this] {
@@ -451,12 +450,19 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
         cancelSelectionGesture();
         dismissSelectionAction();
         setHasSelection(false);
+        const bool scrollbarWasVisible = scrollbarVisible();
         m_snapshot.reset();
+        m_keywordStyles.clear();
+        m_searchStyles.clear();
+        m_searchStylesDirty = false;
         refreshSelectionMatchesKeywordHighlight();
         clearHoveredLink();
         invalidateRenderer(true);
         notifyInputMethod();
-        emit scrollbarChanged();
+        if (scrollbarWasVisible)
+        {
+            emit scrollbarChanged();
+        }
         emit cursorGeometryChanged();
         return;
     }
@@ -486,7 +492,12 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
     {
         emit selectionActionChanged();
     }
+    const bool scrollbarMoved = !m_snapshot || m_snapshot->scrollbar.total != snapshot->scrollbar.total
+                                || m_snapshot->scrollbar.offset != snapshot->scrollbar.offset
+                                || m_snapshot->scrollbar.visible != snapshot->scrollbar.visible;
     m_snapshot = std::move(snapshot);
+    refreshKeywordStyles();
+    m_searchStylesDirty = true;
     refreshSelectionMatchesKeywordHighlight();
     if (m_hoverInside)
     {
@@ -499,7 +510,10 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
     }
     invalidateRenderer(true);
     notifyInputMethod();
-    emit scrollbarChanged();
+    if (scrollbarMoved)
+    {
+        emit scrollbarChanged();
+    }
     if (previousCursor != inputCursorRectangle())
     {
         emit cursorGeometryChanged();
@@ -561,6 +575,7 @@ void TerminalItem::setFontFamily(const QString &family)
         return;
     }
     m_font.setFamilies({normalized, QStringLiteral("Consolas")});
+    refreshFontMetrics();
     m_reportedColumns = 0;
     m_reportedRows = 0;
     invalidateRenderer(true);
@@ -576,6 +591,7 @@ void TerminalItem::setFontPixelSize(const int pixelSize)
         return;
     }
     m_font.setPixelSize(pixelSize);
+    refreshFontMetrics();
     m_reportedColumns = 0;
     m_reportedRows = 0;
     invalidateRenderer(true);
@@ -592,6 +608,7 @@ void TerminalItem::setLigaturesEnabled(const bool enabled)
     }
     m_ligaturesEnabled = enabled;
     configureLigatures(m_font, enabled);
+    refreshFontMetrics();
     invalidateRenderer(true);
     emit fontChanged();
 }
@@ -752,6 +769,7 @@ void TerminalItem::setKeywordHighlightRules(const QVariantList &rules)
             .caseSensitive = map.value(QStringLiteral("caseSensitive"), false).toBool(),
         });
     }
+    refreshKeywordStyles();
     refreshSelectionMatchesKeywordHighlight();
     invalidateRenderer(true);
     emit keywordHighlightRulesChanged();
@@ -764,6 +782,7 @@ void TerminalItem::setSearchQuery(const QString &query)
         return;
     }
     m_searchQuery = query;
+    m_searchStylesDirty = true;
     invalidateRenderer(true);
     emit searchHighlightChanged();
 }
@@ -775,6 +794,7 @@ void TerminalItem::setSearchCaseSensitive(const bool enabled)
         return;
     }
     m_searchCaseSensitive = enabled;
+    m_searchStylesDirty = true;
     invalidateRenderer(true);
     emit searchHighlightChanged();
 }
@@ -786,6 +806,7 @@ void TerminalItem::setSearchMatchBackground(const QColor &value)
         return;
     }
     m_searchMatchBackground = value;
+    m_searchStylesDirty = true;
     invalidateRenderer(true);
     emit searchHighlightChanged();
 }
@@ -1148,7 +1169,12 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
             m_renderMetrics.recordRowReuse(analysis.totalRows, analysis.reusableRows, analysis.shifted());
         }
         node->previousDiagnosticSnapshot = rowReuseDiagnosticEnabled ? m_snapshot : nullptr;
-        node->image = QImage(pixelSize, QImage::Format_ARGB32_Premultiplied);
+        // Reuse the backing store when the size is unchanged; the previous
+        // texture owned the only other reference and has been uploaded.
+        if (node->image.size() != pixelSize || node->image.format() != QImage::Format_ARGB32_Premultiplied)
+        {
+            node->image = QImage(pixelSize, QImage::Format_ARGB32_Premultiplied);
+        }
         node->image.setDevicePixelRatio(devicePixelRatio);
         node->image.fill(defaultBackgroundColor);
     }
@@ -1166,31 +1192,25 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         painter.setRenderHint(QPainter::TextAntialiasing);
         const qreal cellWidthValue = cellWidth();
         const qreal cellHeightValue = cellHeight();
-        const QFontMetricsF metrics(m_font);
+        const qreal ascent = m_fontAscent;
         const std::vector<PreeditCluster> preeditClusters = layoutPreeditText(m_preeditText, m_font, cellWidthValue);
         const int insertedColumns = preeditColumnCount(preeditClusters);
         const int snapshotColumns = static_cast<int>(m_snapshot->columns);
         const bool terminalCursorPresent = preeditClusters.empty() && m_snapshot->cursor.visible
                                            && m_snapshot->cursor.column < m_snapshot->columns
                                            && m_snapshot->cursor.row < m_snapshot->rows;
-        if (!cursorOnlyPaint)
+        if (m_searchStylesDirty)
         {
-            node->keywordStyles = highlightTerminalKeywords(*m_snapshot, m_keywordHighlightRules);
-            std::vector<TerminalKeywordRule> searchRules;
-            if (!m_searchQuery.isEmpty() && m_searchMatchBackground.isValid())
-            {
-                searchRules.push_back(TerminalKeywordRule{
-                    .id = QStringLiteral("terminal-search"),
-                    .pattern = m_searchQuery,
-                    .background = m_searchMatchBackground,
-                    .enabled = true,
-                    .caseSensitive = m_searchCaseSensitive,
-                });
-            }
-            node->searchStyles = highlightTerminalKeywords(*m_snapshot, searchRules);
+            refreshSearchStyles();
         }
-        const std::vector<TerminalKeywordCellStyle> &keywordStyles = node->keywordStyles;
-        const std::vector<TerminalKeywordCellStyle> &searchStyles = node->searchStyles;
+        // Empty vectors mean "no rule matched anything"; the highlighter
+        // skips the per-cell allocation when there are no rules.
+        const std::size_t cellCount = static_cast<std::size_t>(m_snapshot->columns) * m_snapshot->rows;
+        const TerminalKeywordCellStyle *const keywordStyles =
+            m_keywordStyles.size() == cellCount ? m_keywordStyles.data() : nullptr;
+        const TerminalKeywordCellStyle *const searchStyles =
+            m_searchStyles.size() == cellCount ? m_searchStyles.data() : nullptr;
+        static const TerminalKeywordCellStyle noStyle{};
         const quint16 firstRow = cursorOnlyPaint ? m_snapshot->cursor.row : 0;
         const quint16 lastRow = cursorOnlyPaint ? static_cast<quint16>(firstRow + 1) : m_snapshot->rows;
         if (collectPaintPhases)
@@ -1207,6 +1227,16 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 
         for (quint16 row = firstRow; row < lastRow; ++row)
         {
+            // Adjacent cells with the same background collapse into one fill.
+            QRectF runRect;
+            QColor runColor;
+            const auto flushRun = [&painter, &runRect, &runColor] {
+                if (runColor.isValid())
+                {
+                    painter.fillRect(runRect, runColor);
+                    runColor = QColor{};
+                }
+            };
             for (quint16 column = 0; column < m_snapshot->columns; ++column)
             {
                 const terminal::TerminalCell &cell = m_snapshot->cell(column, row);
@@ -1218,38 +1248,37 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                 {
                     continue;
                 }
+                const std::size_t styleIndex = (static_cast<std::size_t>(row) * m_snapshot->columns) + column;
+                const TerminalKeywordCellStyle &searchStyle = searchStyles ? searchStyles[styleIndex] : noStyle;
+                const TerminalKeywordCellStyle &keywordStyle = keywordStyles ? keywordStyles[styleIndex] : noStyle;
+                const bool currentSearchCell = m_snapshot->searchSelectionPresent && cell.selected;
+                const QColor background = currentSearchCell                   ? m_searchCurrentBackground
+                                          : cell.selected                     ? selectionBackground
+                                          : searchStyle.background.isValid()  ? searchStyle.background
+                                          : keywordStyle.background.isValid() ? keywordStyle.background
+                                          : cell.explicitBackground           ? color(cell.background)
+                                                                              : QColor{};
+                if (!background.isValid())
+                {
+                    flushRun();
+                    continue;
+                }
                 const QRectF cellRect{
                     horizontalPadding + (displayColumn * cellWidthValue),
                     verticalPadding + (row * cellHeightValue),
                     std::max<qreal>(1.0, cell.displayWidth) * cellWidthValue,
                     cellHeightValue,
                 };
-                const bool currentSearchCell = m_snapshot->searchSelectionPresent && cell.selected;
-                if (currentSearchCell)
+                if (runColor.isValid() && runColor == background && qFuzzyCompare(runRect.right(), cellRect.left()))
                 {
-                    painter.fillRect(cellRect, m_searchCurrentBackground);
+                    runRect.setRight(cellRect.right());
+                    continue;
                 }
-                else if (cell.selected)
-                {
-                    painter.fillRect(cellRect, selectionBackground);
-                }
-                else if (const TerminalKeywordCellStyle &searchStyle =
-                             searchStyles[(static_cast<std::size_t>(row) * m_snapshot->columns) + column];
-                         searchStyle.background.isValid())
-                {
-                    painter.fillRect(cellRect, searchStyle.background);
-                }
-                else if (const TerminalKeywordCellStyle &keywordStyle =
-                             keywordStyles[(static_cast<std::size_t>(row) * m_snapshot->columns) + column];
-                         keywordStyle.background.isValid())
-                {
-                    painter.fillRect(cellRect, keywordStyle.background);
-                }
-                else if (cell.explicitBackground)
-                {
-                    painter.fillRect(cellRect, color(cell.background));
-                }
+                flushRun();
+                runRect = cellRect;
+                runColor = background;
             }
+            flushRun();
         }
         if (collectPaintPhases)
         {
@@ -1258,6 +1287,9 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
             phaseMarkNanoseconds = now;
         }
 
+        std::size_t activeStyleBits = std::numeric_limits<std::size_t>::max();
+        QColor activePen;
+        QString grapheme;
         for (quint16 row = firstRow; row < lastRow; ++row)
         {
             for (quint16 column = 0; column < m_snapshot->columns; ++column)
@@ -1276,27 +1308,38 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                     continue;
                 }
 
-                QFont cellFont = m_font;
-                cellFont.setBold(cell.bold);
-                cellFont.setItalic(cell.italic);
-                cellFont.setUnderline(cell.underline || (cell.hyperlinkId != 0 && cell.hyperlinkId == m_hoveredLinkId));
-                cellFont.setStrikeOut(cell.strikethrough);
-                cellFont.setOverline(cell.overline);
-                painter.setFont(cellFont);
+                const bool underline = cell.underline || (cell.hyperlinkId != 0 && cell.hyperlinkId == m_hoveredLinkId);
+                const std::size_t styleBits =
+                    (cell.bold ? styleBold : 0U) | (cell.italic ? styleItalic : 0U) | (underline ? styleUnderline : 0U)
+                    | (cell.strikethrough ? styleStrikeOut : 0U) | (cell.overline ? styleOverline : 0U);
+                if (styleBits != activeStyleBits)
+                {
+                    painter.setFont(styledFont(styleBits));
+                    activeStyleBits = styleBits;
+                }
                 const TerminalKeywordCellStyle &keywordStyle =
-                    keywordStyles[(static_cast<std::size_t>(row) * m_snapshot->columns) + column];
+                    keywordStyles ? keywordStyles[(static_cast<std::size_t>(row) * m_snapshot->columns) + column]
+                                  : noStyle;
                 const QColor cellForeground =
                     m_foregroundOverride.isValid() && sameColor(cell.foreground, defaultForeground)
                         ? m_foregroundOverride
                         : color(cell.foreground);
                 const bool currentSearchCell = m_snapshot->searchSelectionPresent && cell.selected;
-                painter.setPen(currentSearchCell                   ? m_searchCurrentForeground
-                               : cell.selected                     ? selectionForeground
-                               : keywordStyle.foreground.isValid() ? keywordStyle.foreground
-                                                                   : cellForeground);
+                const QColor pen = currentSearchCell                   ? m_searchCurrentForeground
+                                   : cell.selected                     ? selectionForeground
+                                   : keywordStyle.foreground.isValid() ? keywordStyle.foreground
+                                                                       : cellForeground;
+                if (pen != activePen)
+                {
+                    painter.setPen(pen);
+                    activePen = pen;
+                }
 
-                QString grapheme =
-                    QString::fromUcs4(cell.grapheme.data(), static_cast<qsizetype>(cell.grapheme.size()));
+                grapheme.resize(0);
+                for (const char32_t codePoint : cell.grapheme)
+                {
+                    grapheme.append(QChar::fromUcs4(codePoint));
+                }
                 quint16 runEnd = column;
                 int previousDisplayColumn = displayColumn;
                 const bool currentCellHasCursor =
@@ -1323,7 +1366,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                     }
                 }
                 const QPointF baseline{horizontalPadding + (displayColumn * cellWidthValue),
-                                       verticalPadding + (row * cellHeightValue) + metrics.ascent()};
+                                       verticalPadding + (row * cellHeightValue) + ascent};
                 painter.drawText(baseline, grapheme);
                 column = runEnd;
             }
@@ -1398,7 +1441,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                 };
                 painter.fillRect(clusterRect, QColor(42, 91, 145, 180));
                 painter.setPen(QColor(255, 255, 255));
-                painter.drawText(QPointF(clusterRect.left(), compositionTop + metrics.ascent()), cluster.text);
+                painter.drawText(QPointF(clusterRect.left(), compositionTop + ascent), cluster.text);
             }
             if (m_preeditCursorVisible && (!m_cursorBlink || m_cursorBlinkPhase))
             {
@@ -1456,7 +1499,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                                                  ? m_backgroundOverride
                                                  : color(cell.background));
                         cursorPainter.drawText(
-                            QPointF(cursorCell.left(), metrics.ascent()),
+                            QPointF(cursorCell.left(), ascent),
                             QString::fromUcs4(cell.grapheme.data(), static_cast<qsizetype>(cell.grapheme.size())));
                     }
                     break;
@@ -2004,11 +2047,9 @@ void TerminalItem::setHasSelection(const bool selected)
 void TerminalItem::refreshSelectionMatchesKeywordHighlight()
 {
     bool matches = false;
-    if (m_snapshot && m_snapshot->selectionPresent && !m_snapshot->searchSelectionPresent
-        && !m_keywordHighlightRules.empty())
+    if (m_snapshot && m_snapshot->selectionPresent && !m_snapshot->searchSelectionPresent && !m_keywordStyles.empty())
     {
-        const std::vector<TerminalKeywordCellStyle> styles =
-            highlightTerminalKeywords(*m_snapshot, m_keywordHighlightRules);
+        const std::vector<TerminalKeywordCellStyle> &styles = m_keywordStyles;
         for (quint16 row = 0; row < m_snapshot->rows && !matches; ++row)
         {
             for (quint16 column = 0; column < m_snapshot->columns; ++column)
@@ -2680,12 +2721,61 @@ terminal::TerminalCursorStyle TerminalItem::effectiveCursorStyle() const noexcep
 
 qreal TerminalItem::cellWidth() const
 {
-    return std::ceil(QFontMetricsF(m_font).horizontalAdvance(QLatin1Char('M')));
+    return m_cellWidth;
 }
 
 qreal TerminalItem::cellHeight() const
 {
-    return std::ceil(QFontMetricsF(m_font).height());
+    return m_cellHeight;
+}
+
+void TerminalItem::refreshFontMetrics()
+{
+    const QFontMetricsF metrics(m_font);
+    m_cellWidth = std::ceil(metrics.horizontalAdvance(QLatin1Char('M')));
+    m_cellHeight = std::ceil(metrics.height());
+    m_fontAscent = metrics.ascent();
+    m_styledFontsReady.reset();
+}
+
+const QFont &TerminalItem::styledFont(const std::size_t styleBits)
+{
+    QFont &font = m_styledFonts[styleBits];
+    if (!m_styledFontsReady.test(styleBits))
+    {
+        font = m_font;
+        font.setBold((styleBits & styleBold) != 0);
+        font.setItalic((styleBits & styleItalic) != 0);
+        font.setUnderline((styleBits & styleUnderline) != 0);
+        font.setStrikeOut((styleBits & styleStrikeOut) != 0);
+        font.setOverline((styleBits & styleOverline) != 0);
+        m_styledFontsReady.set(styleBits);
+    }
+    return font;
+}
+
+void TerminalItem::refreshKeywordStyles()
+{
+    m_keywordStyles = m_snapshot ? highlightTerminalKeywords(*m_snapshot, m_keywordHighlightRules)
+                                 : std::vector<TerminalKeywordCellStyle>{};
+}
+
+void TerminalItem::refreshSearchStyles()
+{
+    m_searchStylesDirty = false;
+    m_searchStyles.clear();
+    if (!m_snapshot || m_searchQuery.isEmpty() || !m_searchMatchBackground.isValid())
+    {
+        return;
+    }
+    const std::vector<TerminalKeywordRule> searchRules{TerminalKeywordRule{
+        .id = QStringLiteral("terminal-search"),
+        .pattern = m_searchQuery,
+        .background = m_searchMatchBackground,
+        .enabled = true,
+        .caseSensitive = m_searchCaseSensitive,
+    }};
+    m_searchStyles = highlightTerminalKeywords(*m_snapshot, searchRules);
 }
 
 } // namespace ztermy::ui

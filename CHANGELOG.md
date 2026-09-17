@@ -21,6 +21,17 @@ The project has not published a release.
   now reads snapshot cells directly instead of building and splitting a
   `QString` per frame. `local-terminal-session` gains a regression test that
   asserts at most one snapshot is built per delivery.
+- Trim the terminal raster path. `TerminalItem` caches cell metrics and the
+  32 bold/italic/underline/strike/overline font variants instead of building
+  a `QFontMetricsF` and a `QFont` per cell, only changes the painter font and
+  pen when they differ from the previous cell, coalesces adjacent equal
+  background fills into one rectangle, reuses the frame `QImage` when its size
+  is unchanged, computes keyword styles once per snapshot (and search styles
+  once per query) instead of twice per frame, and the keyword highlighter no
+  longer allocates a per-cell style table when there are no rules.
+  `scrollbarChanged` is only emitted when the scrollbar geometry moves. Same
+  20k-line burst: paint P50/P95 buckets 4 ms → 2 ms, paint max 7.5 → 7.0 ms,
+  completion and heartbeat gap unchanged.
 
 ### 0.4.6 local validation build — 2026-09-15
 
