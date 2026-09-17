@@ -225,6 +225,7 @@ void LocalTerminalSession::stop() noexcept
     }
     m_snapshotDeliveryTimer.stop();
     m_snapshotDeliveryScheduled.store(false);
+    m_engineDirty.store(false);
 
     if (m_running.exchange(false))
     {
@@ -621,6 +622,13 @@ void LocalTerminalSession::readLoop(const std::stop_token &stopToken)
 
     if (!stopToken.stop_requested())
     {
+        // The write worker may already be gone; build the exit frame here.
+        if (m_engineDirty.load(std::memory_order_acquire)
+            && !m_snapshotBuildActive.exchange(true, std::memory_order_acq_rel))
+        {
+            buildSnapshot();
+            m_snapshotBuildActive.store(false, std::memory_order_release);
+        }
         emit processExitObserved();
     }
 }
@@ -650,6 +658,12 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
             }
         }
 
+        if (std::holds_alternative<SnapshotRequestCommand>(command))
+        {
+            publishSnapshotIfDirty();
+            continue;
+        }
+
         if (const auto *input = std::get_if<InputCommand>(&command))
         {
             const auto latency = std::chrono::steady_clock::now() - input->enqueuedAt;
@@ -666,15 +680,13 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
                 postStatus(
                     tr("Terminal selection clear failed: %1").arg(QString::fromStdString(selectionError.message())));
             }
-            publishSnapshot();
-
-            const auto bytes =
-                std::as_bytes(std::span(input->bytes.constData(), static_cast<std::size_t>(input->bytes.size())));
-            if (const std::error_code writeError = m_process->write(bytes))
+            // Write to the PTY first so the snapshot build never delays the keystroke.
+            if (!writeToProcess(
+                    std::as_bytes(std::span(input->bytes.constData(), static_cast<std::size_t>(input->bytes.size())))))
             {
-                postStatus(tr("Terminal write failed: %1").arg(QString::fromStdString(writeError.message())));
                 break;
             }
+            publishSnapshot();
             continue;
         }
 
@@ -708,12 +720,11 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
             {
                 continue;
             }
-            publishSnapshot();
-            if (const std::error_code writeError = m_process->write(*encoded))
+            if (!writeToProcess(*encoded))
             {
-                postStatus(tr("Terminal write failed: %1").arg(QString::fromStdString(writeError.message())));
                 break;
             }
+            publishSnapshot();
             continue;
         }
 
@@ -730,13 +741,9 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
                     tr("Terminal mouse encoding failed: %1").arg(QString::fromStdString(encoded.error().message())));
                 continue;
             }
-            if (!encoded->empty())
+            if (!encoded->empty() && !writeToProcess(*encoded))
             {
-                if (const std::error_code writeError = m_process->write(*encoded))
-                {
-                    postStatus(tr("Terminal write failed: %1").arg(QString::fromStdString(writeError.message())));
-                    break;
-                }
+                break;
             }
             continue;
         }
@@ -754,13 +761,9 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
                     tr("Terminal focus encoding failed: %1").arg(QString::fromStdString(encoded.error().message())));
                 continue;
             }
-            if (!encoded->empty())
+            if (!encoded->empty() && !writeToProcess(*encoded))
             {
-                if (const std::error_code writeError = m_process->write(*encoded))
-                {
-                    postStatus(tr("Terminal write failed: %1").arg(QString::fromStdString(writeError.message())));
-                    break;
-                }
+                break;
             }
             continue;
         }
@@ -787,12 +790,11 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
                 postStatus(tr("Terminal paste failed: %1").arg(QString::fromStdString(encoded.error().message())));
                 continue;
             }
-            publishSnapshot();
-            if (const std::error_code writeError = m_process->write(*encoded))
+            if (!writeToProcess(*encoded))
             {
-                postStatus(tr("Terminal write failed: %1").arg(QString::fromStdString(writeError.message())));
                 break;
             }
+            publishSnapshot();
             continue;
         }
 
@@ -822,36 +824,20 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
             continue;
         }
 
-        if (const auto *gesture = std::get_if<SelectionGestureCommand>(&command))
+        if (std::holds_alternative<SelectionGestureCommand>(command)
+            || std::holds_alternative<CopyModeCommand>(command))
         {
+            const auto *gesture = std::get_if<SelectionGestureCommand>(&command);
             std::expected<bool, std::error_code> changed;
             {
                 std::scoped_lock lock(m_engineMutex);
-                changed = m_engine->applySelectionGesture(gesture->gesture);
+                changed = gesture ? m_engine->applySelectionGesture(gesture->gesture)
+                                  : m_engine->applyCopyModeAction(std::get<CopyModeCommand>(command).action);
             }
             if (!changed)
             {
-                postStatus(
-                    tr("Terminal selection gesture failed: %1").arg(QString::fromStdString(changed.error().message())));
-                continue;
-            }
-            if (*changed)
-            {
-                publishSnapshot();
-            }
-            continue;
-        }
-
-        if (const auto *copyMode = std::get_if<CopyModeCommand>(&command))
-        {
-            std::expected<bool, std::error_code> changed;
-            {
-                std::scoped_lock lock(m_engineMutex);
-                changed = m_engine->applyCopyModeAction(copyMode->action);
-            }
-            if (!changed)
-            {
-                postStatus(tr("Terminal Copy Mode failed: %1").arg(QString::fromStdString(changed.error().message())));
+                postStatus((gesture ? tr("Terminal selection gesture failed: %1") : tr("Terminal Copy Mode failed: %1"))
+                               .arg(QString::fromStdString(changed.error().message())));
                 continue;
             }
             if (*changed)
@@ -877,8 +863,9 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
             continue;
         }
 
-        if (std::holds_alternative<CopyCommand>(command))
+        if (std::holds_alternative<CopyCommand>(command) || std::holds_alternative<SelectedTextCommand>(command))
         {
+            const bool copy = std::holds_alternative<CopyCommand>(command);
             std::expected<std::optional<std::string>, std::error_code> selectedText;
             {
                 std::scoped_lock lock(m_engineMutex);
@@ -886,34 +873,20 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
             }
             if (!selectedText)
             {
-                postStatus(tr("Terminal copy failed: %1").arg(QString::fromStdString(selectedText.error().message())));
+                postStatus((copy ? tr("Terminal copy failed: %1") : tr("Terminal selection read failed: %1"))
+                               .arg(QString::fromStdString(selectedText.error().message())));
+                continue;
+            }
+            const QString text = *selectedText ? QString::fromUtf8((*selectedText)->data(),
+                                                                   static_cast<qsizetype>((*selectedText)->size()))
+                                               : QString{};
+            if (!copy)
+            {
+                emit selectedTextReady(text);
             }
             else if (*selectedText)
             {
-                emit clipboardTextReady(
-                    QString::fromUtf8((*selectedText)->data(), static_cast<qsizetype>((*selectedText)->size())));
-            }
-            continue;
-        }
-
-        if (std::holds_alternative<SelectedTextCommand>(command))
-        {
-            std::expected<std::optional<std::string>, std::error_code> selectedText;
-            {
-                std::scoped_lock lock(m_engineMutex);
-                selectedText = m_engine->selectedText();
-            }
-            if (!selectedText)
-            {
-                postStatus(tr("Terminal selection read failed: %1")
-                               .arg(QString::fromStdString(selectedText.error().message())));
-            }
-            else
-            {
-                const QString text = *selectedText ? QString::fromUtf8((*selectedText)->data(),
-                                                                       static_cast<qsizetype>((*selectedText)->size()))
-                                                   : QString{};
-                emit selectedTextReady(text);
+                emit clipboardTextReady(text);
             }
             continue;
         }
@@ -997,12 +970,57 @@ void LocalTerminalSession::monitorProcessExit(const std::stop_token &stopToken)
     }
 }
 
+bool LocalTerminalSession::writeToProcess(const std::span<const std::byte> bytes)
+{
+    if (const std::error_code writeError = m_process->write(bytes))
+    {
+        postStatus(tr("Terminal write failed: %1").arg(QString::fromStdString(writeError.message())));
+        return false;
+    }
+    return true;
+}
+
 void LocalTerminalSession::publishSnapshot()
+{
+    m_engineDirty.store(true, std::memory_order_release);
+    publishSnapshotIfDirty();
+}
+
+void LocalTerminalSession::publishSnapshotIfDirty()
+{
+    if (!m_engineDirty.load(std::memory_order_acquire))
+    {
+        return;
+    }
+    // At most one snapshot waits for delivery. Output that lands while one is
+    // pending only marks the engine dirty; deliverLatestSnapshot() asks the
+    // write worker for the next build once the pending frame has gone out.
+    {
+        std::scoped_lock snapshotLock(m_snapshotMutex);
+        if (m_pendingSnapshot)
+        {
+            m_snapshotsCoalesced.fetch_add(1, std::memory_order_relaxed);
+            return;
+        }
+    }
+    if (m_snapshotBuildActive.exchange(true, std::memory_order_acq_rel))
+    {
+        m_snapshotsCoalesced.fetch_add(1, std::memory_order_relaxed);
+        return;
+    }
+    buildSnapshot();
+    m_snapshotBuildActive.store(false, std::memory_order_release);
+}
+
+void LocalTerminalSession::buildSnapshot()
 {
     TerminalSnapshotPtr snapshot;
     const auto buildStarted = std::chrono::steady_clock::now();
     {
         std::scoped_lock engineLock(m_engineMutex);
+        // Clear under the engine lock: a feed that lands afterwards re-marks
+        // the engine dirty and is picked up by the next delivery round.
+        m_engineDirty.store(false, std::memory_order_release);
         auto snapshotResult = m_engine->snapshot();
         if (!snapshotResult)
         {
@@ -1036,10 +1054,6 @@ void LocalTerminalSession::publishSnapshot()
     }
     {
         std::scoped_lock snapshotLock(m_snapshotMutex);
-        if (m_pendingSnapshot)
-        {
-            m_snapshotsCoalesced.fetch_add(1, std::memory_order_relaxed);
-        }
         m_pendingSnapshot = std::move(snapshot);
     }
 
@@ -1085,12 +1099,24 @@ void LocalTerminalSession::deliverLatestSnapshot()
 
     {
         std::scoped_lock lock(m_snapshotMutex);
-        if (!m_pendingSnapshot || m_snapshotDeliveryScheduled.exchange(true))
+        if (m_pendingSnapshot)
         {
+            if (!m_snapshotDeliveryScheduled.exchange(true))
+            {
+                scheduleLatestSnapshotDelivery();
+            }
             return;
         }
     }
-    scheduleLatestSnapshotDelivery();
+    if (m_engineDirty.load(std::memory_order_acquire) && m_running.load())
+    {
+        std::scoped_lock lock(m_commandMutex);
+        if (m_commands.empty() || !std::holds_alternative<SnapshotRequestCommand>(m_commands.back()))
+        {
+            m_commands.emplace_back(SnapshotRequestCommand{});
+            m_commandAvailable.notify_one();
+        }
+    }
 }
 
 void LocalTerminalSession::postStatus(const QString &status)
@@ -1118,6 +1144,13 @@ void LocalTerminalSession::postProcessExited()
     emit runningChanged(false);
     logMetrics();
     qCInfo(terminalSessionLog) << "Local shell process exited";
+}
+
+LocalTerminalSession::SnapshotCounters LocalTerminalSession::snapshotCounters() const noexcept
+{
+    return {.produced = m_snapshotsProduced.load(),
+            .delivered = m_snapshotsDelivered.load(),
+            .coalesced = m_snapshotsCoalesced.load()};
 }
 
 void LocalTerminalSession::resetMetrics() noexcept

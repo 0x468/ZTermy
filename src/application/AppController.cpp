@@ -814,36 +814,83 @@ semanticCapability(const ztermy::terminal::SemanticTerminalSnapshot &snapshot) n
                                           : ztermy::terminal::TerminalSemanticCapability::none;
 }
 
-[[nodiscard]] QString terminalFrameText(const ztermy::terminal::TerminalSnapshotPtr &snapshot)
+void appendUtf8(std::string &target, const char32_t codepoint)
 {
-    if (!snapshot || snapshot->columns == 0 || snapshot->rows == 0)
+    if (codepoint < 0x80)
     {
-        return {};
+        target.push_back(static_cast<char>(codepoint));
     }
-    QString frame;
-    for (std::uint16_t row = 0; row < snapshot->rows; ++row)
+    else if (codepoint < 0x800)
     {
-        QString line;
-        for (std::uint16_t column = 0; column < snapshot->columns; ++column)
+        target.push_back(static_cast<char>(0xC0 | (codepoint >> 6)));
+        target.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+    }
+    else if (codepoint < 0x10000)
+    {
+        target.push_back(static_cast<char>(0xE0 | (codepoint >> 12)));
+        target.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+        target.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+    }
+    else
+    {
+        target.push_back(static_cast<char>(0xF0 | (codepoint >> 18)));
+        target.push_back(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F)));
+        target.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+        target.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+    }
+}
+
+// Runs on the GUI thread for every delivered snapshot, so it encodes the grid
+// straight into UTF-8 rows without QString round trips.
+[[nodiscard]] std::vector<std::string> terminalFrameLines(const ztermy::terminal::TerminalSnapshot &snapshot)
+{
+    std::vector<std::string> lines;
+    if (snapshot.columns == 0 || snapshot.rows == 0)
+    {
+        return lines;
+    }
+    lines.reserve(snapshot.rows);
+    for (std::uint16_t row = 0; row < snapshot.rows; ++row)
+    {
+        std::string line;
+        line.reserve(snapshot.columns);
+        for (std::uint16_t column = 0; column < snapshot.columns; ++column)
         {
-            const auto &cell = snapshot->cell(column, row);
+            const auto &cell = snapshot.cell(column, row);
             if (cell.displayWidth == 0 || cell.grapheme.empty() || cell.invisible)
             {
                 continue;
             }
-            line += QString::fromUcs4(cell.grapheme.data(), static_cast<qsizetype>(cell.grapheme.size()));
+            for (const char32_t codepoint : cell.grapheme)
+            {
+                appendUtf8(line, codepoint);
+            }
         }
-        while (line.endsWith(u' '))
+        while (!line.empty() && line.back() == ' ')
         {
-            line.chop(1);
+            line.pop_back();
+        }
+        lines.push_back(std::move(line));
+    }
+    return lines;
+}
+
+[[nodiscard]] QString terminalFrameText(const ztermy::terminal::TerminalSnapshotPtr &snapshot)
+{
+    if (!snapshot)
+    {
+        return {};
+    }
+    std::string frame;
+    for (const std::string &line : terminalFrameLines(*snapshot))
+    {
+        if (!frame.empty())
+        {
+            frame.push_back('\n');
         }
         frame += line;
-        if (row + 1 < snapshot->rows)
-        {
-            frame += u'\n';
-        }
     }
-    return frame;
+    return QString::fromUtf8(frame);
 }
 
 [[nodiscard]] ztermy::ai::AiTerminalFrameInput terminalFrameInput(const ztermy::terminal::TerminalSnapshotPtr &snapshot)
@@ -852,13 +899,7 @@ semanticCapability(const ztermy::terminal::SemanticTerminalSnapshot &snapshot) n
     {
         return {};
     }
-    const QStringList textLines = terminalFrameText(snapshot).split(QLatin1Char('\n'), Qt::KeepEmptyParts);
-    std::vector<std::string> lines;
-    lines.reserve(static_cast<std::size_t>(textLines.size()));
-    for (const QString &line : textLines)
-    {
-        lines.push_back(utf8String(line));
-    }
+    std::vector<std::string> lines = terminalFrameLines(*snapshot);
     return ztermy::ai::AiTerminalFrameInput{.lines = std::move(lines),
                                             .columns = snapshot->columns,
                                             .rows = snapshot->rows,

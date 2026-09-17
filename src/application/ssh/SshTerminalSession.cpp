@@ -317,6 +317,7 @@ void SshTerminalSession::stop() noexcept
     }
     m_snapshotDeliveryTimer.stop();
     m_snapshotDeliveryScheduled.store(false);
+    m_engineDirty.store(false);
     m_engine.reset();
 
     if (m_running.exchange(false))
@@ -891,6 +892,11 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
 
         for (const Command &command : commands)
         {
+            if (std::holds_alternative<SnapshotRequestCommand>(command))
+            {
+                publishSnapshotIfDirty();
+                continue;
+            }
             if (const auto *encoding = std::get_if<EncodingCommand>(&command))
             {
                 textCodec.setEncoding(encoding->encoding);
@@ -1394,6 +1400,32 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
 
 void SshTerminalSession::publishSnapshot()
 {
+    m_engineDirty.store(true, std::memory_order_release);
+    publishSnapshotIfDirty();
+}
+
+void SshTerminalSession::publishSnapshotIfDirty()
+{
+    if (!m_engineDirty.load(std::memory_order_acquire))
+    {
+        return;
+    }
+    // At most one snapshot waits for delivery; output that lands meanwhile
+    // only marks the engine dirty and deliverLatestSnapshot() asks the worker
+    // for the next build once the pending frame has gone out.
+    {
+        std::scoped_lock lock(m_snapshotMutex);
+        if (m_pendingSnapshot)
+        {
+            return;
+        }
+    }
+    buildSnapshot();
+}
+
+void SshTerminalSession::buildSnapshot()
+{
+    m_engineDirty.store(false, std::memory_order_release);
     auto result = m_engine->snapshot();
     if (!result)
     {
@@ -1446,12 +1478,24 @@ void SshTerminalSession::deliverLatestSnapshot()
 
     {
         std::scoped_lock lock(m_snapshotMutex);
-        if (!m_pendingSnapshot || m_snapshotDeliveryScheduled.exchange(true))
+        if (m_pendingSnapshot)
         {
+            if (!m_snapshotDeliveryScheduled.exchange(true))
+            {
+                scheduleLatestSnapshotDelivery();
+            }
             return;
         }
     }
-    scheduleLatestSnapshotDelivery();
+    if (m_engineDirty.load(std::memory_order_acquire) && m_running.load())
+    {
+        std::scoped_lock lock(m_commandMutex);
+        if (m_commands.empty() || !std::holds_alternative<SnapshotRequestCommand>(m_commands.back()))
+        {
+            m_commands.emplace_back(SnapshotRequestCommand{});
+            signalCommandWake();
+        }
+    }
 }
 
 void SshTerminalSession::postStatus(const QString &status)
@@ -1609,6 +1653,12 @@ void SshTerminalSession::postRemoteTelemetryState(const QString &state)
 void SshTerminalSession::finishWorker(const QString &status, const SshConnectionPhase phase)
 {
     logMetrics();
+    // Last output before the disconnect may only be a dirty flag; the engine
+    // is still owned by this worker, so build the final frame here.
+    if (m_engine && m_engineDirty.load(std::memory_order_acquire))
+    {
+        buildSnapshot();
+    }
     if (m_running.exchange(false))
     {
         postRunning(false);

@@ -6,6 +6,22 @@ The project has not published a release.
 
 ## Unreleased
 
+### Performance pass — 2026-09-18
+
+- Build terminal snapshots on the delivery cadence instead of per read. Every
+  ConPTY/SSH read used to build a full `libghostty` snapshot even though only
+  the latest one per 8 ms delivery slot reached the GUI. Reads now only mark
+  the engine dirty; the delivery timer asks the write worker for the next
+  build once the pending frame has gone out, and the exit frame is built
+  before `processExitObserved`. Key, input and paste bytes are handed to the
+  PTY before the snapshot build. A 20k-line PowerShell burst drops from about
+  5800 snapshot builds (140 delivered) to about 140 builds per run, removing
+  roughly one second of engine-thread CPU per burst; GUI-side medians are
+  unchanged (completion 1575 → 1579 ms, paint P95 ≤ 4 ms). AI frame tracking
+  now reads snapshot cells directly instead of building and splitting a
+  `QString` per frame. `local-terminal-session` gains a regression test that
+  asserts at most one snapshot is built per delivery.
+
 ### 0.4.6 local validation build — 2026-09-15
 
 - Keep the maximized state when a window is minimized and later restored from

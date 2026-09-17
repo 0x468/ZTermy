@@ -14,10 +14,12 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
+#include <cstdint>
 #include <deque>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <string>
 #include <system_error>
 #include <thread>
@@ -108,6 +110,13 @@ public:
     void setLaunchSpec(const LocalTerminalLaunchSpec &spec) override;
     [[nodiscard]] diagnostics::LatencySummary inputQueueLatencySummary() const noexcept;
     [[nodiscard]] diagnostics::LatencySummary takeInputQueueLatencySummary() noexcept;
+    struct SnapshotCounters
+    {
+        std::uint64_t produced = 0;
+        std::uint64_t delivered = 0;
+        std::uint64_t coalesced = 0;
+    };
+    [[nodiscard]] SnapshotCounters snapshotCounters() const noexcept;
 
 public slots:
     void queueInput(const QByteArray &bytes) override;
@@ -195,17 +204,27 @@ private:
     struct ClearSearchCommand
     {
     };
+    // Queued by the delivery timer when output arrived while a snapshot was
+    // still waiting for delivery, so the next frame is built off the timer
+    // cadence instead of once per PTY read.
+    struct SnapshotRequestCommand
+    {
+    };
 
-    using Command = std::variant<InputCommand, PasteCommand, KeyCommand, MouseCommand, FocusCommand, TerminalGeometry,
-                                 ScrollCommand, SelectionCommand, SelectionGestureCommand, CopyModeCommand,
-                                 SelectAllCommand, CopyCommand, SelectedTextCommand, SearchCommand, ClearSearchCommand>;
+    using Command =
+        std::variant<InputCommand, PasteCommand, KeyCommand, MouseCommand, FocusCommand, TerminalGeometry,
+                     ScrollCommand, SelectionCommand, SelectionGestureCommand, CopyModeCommand, SelectAllCommand,
+                     CopyCommand, SelectedTextCommand, SearchCommand, ClearSearchCommand, SnapshotRequestCommand>;
 
     void queueByteCommand(Command command, std::size_t byteCount);
     void readLoop(const std::stop_token &stopToken);
     void writeLoop(const std::stop_token &stopToken);
     void monitorProcessExit(const std::stop_token &stopToken);
     void stopWorkers() noexcept;
+    [[nodiscard]] bool writeToProcess(std::span<const std::byte> bytes);
     void publishSnapshot();
+    void publishSnapshotIfDirty();
+    void buildSnapshot();
     void postStatus(const QString &status);
     void resetMetrics() noexcept;
     void logMetrics() const;
@@ -234,6 +253,8 @@ private:
     TerminalSnapshotPtr m_pendingSnapshot;
     QTimer m_snapshotDeliveryTimer;
     std::atomic_bool m_snapshotDeliveryScheduled = false;
+    std::atomic_bool m_engineDirty = false;
+    std::atomic_bool m_snapshotBuildActive = false;
     std::atomic_bool m_running = false;
     std::atomic_uint64_t m_readBytes = 0;
     std::atomic_uint64_t m_snapshotsProduced = 0;

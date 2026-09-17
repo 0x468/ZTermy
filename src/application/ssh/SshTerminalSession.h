@@ -176,16 +176,24 @@ private:
     struct TelemetryRefreshCommand final
     {
     };
+    // Queued by the delivery timer when output arrived while a snapshot was
+    // still waiting for delivery; the worker builds the next frame off the
+    // timer cadence instead of once per socket read.
+    struct SnapshotRequestCommand final
+    {
+    };
 
     using Command =
         std::variant<InputCommand, PasteCommand, KeyCommand, MouseCommand, FocusCommand, terminal::TerminalGeometry,
                      ScrollCommand, SelectionCommand, SelectionGestureCommand, CopyModeCommand, SelectAllCommand,
                      CopyCommand, SelectedTextCommand, SearchCommand, ClearSearchCommand, EncodingCommand,
-                     TelemetryVisibilityCommand, TelemetryRefreshCommand>;
+                     TelemetryVisibilityCommand, TelemetryRefreshCommand, SnapshotRequestCommand>;
 
     void queueByteCommand(Command command, std::size_t byteCount);
     void run(SshConnectionRequest &request, terminal::TerminalGeometry geometry, const std::stop_token &stopToken);
     void publishSnapshot();
+    void publishSnapshotIfDirty();
+    void buildSnapshot();
     void postStatus(const QString &status);
     void postPhase(SshConnectionPhase phase);
     void postFailure(SshFailureKind failure);
@@ -225,6 +233,7 @@ private:
     terminal::TerminalSnapshotPtr m_pendingSnapshot;
     QTimer m_snapshotDeliveryTimer;
     std::atomic_bool m_snapshotDeliveryScheduled = false;
+    std::atomic_bool m_engineDirty = false;
     std::atomic_bool m_running = false;
     std::atomic_bool m_telemetryRequestedVisible = false;
     diagnostics::LatencyHistogram m_inputQueueLatency;

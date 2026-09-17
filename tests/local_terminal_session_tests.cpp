@@ -96,6 +96,7 @@ private slots:
     void routesWorkerEncodedKeyEventsToPowerShell();
     void restoresPromptAfterHelixAlternateScreen();
     void measuresInteractiveInputQueueLatency();
+    void buildsAtMostOneSnapshotPerDelivery();
     void processesLargeOutputWithoutStarvingEventLoop();
     void survivesSustainedInteractionWithoutLatencyGrowth();
 };
@@ -467,6 +468,46 @@ void LocalTerminalSessionTests::measuresInteractiveInputQueueLatency()
                           << "p95Us=" << latency.p95UpperBoundMicroseconds
                           << "p99Us=" << latency.p99UpperBoundMicroseconds << "maxUs=" << latency.maxMicroseconds;
 
+        session.stop();
+    }
+    catch (const std::exception &exception)
+    {
+        QFAIL(exception.what());
+    }
+}
+
+void LocalTerminalSessionTests::buildsAtMostOneSnapshotPerDelivery()
+{
+    // Regression: every ConPTY read used to build a full snapshot even though
+    // only the latest one per 8 ms delivery slot could ever reach the GUI.
+    try
+    {
+        ztermy::terminal::LocalTerminalSession session;
+        ztermy::terminal::TerminalSnapshotPtr latestSnapshot;
+        connect(&session, &ztermy::terminal::LocalTerminalSession::snapshotReady, this,
+                [&latestSnapshot](ztermy::terminal::TerminalSnapshotPtr snapshot) {
+                    latestSnapshot = std::move(snapshot);
+                });
+        const std::error_code startError = session.start({.columns = 100, .rows = 30});
+        if (startError)
+        {
+            QFAIL(startError.message().c_str());
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(latestSnapshot && latestSnapshot->cursor.visible, 5000);
+
+        session.queueInput(QByteArrayLiteral(
+            "1..3000 | ForEach-Object { \"ztermy burst line $_\" }; Write-Output ZTERMY_BURST_DONE\r"));
+        QTRY_VERIFY_WITH_TIMEOUT(
+            latestSnapshot && snapshotText(*latestSnapshot).find(U"ZTERMY_BURST_DONE") != std::u32string::npos, 20s);
+        QTest::qWait(50);
+
+        const auto counters = session.snapshotCounters();
+        qInfo().noquote() << "Snapshot counters:" << "produced=" << counters.produced
+                          << "delivered=" << counters.delivered << "coalesced=" << counters.coalesced;
+        QVERIFY2(counters.produced >= counters.delivered, "Delivered more snapshots than were built");
+        // One frame may still be waiting for its delivery slot.
+        QVERIFY2(counters.produced <= counters.delivered + 1,
+                 "Snapshots were built faster than they could be delivered");
         session.stop();
     }
     catch (const std::exception &exception)
