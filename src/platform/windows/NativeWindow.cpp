@@ -600,6 +600,29 @@ LRESULT CALLBACK NativeWindow::windowProcedure(const HWND windowHandle, const UI
     return CallWindowProcW(window->m_originalWindowProcedure, windowHandle, message, wParam, lParam);
 }
 
+namespace
+{
+
+// WM_NCHITTEST arrives on every pointer move over the frame; the resize
+// border only changes with the window DPI, so the system metrics are
+// looked up once per DPI instead of twice per message.
+[[nodiscard]] int resizeBorderForWindow(const HWND windowHandle)
+{
+    static thread_local UINT cachedDpi = 0;
+    static thread_local int cachedBorder = 1;
+    const UINT dpi = GetDpiForWindow(windowHandle);
+    if (dpi != cachedDpi)
+    {
+        const int frame = GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi);
+        const int padding = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+        cachedBorder = std::max(frame + padding, 1);
+        cachedDpi = dpi;
+    }
+    return cachedBorder;
+}
+
+} // namespace
+
 LRESULT NativeWindow::nativeHitTest(const HWND windowHandle, const LPARAM lParam) const
 {
     POINT clientPoint{
@@ -611,10 +634,7 @@ LRESULT NativeWindow::nativeHitTest(const HWND windowHandle, const LPARAM lParam
     RECT clientRect{};
     GetClientRect(windowHandle, &clientRect);
 
-    const UINT dpi = GetDpiForWindow(windowHandle);
-    const int frame = GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi);
-    const int padding = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
-    const int resizeBorder = std::max(frame + padding, 1);
+    const int resizeBorder = resizeBorderForWindow(windowHandle);
     const qreal scale = devicePixelRatio();
 
     const windowing::HitTestMetrics metrics{
@@ -946,11 +966,9 @@ bool NativeWindow::nativeEventFilter(const QByteArray &, void *message, qintptr 
         RECT bounds{};
         if (GetWindowRect(native->hwnd, &bounds) == FALSE)
             return false;
-        const windowing::HitTestMetrics metrics{
-            .resizeBorder = GetSystemMetricsForDpi(SM_CXSIZEFRAME, GetDpiForWindow(native->hwnd))
-                            + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, GetDpiForWindow(native->hwnd)),
-            .caption = {},
-            .maximizeButton = {}};
+        const windowing::HitTestMetrics metrics{.resizeBorder = resizeBorderForWindow(native->hwnd),
+                                                .caption = {},
+                                                .maximizeButton = {}};
         *result = toNativeHitArea(windowing::classifyHitTest(
             {.x = GET_X_LPARAM(native->lParam) - bounds.left, .y = GET_Y_LPARAM(native->lParam) - bounds.top},
             {.width = bounds.right - bounds.left, .height = bounds.bottom - bounds.top}, metrics,

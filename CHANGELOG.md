@@ -49,6 +49,17 @@ The project has not published a release.
   path only remains for files it has never seen (still refusing to overwrite
   a newer schema). `workspace-state-store` gains a regression test for the
   no-op save and the in-memory backup.
+- Cache rendered SVG icons and defer font enumeration. `SvgIconImageProvider`
+  re-read, recolored and re-rasterized the SVG for every `AppIcon` instance;
+  it now keeps a 4 MB `QCache` keyed by icon id and target size, so new tabs,
+  panes and menus reuse the existing raster. `FontCatalog` enumerated every
+  installed family and probed each one for fixed pitch during startup even
+  though only the settings page reads those lists; both are now built on
+  first use. `svg-icon-image-provider` gains a cache regression test.
+- Look up the resize-border metrics once per DPI in the native hit test. The
+  main window's `WM_NCHITTEST` handler and the detached-window filter each
+  called `GetDpiForWindow`/`GetSystemMetricsForDpi` on every pointer move
+  (the detached path twice); both now share one cached lookup.
 
 ### 0.4.6 local validation build — 2026-09-15
 
