@@ -172,6 +172,7 @@ add_library(ztermy_core_config STATIC
     src/core/config/ApplicationPaths.h
     src/core/config/ApplicationSettings.cpp
     src/core/config/ApplicationSettings.h
+    src/core/config/ApplicationSettingsTokens.cpp
 )
 
 add_library(ztermy_core_persistence STATIC
