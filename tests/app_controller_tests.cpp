@@ -1905,6 +1905,12 @@ void AppControllerTests::persistsConnectionHistorySwitchWithoutStoppingSessions(
         QCOMPARE(history->entries(), existing);
         QVERIFY(reopened.resetApplicationSettings());
         QVERIFY(reopened.connectionHistoryEnabled());
+        QCOMPARE(reopened.effectsTier(), QStringLiteral("full"));
+        QVERIFY(!reopened.saveEffectsTier(QStringLiteral("shiny")));
+        QVERIFY(reopened.saveEffectsTier(QStringLiteral("reduced")));
+        QCOMPARE(reopened.effectsTier(), QStringLiteral("reduced"));
+        QVERIFY(reopened.resetApplicationSettings());
+        QCOMPARE(reopened.effectsTier(), QStringLiteral("full"));
         QFile futureSettings(settings);
         QVERIFY(futureSettings.open(QIODevice::WriteOnly | QIODevice::Truncate));
         QVERIFY(futureSettings.write("{\"version\":9999}") > 0);

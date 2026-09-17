@@ -4693,6 +4693,23 @@ bool AppController::setConnectionHistoryEnabled(const bool enabled)
     return persistApplicationSettings(updated);
 }
 
+QString AppController::effectsTier() const
+{
+    return config::effectsTierToken(m_settings.effectsTier);
+}
+
+bool AppController::saveEffectsTier(const QString &tier)
+{
+    const auto parsed = config::parseEffectsTier(tier.trimmed());
+    if (!parsed)
+    {
+        return false;
+    }
+    auto updated = m_settings;
+    updated.effectsTier = *parsed;
+    return persistApplicationSettings(updated);
+}
+
 QObject *AppController::localFiles() const noexcept
 {
     return m_localFilesController.get();

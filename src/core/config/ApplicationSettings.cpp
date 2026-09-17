@@ -65,7 +65,9 @@ constexpr qint64 terminalSelectionPopupSchemaVersion = 30;
 constexpr qint64 extendedLocalShellSchemaVersion = 31;
 constexpr qint64 windowInteractionSchemaVersion = extendedLocalShellSchemaVersion + 1;
 constexpr qint64 connectionHistorySchemaVersion = 33;
-constexpr qint64 currentSchemaVersion = connectionHistorySchemaVersion;
+// Version 34 adds the visual effects tier (material, shadows and motion in one switch).
+constexpr qint64 effectsTierSchemaVersion = 34;
+constexpr qint64 currentSchemaVersion = effectsTierSchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -77,6 +79,7 @@ using ztermy::config::ApplicationSettingsStoreError;
 using ztermy::config::BackdropPreference;
 using ztermy::config::CredentialStoragePreference;
 using ztermy::config::CursorPreference;
+using ztermy::config::EffectsTier;
 using ztermy::config::LanguagePreference;
 using ztermy::config::LocalShellPreference;
 using ztermy::config::TerminalMiddleClickPreference;
@@ -179,6 +182,24 @@ template <>
     if (token == QStringLiteral("solid"))
     {
         return BackdropPreference::solid;
+    }
+    return std::nullopt;
+}
+
+template <>
+[[nodiscard]] std::optional<EffectsTier> parsePreference(const QString &token)
+{
+    if (token == QStringLiteral("full"))
+    {
+        return EffectsTier::full;
+    }
+    if (token == QStringLiteral("reduced"))
+    {
+        return EffectsTier::reduced;
+    }
+    if (token == QStringLiteral("off"))
+    {
+        return EffectsTier::off;
     }
     return std::nullopt;
 }
@@ -549,6 +570,7 @@ template <>
     const QJsonValue closeToTrayValue = root.value(QStringLiteral("closeToTray"));
     const QJsonValue performanceModeValue = root.value(QStringLiteral("performanceMode"));
     const QJsonValue connectionHistoryValue = root.value(QStringLiteral("connectionHistoryEnabled"));
+    const QJsonValue effectsTierValue = root.value(QStringLiteral("effectsTier"));
     const QJsonValue credentialStorageValue = root.value(QStringLiteral("credentialStorage"));
     const QJsonValue languageValue = root.value(QStringLiteral("language"));
     const QJsonValue shortcutOverridesValue = root.value(QStringLiteral("shortcutOverrides"));
@@ -603,7 +625,8 @@ template <>
     }
     if ((version >= closeToTraySchemaVersion && !closeToTrayValue.isBool())
         || (version >= performanceModeSchemaVersion && !performanceModeValue.isBool())
-        || (version >= connectionHistorySchemaVersion && !connectionHistoryValue.isBool()))
+        || (version >= connectionHistorySchemaVersion && !connectionHistoryValue.isBool())
+        || (version >= effectsTierSchemaVersion && !effectsTierValue.isString()))
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
@@ -660,6 +683,9 @@ template <>
     }
     const auto theme = parsePreference<ThemePreference>(themeValue.toString());
     const auto backdrop = parsePreference<BackdropPreference>(backdropValue.toString());
+    const auto effectsTier = version >= effectsTierSchemaVersion
+                                 ? parsePreference<EffectsTier>(effectsTierValue.toString())
+                                 : std::optional{EffectsTier::full};
     const auto accent = version >= accentSchemaVersion ? parsePreference<AccentPreference>(accentValue.toString())
                                                        : std::optional{AccentPreference::ztermy};
     const auto cursor = parsePreference<CursorPreference>(cursorValue.toString());
@@ -706,8 +732,8 @@ template <>
     const auto selectionRetainActions = version >= terminalSelectionPopupSchemaVersion
                                             ? parseStringList(terminalSelectionRetainActionsValue)
                                             : std::optional{defaultSelectionRetainActions()};
-    if (!theme || !backdrop || !accent || !cursor || !terminalRightClick || !terminalMiddleClick || !localShell
-        || !credentialStorage || !language || !aiProvider || !aiPermission || !aiReasoning || !aiProxy
+    if (!theme || !backdrop || !effectsTier || !accent || !cursor || !terminalRightClick || !terminalMiddleClick
+        || !localShell || !credentialStorage || !language || !aiProvider || !aiPermission || !aiReasoning || !aiProxy
         || !selectionActionOrder || !selectionPrimaryActions || !selectionRetainActions
         || fontSizeValue.toDouble() != static_cast<double>(fontSize)
         || (version >= terminalSelectionSettingsSchemaVersion
@@ -782,6 +808,7 @@ template <>
         .closeToTray = version >= closeToTraySchemaVersion && closeToTrayValue.toBool(),
         .performanceMode = version >= performanceModeSchemaVersion && performanceModeValue.toBool(),
         .connectionHistoryEnabled = version < connectionHistorySchemaVersion || connectionHistoryValue.toBool(),
+        .effectsTier = *effectsTier,
         .credentialStorage = *credentialStorage,
         .language = *language,
         .aiProvider = *aiProvider,
@@ -915,6 +942,7 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("theme"), themePreferenceToken(settings.theme)},
         {QStringLiteral("backdropOpacity"), settings.backdropOpacity},
         {QStringLiteral("backdrop"), backdropPreferenceToken(settings.backdrop)},
+        {QStringLiteral("effectsTier"), effectsTierToken(settings.effectsTier)},
         {QStringLiteral("accent"), accentPreferenceToken(settings.accent)},
         {QStringLiteral("customAccent"), settings.customAccent.trimmed().toUpper()},
         {QStringLiteral("uiFontFamily"), settings.uiFontFamily.trimmed()},
@@ -995,6 +1023,20 @@ QString backdropPreferenceToken(const BackdropPreference preference)
             return QStringLiteral("solid");
         default:
             return QStringLiteral("acrylic");
+    }
+}
+
+QString effectsTierToken(const EffectsTier tier)
+{
+    switch (tier)
+    {
+        case EffectsTier::reduced:
+            return QStringLiteral("reduced");
+        case EffectsTier::off:
+            return QStringLiteral("off");
+        case EffectsTier::full:
+        default:
+            return QStringLiteral("full");
     }
 }
 
@@ -1191,6 +1233,11 @@ std::optional<ThemePreference> parseThemePreference(const QString &token)
 std::optional<BackdropPreference> parseBackdropPreference(const QString &token)
 {
     return parsePreference<BackdropPreference>(token);
+}
+
+std::optional<EffectsTier> parseEffectsTier(const QString &token)
+{
+    return parsePreference<EffectsTier>(token);
 }
 
 std::optional<AccentPreference> parseAccentPreference(const QString &token)

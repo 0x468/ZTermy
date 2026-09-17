@@ -161,6 +161,7 @@ class AppController final : public QObject
     Q_PROPERTY(QString themePreference READ themePreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(qreal backdropOpacity READ backdropOpacity NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString backdropPreference READ backdropPreference NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QString effectsTier READ effectsTier NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString accentPreference READ accentPreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString customAccent READ customAccent NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString uiFontFamily READ uiFontFamily NOTIFY applicationSettingsChanged)
@@ -424,6 +425,8 @@ public:
     [[nodiscard]] QObject *connectionHistory() const noexcept;
     [[nodiscard]] bool connectionHistoryEnabled() const noexcept;
     Q_INVOKABLE bool setConnectionHistoryEnabled(bool enabled);
+    [[nodiscard]] QString effectsTier() const;
+    Q_INVOKABLE bool saveEffectsTier(const QString &tier);
     [[nodiscard]] QObject *localFiles() const noexcept;
 
     Q_INVOKABLE QString startLocalTerminal();

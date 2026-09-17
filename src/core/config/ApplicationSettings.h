@@ -28,6 +28,13 @@ enum class BackdropPreference : std::uint8_t
     solid,
 };
 
+enum class EffectsTier : std::uint8_t
+{
+    full,
+    reduced,
+    off,
+};
+
 enum class AccentPreference : std::uint8_t
 {
     ztermy,
@@ -165,6 +172,7 @@ struct ApplicationSettings final
     bool closeToTray = false;
     bool performanceMode = false;
     bool connectionHistoryEnabled = true;
+    EffectsTier effectsTier = EffectsTier::full;
     CredentialStoragePreference credentialStorage = CredentialStoragePreference::automatic;
     LanguagePreference language = LanguagePreference::system;
     AiProviderPreference aiProvider = AiProviderPreference::openAiResponses;
@@ -204,6 +212,7 @@ private:
 
 [[nodiscard]] QString themePreferenceToken(ThemePreference preference);
 [[nodiscard]] QString backdropPreferenceToken(BackdropPreference preference);
+[[nodiscard]] QString effectsTierToken(EffectsTier tier);
 [[nodiscard]] QString accentPreferenceToken(AccentPreference preference);
 [[nodiscard]] QString cursorPreferenceToken(CursorPreference preference);
 [[nodiscard]] QString terminalRightClickPreferenceToken(TerminalRightClickPreference preference);
@@ -217,6 +226,7 @@ private:
 [[nodiscard]] QString aiProxyPreferenceToken(AiProxyPreference preference);
 [[nodiscard]] std::optional<ThemePreference> parseThemePreference(const QString &token);
 [[nodiscard]] std::optional<BackdropPreference> parseBackdropPreference(const QString &token);
+[[nodiscard]] std::optional<EffectsTier> parseEffectsTier(const QString &token);
 [[nodiscard]] std::optional<AccentPreference> parseAccentPreference(const QString &token);
 [[nodiscard]] std::optional<CursorPreference> parseCursorPreference(const QString &token);
 [[nodiscard]] std::optional<TerminalRightClickPreference> parseTerminalRightClickPreference(const QString &token);
