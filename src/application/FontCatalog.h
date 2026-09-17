@@ -30,8 +30,13 @@ public:
 private:
     [[nodiscard]] bool containsFamily(const QString &family) const;
 
-    QStringList m_allFamilies;
-    QStringList m_monospacedFamilies;
+    // Family enumeration and the per-family fixed-pitch probe are deferred
+    // until first use; startup only needs the system UI family, and the
+    // monospaced list is only read by the settings page.
+    mutable QStringList m_allFamilies;
+    mutable QStringList m_monospacedFamilies;
+    mutable bool m_allFamiliesReady = false;
+    mutable bool m_monospacedFamiliesReady = false;
     QString m_systemUiFamily;
 };
 

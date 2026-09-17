@@ -4,6 +4,8 @@
 #include <QImage>
 #include <QTest>
 
+#include <cstddef>
+
 namespace
 {
 
@@ -15,6 +17,7 @@ private slots:
     void rendersKnownIconAtRequestedSizeAndColor();
     void rendersBrandAssetAtRequestedSize();
     void rejectsInvalidOrUnknownNames();
+    void reusesRenderedIconsPerIdAndSize();
 };
 
 void SvgIconImageProviderTests::rendersKnownIconAtRequestedSizeAndColor()
@@ -70,6 +73,31 @@ void SvgIconImageProviderTests::rejectsInvalidOrUnknownNames()
 }
 
 } // namespace
+
+void SvgIconImageProviderTests::reusesRenderedIconsPerIdAndSize()
+{
+    ztermy::ui::SvgIconImageProvider provider(QStringLiteral(ZTERMY_TEST_ICON_DIRECTORY));
+    QSize renderedSize;
+
+    const QImage first = provider.requestImage(QStringLiteral("search/12ab34"), &renderedSize, QSize{40, 36});
+    QCOMPARE(provider.cachedImageCount(), std::size_t{1});
+    const QImage again = provider.requestImage(QStringLiteral("search/12ab34"), &renderedSize, QSize{40, 36});
+    QCOMPARE(provider.cachedImageCount(), std::size_t{1});
+    QCOMPARE(renderedSize, QSize(40, 36));
+    QCOMPARE(again, first);
+
+    // A different size or color is a distinct raster.
+    const QImage larger = provider.requestImage(QStringLiteral("search/12ab34"), &renderedSize, QSize{80, 72});
+    QCOMPARE(larger.size(), QSize(80, 72));
+    QCOMPARE(provider.cachedImageCount(), std::size_t{2});
+    const QImage recolored = provider.requestImage(QStringLiteral("search/ff0000"), &renderedSize, QSize{40, 36});
+    QVERIFY(recolored != first);
+    QCOMPARE(provider.cachedImageCount(), std::size_t{3});
+
+    // Rejected names are not cached.
+    QVERIFY(provider.requestImage(QStringLiteral("Missing Icon"), &renderedSize, QSize{40, 36}).isNull());
+    QCOMPARE(provider.cachedImageCount(), std::size_t{3});
+}
 
 QTEST_GUILESS_MAIN(SvgIconImageProviderTests)
 

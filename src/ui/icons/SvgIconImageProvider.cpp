@@ -2,6 +2,7 @@
 
 #include <QColor>
 #include <QFile>
+#include <QMutexLocker>
 #include <QPainter>
 #include <QSvgRenderer>
 
@@ -15,6 +16,9 @@ namespace
 
 constexpr int defaultIconSize = 20;
 constexpr int maximumIconSize = 512;
+// Cache budget in bytes; a 40x40 icon costs 6.4 KB, so this holds hundreds
+// of distinct icon/color/size combinations.
+constexpr qsizetype iconCacheBudgetBytes = 4 * 1024 * 1024;
 
 [[nodiscard]] bool isValidIconName(const QStringView name)
 {
@@ -42,8 +46,16 @@ constexpr int maximumIconSize = 512;
 } // namespace
 
 SvgIconImageProvider::SvgIconImageProvider(QString iconDirectory)
-    : QQuickImageProvider(QQuickImageProvider::Image), m_iconDirectory(std::move(iconDirectory))
+    : QQuickImageProvider(QQuickImageProvider::Image),
+      m_iconDirectory(std::move(iconDirectory)),
+      m_cache(iconCacheBudgetBytes)
 {
+}
+
+std::size_t SvgIconImageProvider::cachedImageCount() const
+{
+    const QMutexLocker locker(&m_cacheMutex);
+    return static_cast<std::size_t>(m_cache.count());
 }
 
 QImage SvgIconImageProvider::requestImage(const QString &id, QSize *size, const QSize &requestedSize)
@@ -53,6 +65,21 @@ QImage SvgIconImageProvider::requestImage(const QString &id, QSize *size, const 
     if (!isValidIconName(iconName))
     {
         return {};
+    }
+
+    const QSize targetSize = renderSize(requestedSize);
+    const QString cacheKey =
+        id + u'@' + QString::number(targetSize.width()) + u'x' + QString::number(targetSize.height());
+    {
+        const QMutexLocker locker(&m_cacheMutex);
+        if (const QImage *cached = m_cache.object(cacheKey); cached != nullptr)
+        {
+            if (size != nullptr)
+            {
+                *size = cached->size();
+            }
+            return *cached;
+        }
     }
 
     QColor iconColor(Qt::white);
@@ -80,7 +107,6 @@ QImage SvgIconImageProvider::requestImage(const QString &id, QSize *size, const 
         return {};
     }
 
-    const QSize targetSize = renderSize(requestedSize);
     QImage image(targetSize, QImage::Format_ARGB32_Premultiplied);
     image.fill(Qt::transparent);
     QPainter painter(&image);
@@ -88,10 +114,15 @@ QImage SvgIconImageProvider::requestImage(const QString &id, QSize *size, const 
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
     painter.setOpacity(iconColor.alphaF());
     renderer.render(&painter, QRectF(QPointF{}, targetSize));
+    painter.end();
 
     if (size != nullptr)
     {
         *size = targetSize;
+    }
+    {
+        const QMutexLocker locker(&m_cacheMutex);
+        m_cache.insert(cacheKey, new QImage(image), image.sizeInBytes());
     }
     return image;
 }

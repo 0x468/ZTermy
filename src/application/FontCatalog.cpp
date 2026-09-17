@@ -31,19 +31,8 @@ namespace
 namespace ztermy
 {
 
-FontCatalog::FontCatalog(QObject *parent) : QObject(parent), m_allFamilies(QFontDatabase::families())
+FontCatalog::FontCatalog(QObject *parent) : QObject(parent)
 {
-    m_allFamilies.removeDuplicates();
-    m_allFamilies.sort(Qt::CaseInsensitive);
-    m_monospacedFamilies.reserve(m_allFamilies.size());
-    for (const QString &family : m_allFamilies)
-    {
-        if (QFontDatabase::isFixedPitch(family))
-        {
-            m_monospacedFamilies.append(family);
-        }
-    }
-
     m_systemUiFamily = QFontDatabase::systemFont(QFontDatabase::GeneralFont).family().trimmed();
     if (m_systemUiFamily.isEmpty())
     {
@@ -53,11 +42,31 @@ FontCatalog::FontCatalog(QObject *parent) : QObject(parent), m_allFamilies(QFont
 
 const QStringList &FontCatalog::allFamilies() const noexcept
 {
+    if (!m_allFamiliesReady)
+    {
+        m_allFamilies = QFontDatabase::families();
+        m_allFamilies.removeDuplicates();
+        m_allFamilies.sort(Qt::CaseInsensitive);
+        m_allFamiliesReady = true;
+    }
     return m_allFamilies;
 }
 
 const QStringList &FontCatalog::monospacedFamilies() const noexcept
 {
+    if (!m_monospacedFamiliesReady)
+    {
+        const QStringList &families = allFamilies();
+        m_monospacedFamilies.reserve(families.size());
+        for (const QString &family : families)
+        {
+            if (QFontDatabase::isFixedPitch(family))
+            {
+                m_monospacedFamilies.append(family);
+            }
+        }
+        m_monospacedFamiliesReady = true;
+    }
     return m_monospacedFamilies;
 }
 
@@ -122,7 +131,7 @@ void FontCatalog::applyUiFont(const QString &preference) const
 
 bool FontCatalog::containsFamily(const QString &family) const
 {
-    return std::ranges::any_of(m_allFamilies, [&family](const QString &candidate) {
+    return std::ranges::any_of(allFamilies(), [&family](const QString &candidate) {
         return candidate.compare(family, Qt::CaseInsensitive) == 0;
     });
 }
