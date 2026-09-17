@@ -66,6 +66,13 @@ The project has not published a release.
   socket and closed both again; the socket now owns one pair, resets them
   per wait and moves them with the socket. `windows-tcp-socket` gains a test
   for repeated short waits and a moved socket.
+- Stop rebuilding the pane toolbar on every state change. The toolbar's
+  `Repeater` model was an inline array of objects whose labels and `shown`
+  flags depended on header/zoom/pane-count state, so every toggle rebuilt the
+  array and re-created all six buttons; the model is now a static id list
+  with the labels and visibility bound inside the delegate. The "new pane"
+  menu only instantiates its host and shell entries on first open instead of
+  once per pane.
 
 ### 0.4.6 local validation build — 2026-09-15
 

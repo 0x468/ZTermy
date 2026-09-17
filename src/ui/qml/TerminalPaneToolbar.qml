@@ -50,59 +50,51 @@ RowLayout {
             controller.splitActiveTerminal("horizontal", copy, profile, shell);
     }
 
+    // The model only carries stable identity; labels and visibility are
+    // bound inside the delegate so toggling headers, zoom or pane count
+    // does not rebuild the array and re-create every button.
     Repeater {
-        model: [
-            {
-                id: "headers",
-                icon: "list",
-                label: root.headersVisible ? qsTr("Hide headers") : qsTr("Show headers"),
-                shown: true
-            },
-            {
-                id: "zoom",
-                icon: "locate",
-                label: root.zoomed ? qsTr("Restore pane layout") : qsTr("Zoom this pane within its tab"),
-                shown: root.paneCount > 1 && !root.detached
-            },
-            {
-                id: "detach",
-                icon: "external-link",
-                label: root.detached ? qsTr("Reattach terminal pane") : qsTr("Detach terminal pane"),
-                shown: true
-            },
-            {
-                id: "copy",
-                icon: "copy",
-                label: qsTr("Copy pane — new session, same profile or Shell"),
-                shown: !root.detached
-            },
-            {
-                id: "new",
-                icon: "plus",
-                label: qsTr("New pane — choose a host or local Shell"),
-                shown: !root.detached
-            },
-            {
-                id: "close",
-                icon: "close",
-                label: qsTr("Close this pane"),
-                shown: root.paneCount > 1 && !root.detached
-            }
-        ]
+        model: ["headers", "zoom", "detach", "copy", "new", "close"]
         delegate: AppIconButton {
             id: button
-            required property var modelData
-            objectName: "terminalPaneAction-" + modelData.id + "-" + root.paneId
-            visible: modelData.shown
+            required property string modelData
+            objectName: "terminalPaneAction-" + modelData + "-" + root.paneId
+            visible: {
+                switch (modelData) {
+                case "zoom":
+                case "close":
+                    return root.paneCount > 1 && !root.detached;
+                case "copy":
+                case "new":
+                    return !root.detached;
+                default:
+                    return true;
+                }
+            }
             Layout.preferredWidth: 28
             Layout.preferredHeight: root.detached ? 32 : 28
-            label: modelData.label
-            iconName: modelData.icon
-            selected: (modelData.id === "headers" && root.headersVisible) || (modelData.id === "zoom" && root.zoomed)
+            label: {
+                switch (modelData) {
+                case "headers":
+                    return root.headersVisible ? qsTr("Hide headers") : qsTr("Show headers");
+                case "zoom":
+                    return root.zoomed ? qsTr("Restore pane layout") : qsTr("Zoom this pane within its tab");
+                case "detach":
+                    return root.detached ? qsTr("Reattach terminal pane") : qsTr("Detach terminal pane");
+                case "copy":
+                    return qsTr("Copy pane — new session, same profile or Shell");
+                case "new":
+                    return qsTr("New pane — choose a host or local Shell");
+                default:
+                    return qsTr("Close this pane");
+                }
+            }
+            iconName: modelData === "headers" ? "list" : modelData === "zoom" ? "locate" : modelData === "detach" ? "external-link" : modelData === "copy" ? "copy" : modelData === "new" ? "plus" : "close"
+            selected: (modelData === "headers" && root.headersVisible) || (modelData === "zoom" && root.zoomed)
             iconColor: selected ? Theme.accent : Theme.text
             toolTipEnabled: !newPaneMenu.visible
             onClicked: {
-                switch (modelData.id) {
+                switch (modelData) {
                 case "headers":
                     root.toggleHeadersRequested();
                     break;
@@ -155,12 +147,17 @@ RowLayout {
     AppMenu {
         id: newPaneMenu
         objectName: "terminalNewPaneMenu-" + root.paneId
+        // Host and shell entries are only instantiated once the menu is first
+        // opened; every pane used to build the full list on creation.
+        property bool populated: false
+        onAboutToShow: populated = true
         AppMenuItem {
             text: qsTr("Default local Shell")
             iconName: "terminal"
             onTriggered: root.createPane("", "", false)
         }
         Instantiator {
+            active: newPaneMenu.populated
             model: root.controller.availableLocalShells
             delegate: AppMenuItem {
                 required property var modelData
@@ -175,6 +172,7 @@ RowLayout {
         }
         AppMenuSeparator {}
         Instantiator {
+            active: newPaneMenu.populated
             model: root.controller.hostProfiles
             delegate: AppMenuItem {
                 required property var modelData
