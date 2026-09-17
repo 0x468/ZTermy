@@ -29,6 +29,13 @@ The project has not published a release.
   drop inside the target viewport, and the lifecycle smoke opens the terminal
   page before looking for a viewport. The lifecycle smoke now reaches its
   close-latency measurement and reports a tab close above its 3 s budget.
+- Give detached windows the main window's native window flags instead of
+  `FramelessWindowHint`; the chrome's native event filter already removes the
+  frame, and a frameless Qt window is only moved to the work area on maximize,
+  so `IsZoomed`, minimize and restore-to-maximized never matched the Qt state.
+  `ztermy_terminal_render_runtime_smoke` now drives a detached window through
+  its QML caption buttons (maximize, minimize, present, restore) and checks
+  `IsZoomed`, `IsIconic` and `WPF_RESTORETOMAXIMIZED`.
 
 ### 0.4.5 local validation build — 2026-09-13
 

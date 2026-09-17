@@ -2,13 +2,12 @@
 
 #include "application/AppController.h"
 #include "platform/windows/NativeWindow.h"
+#include "ui/WindowStateRuntimeSmoke.h"
 #include "ui/terminal/TerminalItem.h"
 
 #include <QDir>
-#include <QEventLoop>
 #include <QGuiApplication>
 #include <QQuickItem>
-#include <QTimer>
 #include <vector>
 
 QT_BEGIN_NAMESPACE
@@ -44,13 +43,6 @@ namespace ztermy::ui
     }
     return fallback;
 }
-inline void processWindowEventsFor(const std::chrono::milliseconds duration)
-{
-    QEventLoop loop;
-    QTimer::singleShot(duration, &loop, &QEventLoop::quit);
-    loop.exec();
-}
-
 // Synthesizes one mouse event in window scene coordinates and lets the scene react.
 inline void sendMouse(QQuickWindow &window, const QPointF &point, const Qt::MouseButtons buttons,
                       const Qt::MouseButton button, const QEvent::Type type,
@@ -169,6 +161,68 @@ inline bool verifyWholeTabMouseMerge(NativeWindow &window, AppController &contro
     controller.activateTerminalPane(paneId);
     processWindowEventsFor(std::chrono::milliseconds{250});
     return passed;
+}
+// Drives a detached window through its own QML caption buttons:
+// maximize -> minimize -> present -> restore, checking the same native state
+// the main-window smoke checks, so the WindowControl path used by detached
+// windows has the same evidence as the main title bar.
+inline bool verifyDetachedCaptionStateRoundTrip(QQuickWindow &detached, const QString &paneId,
+                                                const QString &outputDirectory)
+{
+    using namespace std::chrono_literals;
+    const auto clickCaption = [&detached, &paneId](const QString &kind) {
+        // Repeater delegates are not QObject children of the window; walk the items.
+        const QString name = QStringLiteral("detachedWindowAction-") + kind + QLatin1Char('-') + paneId;
+        auto *button = visualQuickItem(detached.contentItem(), name.toLatin1().constData());
+        if (button == nullptr)
+        {
+            qWarning() << "Detached caption button not found:" << kind;
+            return false;
+        }
+        clickMouse(detached, button->mapToScene({button->width() / 2, button->height() / 2}));
+        return true;
+    };
+    const auto handle = reinterpret_cast<HWND>(detached.winId()); // NOLINT(performance-no-int-to-ptr)
+
+    const bool maximized = clickCaption(QStringLiteral("maximize"))
+                           && settleWindowUntil(
+                               [handle] {
+                                   return IsZoomed(handle) != FALSE;
+                               },
+                               3s);
+    qInfo() << "Detached caption maximize:" << maximized;
+    const bool captured =
+        detached.grabWindow().save(QDir(outputDirectory).filePath(QStringLiteral("detached-pane-maximized.png")));
+
+    const bool minimizedKeepsMaximize = clickCaption(QStringLiteral("minimize"))
+                                        && settleWindowUntil(
+                                            [&detached, handle] {
+                                                return IsIconic(handle) != FALSE
+                                                       && detached.windowStates().testFlag(Qt::WindowMaximized)
+                                                       && restoresToMaximized(handle);
+                                            },
+                                            2s);
+    qInfo() << "Detached caption minimize keeps maximized state:" << minimizedKeepsMaximize
+            << "iconic=" << (IsIconic(handle) != FALSE) << "states=" << detached.windowStates()
+            << "restoreToMaximized=" << restoresToMaximized(handle);
+
+    // Workspace activation presents detached windows through the same owner.
+    windowing::present(detached);
+    const bool presentedMaximized = settleWindowUntil(
+        [handle] {
+            return IsIconic(handle) == FALSE && IsZoomed(handle) != FALSE;
+        },
+        2s);
+    qInfo() << "Detached present restores maximized window:" << presentedMaximized;
+
+    const bool restored = clickCaption(QStringLiteral("maximize"))
+                          && settleWindowUntil(
+                              [handle] {
+                                  return IsZoomed(handle) == FALSE && IsIconic(handle) == FALSE;
+                              },
+                              2s);
+    qInfo() << "Detached caption restore:" << restored;
+    return maximized && captured && minimizedKeepsMaximize && presentedMaximized && restored;
 }
 // creates no remote sessions or additional terminal input.
 inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppController &controller,
@@ -305,12 +359,7 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
         passed =
             detached->grabWindow().save(QDir(outputDirectory).filePath(QStringLiteral("detached-pane-resized.png")))
             && passed;
-        detached->showMaximized();
-        settle();
-        passed =
-            detached->grabWindow().save(QDir(outputDirectory).filePath(QStringLiteral("detached-pane-maximized.png")))
-            && passed;
-        detached->showNormal();
+        passed = verifyDetachedCaptionStateRoundTrip(*detached, paneId, outputDirectory) && passed;
         detached->resize(originalSize);
         controller.activateTerminalTab(otherId);
         settle();

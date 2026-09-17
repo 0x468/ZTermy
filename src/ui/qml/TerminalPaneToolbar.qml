@@ -134,6 +134,7 @@ RowLayout {
         model: root.detached ? ["minimize", "maximize", "close"] : []
         delegate: CaptionButton {
             required property string modelData
+            objectName: "detachedWindowAction-" + modelData + "-" + root.paneId
             Layout.preferredWidth: 32
             Layout.preferredHeight: 32
             kind: modelData

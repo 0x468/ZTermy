@@ -2,15 +2,32 @@
 
 #include "core/windowing/WindowPresenter.h"
 #include "platform/windows/NativeWindow.h"
-#include "ui/terminal/TerminalPaneRuntimeSmoke.h"
 
 #include <QDebug>
 #include <QElapsedTimer>
+#include <QEventLoop>
+#include <QTimer>
+#include <QWindow>
 
 #include <chrono>
 
 namespace ztermy::ui
 {
+inline void processWindowEventsFor(const std::chrono::milliseconds duration)
+{
+    QEventLoop loop;
+    QTimer::singleShot(duration, &loop, &QEventLoop::quit);
+    loop.exec();
+}
+
+// The placement flag Windows consults when a minimized window comes back; a
+// forgotten maximize state surfaces here before it is visible anywhere else.
+[[nodiscard]] inline bool restoresToMaximized(const HWND handle)
+{
+    WINDOWPLACEMENT placement{.length = sizeof(WINDOWPLACEMENT)};
+    return GetWindowPlacement(handle, &placement) != FALSE && (placement.flags & WPF_RESTORETOMAXIMIZED) != 0;
+}
+
 inline void showForRuntimeSmoke(QWindow &window)
 {
     window.show();
@@ -59,10 +76,6 @@ template <typename Predicate>
         return false;
     }
     const auto handle = reinterpret_cast<HWND>(window.winId()); // NOLINT(performance-no-int-to-ptr)
-    const auto restoresToMaximized = [handle] {
-        WINDOWPLACEMENT placement{.length = sizeof(WINDOWPLACEMENT)};
-        return GetWindowPlacement(handle, &placement) != FALSE && (placement.flags & WPF_RESTORETOMAXIMIZED) != 0;
-    };
 
     window.showMaximized();
     const bool maximized = settleWindowUntil(
@@ -75,14 +88,14 @@ template <typename Predicate>
 
     windowing::minimize(window);
     const bool minimizedKeepsMaximize = settleWindowUntil(
-        [&window, handle, &restoresToMaximized] {
+        [&window, handle] {
             return IsIconic(handle) != FALSE && window.windowStates().testFlag(Qt::WindowMaximized)
-                   && restoresToMaximized();
+                   && restoresToMaximized(handle);
         },
         2s);
     qInfo() << "Window state smoke: minimize keeps maximized state:" << minimizedKeepsMaximize
             << "iconic=" << (IsIconic(handle) != FALSE) << "states=" << window.windowStates()
-            << "restoreToMaximized=" << restoresToMaximized();
+            << "restoreToMaximized=" << restoresToMaximized(handle);
 
     windowing::present(window);
     const bool presentedMaximized = settleWindowUntil(

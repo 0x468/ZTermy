@@ -36,6 +36,14 @@ build/msvc-dynamic-debug/test-data/window-runtime-smoke/logs/ztermy.log
 The pure state rules and the `QWindow` behaviour behind this gate are covered
 by the offscreen `window-state` and `application-instance` CTest cases.
 
+Detached terminal windows get the same evidence from
+`ztermy_terminal_render_runtime_smoke`: it clicks the detached window's own QML
+caption buttons (`detachedWindowAction-<kind>-<paneId>`) to maximize and
+minimize, presents the window through `ztermy::windowing::present()`, restores
+it, and requires `IsZoomed()`, `IsIconic()` and `WPF_RESTORETOMAXIMIZED` at each
+step. The lines start with `Detached caption` and `Detached present` in the
+smoke log.
+
 This gate proves the current monitor path. It does not replace the mixed-DPI
 and per-monitor manual checks below.
 

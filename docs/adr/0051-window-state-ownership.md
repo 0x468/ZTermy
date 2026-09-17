@@ -54,4 +54,10 @@ exemption.
   and `Win+Down` minimize) remain native and already preserve the flag.
 - The pure rules and the `QWindow` behaviour are unit tested on the offscreen
   platform; the Windows placement flag is checked by
-  `ztermy_window_runtime_smoke`.
+  `ztermy_window_runtime_smoke` for the main window and by
+  `ztermy_terminal_render_runtime_smoke` for a detached window driven through
+  its QML caption buttons.
+- Detached windows use the main window's native window flags, not
+  `FramelessWindowHint`; the chrome's native event filter removes the frame.
+  A frameless Qt window is only moved to the work area on maximize, so the
+  native state the presenter relies on never matches.

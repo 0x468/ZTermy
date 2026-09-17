@@ -3681,8 +3681,7 @@ void sendText(ztermy::NativeWindow &window, const QStringView text)
     ztermy::ui::showForRuntimeSmoke(window);
     window.requestActivate();
     processWindowEventsFor(std::chrono::milliseconds{200});
-    // The terminal page loads on demand; open it the way the render smoke does
-    // before looking for a viewport.
+    // The terminal page loads on demand; open it before looking for a viewport.
     const auto showTerminalPage = [&window] {
         if (auto *rootObject = window.rootObject(); rootObject != nullptr)
         {
@@ -3870,6 +3869,12 @@ void sendText(ztermy::NativeWindow &window, const QStringView text)
     qint64 nextSearchMilliseconds = 100;
     bool compactResizeApplied = false;
     bool regularResizeRestored = false;
+    // One search in flight at a time; a backlog delays the scroll commands checked after the marker.
+    bool searchPending = false;
+    const QMetaObject::Connection searchConnection =
+        QObject::connect(&controller, &ztermy::AppController::terminalSearchChanged, &window, [&searchPending] {
+            searchPending = false;
+        });
     while (completionTimer.elapsed() < 20'000 && controller.terminalSearchTotal() == 0)
     {
         processWindowEventsFor(std::chrono::milliseconds{20});
@@ -3884,12 +3889,14 @@ void sendText(ztermy::NativeWindow &window, const QStringView text)
             window.resize(QSize{1120, 800});
             regularResizeRestored = true;
         }
-        if (elapsedMilliseconds >= nextSearchMilliseconds)
+        if (!searchPending && elapsedMilliseconds >= nextSearchMilliseconds)
         {
             controller.searchTerminal(QString::fromLatin1(completionMarker), false, true);
-            nextSearchMilliseconds += 100;
+            searchPending = true;
+            nextSearchMilliseconds = elapsedMilliseconds + 100;
         }
     }
+    QObject::disconnect(searchConnection);
     const qint64 completionMilliseconds = completionTimer.elapsed();
     processWindowEventsFor(std::chrono::milliseconds{250});
     const bool scrollbarExposed = terminalItem->scrollbarVisible() && terminalItem->scrollbarPageRatio() < 1.0
@@ -3912,15 +3919,6 @@ void sendText(ztermy::NativeWindow &window, const QStringView text)
         return position > 0.9;
     });
     const bool scrollbarPassed = scrollbarExposed && scrollbarReachedHistory && scrollbarReturnedToBottom;
-    if (!scrollbarPassed)
-    {
-        qCWarning(applicationLog) << "Terminal render scrollbar check" << "exposed=" << scrollbarExposed
-                                  << "reachedHistory=" << scrollbarReachedHistory
-                                  << "returnedToBottom=" << scrollbarReturnedToBottom
-                                  << "visible=" << terminalItem->scrollbarVisible()
-                                  << "pageRatio=" << terminalItem->scrollbarPageRatio()
-                                  << "position=" << terminalItem->scrollbarPosition();
-    }
     heartbeat.stop();
     QObject::disconnect(frameConnection);
 
@@ -3953,7 +3951,8 @@ void sendText(ztermy::NativeWindow &window, const QStringView text)
                            << "maxHeartbeatGapMs=" << maximumHeartbeatGapMilliseconds << "frameSwaps=" << frameSwaps
                            << "resizeCompleted=" << resizeCompleted << "captureSaved=" << captureSaved
                            << "terminalRendered=" << terminalRendered << "scrollbarPassed=" << scrollbarPassed
-                           << "capture=" << capturePath;
+                           << "scrollbarExposed=" << scrollbarExposed << "reachedHistory=" << scrollbarReachedHistory
+                           << "returnedToBottom=" << scrollbarReturnedToBottom << "capture=" << capturePath;
     const bool baselinePassed = completed && responsive && progressiveFrames && resizeCompleted && captureSaved
                                 && terminalRendered && scrollbarPassed
                                 && ztermy::ui::verifyWorkbenchResizeWhileDragging(window, controller);

@@ -14,7 +14,11 @@ Window {
     property bool paneHeadersVisible: false
 
     transientParent: null
-    flags: Qt.Window | Qt.FramelessWindowHint
+    // Same native style as the main window: Windows owns maximize, minimize
+    // and the restore-to-maximized placement, while the chrome's native event
+    // filter removes the frame. A frameless window only gets moved to the
+    // work area on maximize, so the native state never matches the Qt state.
+    flags: Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint | Qt.WindowMinMaxButtonsHint | Qt.WindowCloseButtonHint
     width: 920
     height: 620
     minimumWidth: 480
