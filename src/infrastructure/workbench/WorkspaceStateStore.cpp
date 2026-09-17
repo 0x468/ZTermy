@@ -555,37 +555,34 @@ std::expected<void, WorkspaceStateStoreError> WorkspaceStateStore::save(const Wo
                                   {QStringLiteral("restoreAttemptIntentId"), text(state.restoreAttemptIntentId)}})
             .toJson(QJsonDocument::Indented);
     const bool fileExists = QFileInfo::exists(m_filePath);
-    if (fileExists && payload == m_knownGoodPayload)
+    QByteArray backupPayload = m_knownGoodPayload;
+    if (fileExists)
     {
-        return {};
-    }
-    const QString backupPath = m_filePath + QStringLiteral(".bak");
-    if (fileExists && !m_knownGoodPayload.isEmpty())
-    {
-        auto backupWritten = writeWorkspacePayload(backupPath, m_knownGoodPayload);
-        if (!backupWritten)
-        {
-            return backupWritten;
-        }
-    }
-    else if (fileExists)
-    {
+        // Reading the current file is cheap; parsing it is not. Only re-parse when
+        // the file no longer matches what this store last wrote or loaded, so an
+        // external newer-schema document is still refused instead of overwritten.
         auto previousPayload = readWorkspacePayload(m_filePath);
-        if (previousPayload)
+        if (previousPayload && *previousPayload == payload)
+        {
+            m_knownGoodPayload = payload;
+            return {};
+        }
+        if (previousPayload && *previousPayload != m_knownGoodPayload)
         {
             auto previous = parseWorkspacePayload(*previousPayload);
             if (!previous && previous.error() == WorkspaceStateStoreError::UnsupportedVersion)
             {
                 return std::unexpected(WorkspaceStateStoreError::UnsupportedVersion);
             }
-            if (previous)
-            {
-                auto backupWritten = writeWorkspacePayload(backupPath, *previousPayload);
-                if (!backupWritten)
-                {
-                    return backupWritten;
-                }
-            }
+            backupPayload = previous ? *previousPayload : m_knownGoodPayload;
+        }
+    }
+    if (fileExists && !backupPayload.isEmpty())
+    {
+        auto backupWritten = writeWorkspacePayload(m_filePath + QStringLiteral(".bak"), backupPayload);
+        if (!backupWritten)
+        {
+            return backupWritten;
         }
     }
     auto written = writeWorkspacePayload(m_filePath, payload);

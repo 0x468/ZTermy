@@ -378,6 +378,7 @@ void WorkspaceStateStoreTests::skipsRewritingAnUnchangedStateAndBacksUpFromMemor
     QFile backup(backupPath);
     QVERIFY(backup.open(QIODevice::ReadOnly));
     QCOMPARE(backup.readAll(), firstPayload);
+    backup.close();
 
     // A fresh store that loads the file also backs up from memory.
     const ztermy::workbench::WorkspaceStateStore reopened(path);
