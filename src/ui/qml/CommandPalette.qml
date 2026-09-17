@@ -85,9 +85,9 @@ Item {
         visible = true;
         items = controller.commandPaletteItems();
         searchField.text = "";
-        reveal = Theme.animationsEnabled ? 0.0 : 1.0;
+        reveal = Motion.enabled ? 0.0 : 1.0;
         actionList.currentIndex = firstEnabledIndex(0, 1);
-        if (Theme.animationsEnabled) {
+        if (Motion.enabled) {
             revealAnimation.restart();
         }
         Qt.callLater(searchField.forceActiveFocus);
@@ -106,14 +106,10 @@ Item {
 
     onFilteredActionsChanged: actionList.currentIndex = firstEnabledIndex(0, 1)
 
-    NumberAnimation {
+    MotionReveal {
         id: revealAnimation
         target: palette
         property: "reveal"
-        from: 0.0
-        to: 1.0
-        duration: Theme.motionFast
-        easing.type: Easing.OutCubic
     }
 
     Rectangle {
@@ -134,7 +130,7 @@ Item {
         width: Math.min(720, Math.max(360, palette.width - 32))
         height: Math.min(520, Math.max(176, actionList.contentHeight + 62))
         elevation: 3
-        scale: 0.985 + (palette.reveal * 0.015)
+        scale: Motion.revealScale + ((1 - Motion.revealScale) * palette.reveal)
 
         TapHandler {
             onTapped: eventPoint => eventPoint.accepted = true

@@ -20,14 +20,12 @@ Text {
 
     Behavior on opacity {
         NumberAnimation {
-            duration: message.text.length > 0 ? Theme.motionMedium : Theme.motionFast
-            easing.type: message.text.length > 0 ? Easing.OutCubic : Easing.InCubic
+            duration: message.text.length > 0 ? Motion.enter : Motion.exit
+            easing.type: message.text.length > 0 ? Motion.enterEasing : Motion.exitEasing
         }
     }
 
     Behavior on color {
-        ColorAnimation {
-            duration: Theme.motionFast
-        }
+        MotionColor {}
     }
 }

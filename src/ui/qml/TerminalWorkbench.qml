@@ -416,9 +416,7 @@ SidePanelSurface {
                                 rotation: parent.enabled ? 0 : 180
 
                                 Behavior on rotation {
-                                    NumberAnimation {
-                                        duration: Theme.motionMedium
-                                    }
+                                    MotionRelocate {}
                                 }
                             }
                         }

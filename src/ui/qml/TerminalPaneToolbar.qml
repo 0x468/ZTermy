@@ -20,9 +20,7 @@ RowLayout {
     opacity: headersVisible || hover.hovered || activeFocus || newPaneMenu.visible || !dimmed ? 1 : detached ? 0 : 0.18
 
     Behavior on opacity {
-        NumberAnimation {
-            duration: Theme.animationsEnabled ? Theme.motionFast : 0
-        }
+        MotionFeedback {}
     }
     HoverHandler {
         id: hover

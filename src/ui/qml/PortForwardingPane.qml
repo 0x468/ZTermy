@@ -207,9 +207,7 @@ ColumnLayout {
                 Accessible.name: modelData.label + ", " + root.stateLabel(modelData.state)
 
                 Behavior on color {
-                    ColorAnimation {
-                        duration: Theme.motionFast
-                    }
+                    MotionColor {}
                 }
 
                 HoverHandler {
@@ -413,10 +411,7 @@ ColumnLayout {
             border.color: Theme.border
 
             Behavior on reveal {
-                NumberAnimation {
-                    duration: Theme.motionMedium
-                    easing.type: Easing.OutCubic
-                }
+                MotionRelocate {}
             }
 
             ScrollView {

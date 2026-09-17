@@ -96,8 +96,8 @@ Item {
                 to: card.width + sweep.width
                 duration: 7200
                 loops: Animation.Infinite
-                running: card.visible && Theme.animationsEnabled
-                easing.type: Easing.InOutSine
+                running: card.visible && Motion.enabled
+                easing.type: Motion.emphasisEasing
             }
         }
 
@@ -170,7 +170,7 @@ Item {
                         to: 360
                         duration: 12000
                         loops: Animation.Infinite
-                        running: card.visible && Theme.animationsEnabled
+                        running: card.visible && Motion.enabled
                     }
                 }
 

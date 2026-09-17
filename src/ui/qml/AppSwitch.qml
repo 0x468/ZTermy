@@ -37,16 +37,12 @@ Switch {
             color: control.checked ? Theme.accentText : Theme.textSoft
 
             Behavior on x {
-                NumberAnimation {
-                    duration: Theme.motionFast
-                }
+                MotionFeedback {}
             }
         }
 
         Behavior on color {
-            ColorAnimation {
-                duration: Theme.motionFast
-            }
+            MotionColor {}
         }
     }
 

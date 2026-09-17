@@ -98,8 +98,8 @@ Popup {
             property: "slideOffset"
             from: drawer.width
             to: 0
-            duration: Theme.motionMedium / 2
-            easing.type: Easing.OutCubic
+            duration: Motion.relocate
+            easing.type: Motion.enterEasing
         }
     }
     exit: Transition {
@@ -107,8 +107,8 @@ Popup {
             target: drawer
             property: "slideOffset"
             to: drawer.width
-            duration: Theme.motionMedium / 2
-            easing.type: Easing.InCubic
+            duration: Motion.exit
+            easing.type: Motion.exitEasing
         }
     }
     SequentialAnimation {
@@ -117,8 +117,8 @@ Popup {
             target: drawer
             property: "slideOffset"
             to: drawer.width
-            duration: Theme.motionMedium / 2
-            easing.type: Easing.InCubic
+            duration: Motion.exit
+            easing.type: Motion.exitEasing
         }
         ScriptAction {
             script: {
@@ -132,8 +132,8 @@ Popup {
             target: drawer
             property: "slideOffset"
             to: 0
-            duration: Theme.motionMedium / 2
-            easing.type: Easing.OutCubic
+            duration: Motion.relocate
+            easing.type: Motion.enterEasing
         }
     }
 

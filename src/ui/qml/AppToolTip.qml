@@ -17,25 +17,9 @@ ToolTip {
     timeout: 10000
     visible: hoverTarget && (hoverTarget.hovered === true || hoverTarget.containsMouse === true)
 
-    enter: Transition {
-        NumberAnimation {
-            property: "opacity"
-            from: 0
-            to: 1
-            duration: Theme.motionFast
-            easing.type: Easing.OutCubic
-        }
-    }
+    enter: MotionEnter {}
 
-    exit: Transition {
-        NumberAnimation {
-            property: "opacity"
-            from: 1
-            to: 0
-            duration: Theme.motionFast
-            easing.type: Easing.InCubic
-        }
-    }
+    exit: MotionExit {}
 
     contentItem: Text {
         text: control.text

@@ -88,9 +88,7 @@ Rectangle {
         }
 
         Behavior on color {
-            ColorAnimation {
-                duration: Theme.motionFast
-            }
+            MotionColor {}
         }
 
         Rectangle {
@@ -550,16 +548,16 @@ Rectangle {
             focusCurrentCategory();
             return;
         }
-        contentReveal = Theme.animationsEnabled ? 0.0 : 1.0;
+        contentReveal = Motion.enabled ? 0.0 : 1.0;
         currentCategory = category;
-        if (Theme.animationsEnabled) {
+        if (Motion.enabled) {
             categoryRevealAnimation.restart();
         }
     }
 
     function revealCurrentCategory() {
-        contentReveal = Theme.animationsEnabled ? 0.0 : 1.0;
-        if (Theme.animationsEnabled) {
+        contentReveal = Motion.enabled ? 0.0 : 1.0;
+        if (Motion.enabled) {
             categoryRevealAnimation.restart();
         }
     }
@@ -693,15 +691,11 @@ Rectangle {
             controller.ensureAiUserSkillsLoaded();
     }
 
-    NumberAnimation {
+    MotionReveal {
         id: categoryRevealAnimation
 
         target: pane
         property: "contentReveal"
-        from: 0.0
-        to: 1.0
-        duration: Theme.motionMedium
-        easing.type: Easing.OutCubic
     }
 
     Timer {
@@ -718,7 +712,7 @@ Rectangle {
     Timer {
         id: statusClearTimer
 
-        interval: Theme.animationsEnabled ? Theme.motionMedium : 0
+        interval: Motion.relocate
         repeat: false
         onTriggered: pane.statusMessage = ""
     }
@@ -3466,10 +3460,7 @@ Rectangle {
                 kind: pane.statusIsError ? "error" : "success"
 
                 Behavior on opacity {
-                    NumberAnimation {
-                        duration: Theme.animationsEnabled ? Theme.motionMedium : 0
-                        easing.type: Easing.InOutCubic
-                    }
+                    MotionFeedback {}
                 }
             }
 

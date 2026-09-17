@@ -883,10 +883,7 @@ Rectangle {
             border.color: Theme.border
 
             Behavior on Layout.preferredHeight {
-                NumberAnimation {
-                    duration: Theme.motionFast
-                    easing.type: Easing.OutCubic
-                }
+                MotionFeedback {}
             }
 
             ScrollView {
@@ -1476,10 +1473,7 @@ Rectangle {
             Accessible.name: qsTr("AI activity audit")
 
             Behavior on Layout.preferredHeight {
-                NumberAnimation {
-                    duration: Theme.motionFast
-                    easing.type: Easing.OutCubic
-                }
+                MotionFeedback {}
             }
 
             ColumnLayout {

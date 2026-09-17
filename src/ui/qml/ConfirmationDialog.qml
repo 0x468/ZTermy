@@ -39,25 +39,9 @@ Dialog {
         }
     }
 
-    enter: Transition {
-        NumberAnimation {
-            property: "opacity"
-            from: 0
-            to: 1
-            duration: Theme.motionMedium
-            easing.type: Easing.OutCubic
-        }
-    }
+    enter: MotionEnter {}
 
-    exit: Transition {
-        NumberAnimation {
-            property: "opacity"
-            from: 1
-            to: 0
-            duration: Theme.motionFast
-            easing.type: Easing.InCubic
-        }
-    }
+    exit: MotionExit {}
 
     Overlay.modal: Rectangle {
         color: Theme.modalScrim
@@ -68,13 +52,10 @@ Dialog {
         border.color: control.destructive ? Theme.dangerBorder : Theme.borderStrong
 
         transform: Translate {
-            y: control.visible ? 0 : Theme.motionDistanceSmall
+            y: control.visible ? 0 : Motion.distance
 
             Behavior on y {
-                NumberAnimation {
-                    duration: Theme.motionMedium
-                    easing.type: Easing.OutCubic
-                }
+                MotionRelocate {}
             }
         }
     }

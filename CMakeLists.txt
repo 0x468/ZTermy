@@ -1228,6 +1228,36 @@ set_source_files_properties(
         QT_RESOURCE_ALIAS Theme.qml
 )
 set_source_files_properties(
+    src/ui/qml/Motion.qml
+    PROPERTIES
+        QT_QML_SINGLETON_TYPE TRUE
+        QT_RESOURCE_ALIAS Motion.qml
+)
+set_source_files_properties(
+    src/ui/qml/MotionColor.qml
+    PROPERTIES QT_RESOURCE_ALIAS MotionColor.qml
+)
+set_source_files_properties(
+    src/ui/qml/MotionFeedback.qml
+    PROPERTIES QT_RESOURCE_ALIAS MotionFeedback.qml
+)
+set_source_files_properties(
+    src/ui/qml/MotionRelocate.qml
+    PROPERTIES QT_RESOURCE_ALIAS MotionRelocate.qml
+)
+set_source_files_properties(
+    src/ui/qml/MotionEnter.qml
+    PROPERTIES QT_RESOURCE_ALIAS MotionEnter.qml
+)
+set_source_files_properties(
+    src/ui/qml/MotionExit.qml
+    PROPERTIES QT_RESOURCE_ALIAS MotionExit.qml
+)
+set_source_files_properties(
+    src/ui/qml/MotionReveal.qml
+    PROPERTIES QT_RESOURCE_ALIAS MotionReveal.qml
+)
+set_source_files_properties(
     src/ui/qml/TerminalTabAction.qml
     PROPERTIES QT_RESOURCE_ALIAS TerminalTabAction.qml
 )
@@ -1359,6 +1389,13 @@ qt_add_qml_module(ztermy
         src/ui/qml/ScriptEditor.qml
         src/ui/qml/ScriptRunPane.qml
         src/ui/qml/AppSurface.qml
+        src/ui/qml/Motion.qml
+        src/ui/qml/MotionColor.qml
+        src/ui/qml/MotionFeedback.qml
+        src/ui/qml/MotionRelocate.qml
+        src/ui/qml/MotionEnter.qml
+        src/ui/qml/MotionExit.qml
+        src/ui/qml/MotionReveal.qml
         src/ui/qml/SectionCard.qml
         src/ui/qml/SettingsPane.qml
         src/ui/qml/SftpBrowser.qml

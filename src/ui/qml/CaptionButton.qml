@@ -40,9 +40,7 @@ Control {
         color: control.surfaceColor
 
         Behavior on color {
-            ColorAnimation {
-                duration: Theme.motionFast
-            }
+            MotionColor {}
         }
     }
 

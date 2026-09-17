@@ -87,8 +87,8 @@ AppSurface {
             Rectangle {
                 id: loadingIndicator
 
-                x: control.determinateProgress ? 0 : Theme.animationsEnabled ? -width : 0
-                width: control.determinateProgress ? loadingTrack.width * control.normalizedProgress : Theme.animationsEnabled ? Math.max(36, loadingTrack.width * 0.32) : loadingTrack.width
+                x: control.determinateProgress ? 0 : Motion.enabled ? -width : 0
+                width: control.determinateProgress ? loadingTrack.width * control.normalizedProgress : Motion.enabled ? Math.max(36, loadingTrack.width * 0.32) : loadingTrack.width
                 height: loadingTrack.height
                 radius: height / 2
                 color: Theme.accent
@@ -98,15 +98,14 @@ AppSurface {
                     to: loadingTrack.width
                     duration: 650
                     loops: Animation.Infinite
-                    running: loadingTrack.visible && !control.determinateProgress && Theme.animationsEnabled
+                    running: loadingTrack.visible && !control.determinateProgress && Motion.enabled
                 }
 
                 Behavior on width {
-                    enabled: control.determinateProgress && Theme.animationsEnabled
+                    enabled: control.determinateProgress && Motion.enabled
 
-                    NumberAnimation {
+                    MotionFeedback {
                         duration: control.progressAnimationDuration
-                        easing.type: Easing.OutCubic
                     }
                 }
             }
@@ -139,15 +138,11 @@ AppSurface {
                         border.color: stepRow.currentStep || stepRow.completedStep ? Theme.accent : Theme.border
 
                         Behavior on color {
-                            ColorAnimation {
-                                duration: Theme.motionFast
-                            }
+                            MotionColor {}
                         }
 
                         Behavior on border.color {
-                            ColorAnimation {
-                                duration: Theme.motionFast
-                            }
+                            MotionColor {}
                         }
 
                         Text {
@@ -170,9 +165,7 @@ AppSurface {
                         font.weight: stepRow.currentStep ? Font.DemiBold : Font.Normal
 
                         Behavior on color {
-                            ColorAnimation {
-                                duration: Theme.motionFast
-                            }
+                            MotionColor {}
                         }
                     }
                 }

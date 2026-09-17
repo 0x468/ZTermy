@@ -60,9 +60,7 @@ Button {
         rotation: fontPopup.visible ? 180 : 0
 
         Behavior on rotation {
-            NumberAnimation {
-                duration: Theme.motionFast
-            }
+            MotionFeedback {}
         }
     }
 

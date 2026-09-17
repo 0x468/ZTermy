@@ -213,22 +213,8 @@ Item {
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         onClosed: trigger = null
 
-        enter: Transition {
-            NumberAnimation {
-                property: "opacity"
-                from: 0
-                to: 1
-                duration: Theme.motionFast
-            }
-        }
-        exit: Transition {
-            NumberAnimation {
-                property: "opacity"
-                from: 1
-                to: 0
-                duration: Theme.motionFast
-            }
-        }
+        enter: MotionEnter {}
+        exit: MotionExit {}
 
         background: Rectangle {
             radius: Theme.radiusControl

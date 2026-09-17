@@ -171,7 +171,7 @@ Item {
                     return;
                 connectionProgressLastStep = tab.connectionPhase === "connected" ? 2 : connectionProgressLastStep;
                 connectionProgressLastStatus = tab.status || connectionProgressLastStatus;
-                if (!connectionProgressPresented && Theme.animationsEnabled) {
+                if (!connectionProgressPresented && Motion.enabled) {
                     connectionProgressFinishPending = true;
                     return;
                 }
@@ -180,7 +180,7 @@ Item {
 
             function completeConnectionProgress() {
                 connectionProgressFinishPending = false;
-                if (tab.connectionPhase === "connected" && Theme.animationsEnabled) {
+                if (tab.connectionPhase === "connected" && Motion.enabled) {
                     connectionProgressValue = 1.0;
                     connectionProgressOpacity = 0.0;
                     connectionProgressHideTimer.restart();
@@ -463,9 +463,7 @@ Item {
                 opacity: paneScrollbarMouse.containsMouse || paneScrollbarMouse.pressed || recentlyScrolled ? 1 : 0
                 z: 8
                 Behavior on opacity {
-                    NumberAnimation {
-                        duration: Theme.motionFast
-                    }
+                    MotionFeedback {}
                 }
 
                 Timer {
@@ -859,9 +857,7 @@ Item {
                 }
 
                 Behavior on opacity {
-                    NumberAnimation {
-                        duration: Theme.animationsEnabled ? Theme.motionFast : 0
-                    }
+                    MotionFeedback {}
                 }
 
                 HoverHandler {
@@ -1054,10 +1050,7 @@ Item {
                 progress: leaf.connectionProgressValue
 
                 Behavior on opacity {
-                    NumberAnimation {
-                        duration: 150
-                        easing.type: Easing.OutCubic
-                    }
+                    MotionFeedback {}
                 }
 
                 ActionButton {
@@ -1083,10 +1076,7 @@ Item {
                 progress: leaf.connectionProgressValue
 
                 Behavior on opacity {
-                    NumberAnimation {
-                        duration: 150
-                        easing.type: Easing.OutCubic
-                    }
+                    MotionFeedback {}
                 }
 
                 ActionButton {

@@ -59,9 +59,7 @@ ComboBox {
         rotation: control.popup.visible ? 180 : 0
 
         Behavior on rotation {
-            NumberAnimation {
-                duration: Theme.motionFast
-            }
+            MotionFeedback {}
         }
     }
 
@@ -109,9 +107,7 @@ ComboBox {
         border.width: control.visualFocus ? 2 : 1
 
         Behavior on color {
-            ColorAnimation {
-                duration: Theme.motionFast
-            }
+            MotionColor {}
         }
     }
 
@@ -121,25 +117,9 @@ ComboBox {
         implicitHeight: Math.min(implicitContentHeight + 2, 240)
         padding: 1
 
-        enter: Transition {
-            NumberAnimation {
-                property: "opacity"
-                from: 0
-                to: 1
-                duration: Theme.motionMedium
-                easing.type: Easing.OutCubic
-            }
-        }
+        enter: MotionEnter {}
 
-        exit: Transition {
-            NumberAnimation {
-                property: "opacity"
-                from: 1
-                to: 0
-                duration: Theme.motionFast
-                easing.type: Easing.InCubic
-            }
-        }
+        exit: MotionExit {}
 
         contentItem: ListView {
             clip: true
@@ -154,13 +134,10 @@ ComboBox {
             compact: true
 
             transform: Translate {
-                y: control.popup.visible ? 0 : -Theme.motionDistanceSmall
+                y: control.popup.visible ? 0 : -Motion.distance
 
                 Behavior on y {
-                    NumberAnimation {
-                        duration: Theme.motionMedium
-                        easing.type: Easing.OutCubic
-                    }
+                    MotionRelocate {}
                 }
             }
         }

@@ -46,9 +46,7 @@ ToolButton {
             border.color: control.visualFocus ? Theme.focus : "transparent"
             border.width: control.visualFocus ? 2 : 0
             Behavior on feedbackAmount {
-                NumberAnimation {
-                    duration: Theme.motionFast
-                }
+                MotionFeedback {}
             }
         }
         Rectangle {
@@ -59,10 +57,7 @@ ToolButton {
             radius: height / 2
             color: Theme.accent
             Behavior on width {
-                NumberAnimation {
-                    duration: Theme.motionFast
-                    easing.type: Easing.OutCubic
-                }
+                MotionFeedback {}
             }
         }
     }

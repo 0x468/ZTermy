@@ -20,33 +20,9 @@ Popup {
     dim: false
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
-    enter: Transition {
-        ParallelAnimation {
-            NumberAnimation {
-                property: "opacity"
-                from: 0
-                to: 1
-                duration: Theme.animationsEnabled ? Theme.motionMedium : 0
-                easing.type: Easing.OutCubic
-            }
-            NumberAnimation {
-                property: "y"
-                from: root.y - 6
-                to: root.y
-                duration: Theme.animationsEnabled ? Theme.motionMedium : 0
-                easing.type: Easing.OutCubic
-            }
-        }
-    }
+    enter: MotionEnter {}
 
-    exit: Transition {
-        NumberAnimation {
-            property: "opacity"
-            from: 1
-            to: 0
-            duration: Theme.animationsEnabled ? Theme.motionFast : 0
-        }
-    }
+    exit: MotionExit {}
 
     background: AppSurface {
         elevation: 2

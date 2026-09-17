@@ -19,8 +19,8 @@ Item {
 
     Behavior on opacity {
         NumberAnimation {
-            duration: overlay.controller.hostKeyPromptVisible ? Theme.motionMedium : Theme.motionFast
-            easing.type: overlay.controller.hostKeyPromptVisible ? Easing.OutCubic : Easing.InCubic
+            duration: overlay.controller.hostKeyPromptVisible ? Motion.enter : Motion.exit
+            easing.type: overlay.controller.hostKeyPromptVisible ? Motion.enterEasing : Motion.exitEasing
         }
     }
 
@@ -71,13 +71,10 @@ Item {
         Accessible.name: overlay.controller.hostKeyChangedWarning ? qsTr("Host identity changed") : qsTr("Verify host identity")
 
         transform: Translate {
-            y: overlay.controller.hostKeyPromptVisible ? 0 : Theme.motionDistanceSmall
+            y: overlay.controller.hostKeyPromptVisible ? 0 : Motion.distance
 
             Behavior on y {
-                NumberAnimation {
-                    duration: Theme.motionMedium
-                    easing.type: Easing.OutCubic
-                }
+                MotionRelocate {}
             }
         }
 

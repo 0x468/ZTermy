@@ -126,12 +126,7 @@ QtObject {
     readonly property real shadowBlurDialog: 1.0
     readonly property int shadowOffsetFloating: 3
     readonly property int shadowOffsetDialog: 10
-    // Motion follows the effects tier: "reduced" keeps the choreography but
-    // shortens it, "off" (or the Windows animation preference) removes it.
-    readonly property int motionFast: !motionEnabled ? 0 : reducedEffects ? 80 : 120
-    readonly property int motionMedium: !motionEnabled ? 0 : reducedEffects ? 120 : 180
-    readonly property int motionSlow: !motionEnabled ? 0 : reducedEffects ? 150 : 220
-    readonly property int motionDistanceSmall: !motionEnabled ? 0 : reducedEffects ? 4 : 8
+    // Motion durations and easings live in the Motion singleton.
 
     function withAlpha(baseColor: color, alpha: real): color {
         return Qt.rgba(baseColor.r, baseColor.g, baseColor.b, Math.max(0.0, Math.min(1.0, alpha)));

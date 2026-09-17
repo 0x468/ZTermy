@@ -44,9 +44,7 @@ TextField {
         border.width: control.activeFocus || control.invalid ? 2 : 1
 
         Behavior on color {
-            ColorAnimation {
-                duration: Theme.motionFast
-            }
+            MotionColor {}
         }
     }
 

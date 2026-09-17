@@ -832,9 +832,7 @@ Rectangle {
                                 color: pane.mutedColor
                                 rotation: pane.sectionCollapsed("recent") ? -90 : 0
                                 Behavior on rotation {
-                                    NumberAnimation {
-                                        duration: Theme.motionFast
-                                    }
+                                    MotionFeedback {}
                                 }
                             }
                             Text {
@@ -919,9 +917,7 @@ Rectangle {
                             Keys.onEnterPressed: pane.connectSaved(modelData, recentProfileCard)
 
                             Behavior on color {
-                                ColorAnimation {
-                                    duration: Theme.motionFast
-                                }
+                                MotionColor {}
                             }
 
                             HoverHandler {
@@ -1045,9 +1041,7 @@ Rectangle {
                                 color: pane.mutedColor
                                 rotation: pane.sectionCollapsed("group:" + profileGroup.modelData.name) ? -90 : 0
                                 Behavior on rotation {
-                                    NumberAnimation {
-                                        duration: Theme.motionFast
-                                    }
+                                    MotionFeedback {}
                                 }
                             }
                             Text {
@@ -1107,9 +1101,7 @@ Rectangle {
                                 Keys.onEnterPressed: pane.connectSaved(modelData, profileCard)
 
                                 Behavior on color {
-                                    ColorAnimation {
-                                        duration: Theme.motionFast
-                                    }
+                                    MotionColor {}
                                 }
 
                                 HoverHandler {
@@ -1305,10 +1297,7 @@ Rectangle {
                     border.color: pane.borderColor
 
                     Behavior on reveal {
-                        NumberAnimation {
-                            duration: Theme.motionMedium
-                            easing.type: Easing.OutCubic
-                        }
+                        MotionRelocate {}
                     }
 
                     ScrollView {
@@ -1646,10 +1635,7 @@ Rectangle {
                                     radius: Theme.radiusSmall
 
                                     Behavior on revealHeight {
-                                        NumberAnimation {
-                                            duration: Theme.motionMedium
-                                            easing.type: Easing.OutCubic
-                                        }
+                                        MotionRelocate {}
                                     }
 
                                     ColumnLayout {
@@ -2326,25 +2312,9 @@ Rectangle {
             }
         }
 
-        enter: Transition {
-            NumberAnimation {
-                property: "opacity"
-                from: 0
-                to: 1
-                duration: Theme.motionMedium
-                easing.type: Easing.OutCubic
-            }
-        }
+        enter: MotionEnter {}
 
-        exit: Transition {
-            NumberAnimation {
-                property: "opacity"
-                from: 1
-                to: 0
-                duration: Theme.motionFast
-                easing.type: Easing.InCubic
-            }
-        }
+        exit: MotionExit {}
 
         Overlay.modal: Rectangle {
             color: Theme.modalScrim
@@ -2356,13 +2326,10 @@ Rectangle {
             border.color: Theme.borderStrong
 
             transform: Translate {
-                y: quickConnectDialog.visible ? 0 : Theme.motionDistanceSmall
+                y: quickConnectDialog.visible ? 0 : Motion.distance
 
                 Behavior on y {
-                    NumberAnimation {
-                        duration: Theme.motionMedium
-                        easing.type: Easing.OutCubic
-                    }
+                    MotionRelocate {}
                 }
             }
         }
@@ -2704,25 +2671,9 @@ Rectangle {
             }
         }
 
-        enter: Transition {
-            NumberAnimation {
-                property: "opacity"
-                from: 0
-                to: 1
-                duration: Theme.motionMedium
-                easing.type: Easing.OutCubic
-            }
-        }
+        enter: MotionEnter {}
 
-        exit: Transition {
-            NumberAnimation {
-                property: "opacity"
-                from: 1
-                to: 0
-                duration: Theme.motionFast
-                easing.type: Easing.InCubic
-            }
-        }
+        exit: MotionExit {}
 
         Overlay.modal: Rectangle {
             color: Theme.modalScrim
@@ -2734,13 +2685,10 @@ Rectangle {
             border.color: Theme.borderStrong
 
             transform: Translate {
-                y: credentialDialog.visible ? 0 : Theme.motionDistanceSmall
+                y: credentialDialog.visible ? 0 : Motion.distance
 
                 Behavior on y {
-                    NumberAnimation {
-                        duration: Theme.motionMedium
-                        easing.type: Easing.OutCubic
-                    }
+                    MotionRelocate {}
                 }
             }
         }

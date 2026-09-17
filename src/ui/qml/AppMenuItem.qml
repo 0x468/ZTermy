@@ -88,9 +88,7 @@ MenuItem {
         border.width: control.visualFocus ? 2 : 0
 
         Behavior on color {
-            ColorAnimation {
-                duration: Theme.motionFast
-            }
+            MotionColor {}
         }
     }
 

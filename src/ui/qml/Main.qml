@@ -758,8 +758,8 @@ Rectangle {
     onWidthChanged: scheduleTitleBarMetrics()
     onCurrentPageChanged: {
         Qt.callLater(root.applyAlwaysOnTopPreference);
-        pageReveal = Theme.animationsEnabled ? 0.0 : 1.0;
-        if (Theme.animationsEnabled) {
+        pageReveal = Motion.enabled ? 0.0 : 1.0;
+        if (Motion.enabled) {
             pageEntryAnimation.restart();
         }
         if (currentPage === "settings") {
@@ -879,15 +879,11 @@ Rectangle {
         onTriggered: root.sessionClock = Date.now()
     }
 
-    NumberAnimation {
+    MotionReveal {
         id: pageEntryAnimation
 
         target: root
         property: "pageReveal"
-        from: 0.0
-        to: 1.0
-        duration: Theme.motionMedium
-        easing.type: Easing.OutCubic
     }
 
     Connections {
@@ -957,16 +953,11 @@ Rectangle {
                 border.width: hostsTitleAction.visualFocus ? 1 : 0
 
                 Behavior on feedbackAmount {
-                    NumberAnimation {
-                        duration: Theme.motionFast
-                    }
+                    MotionFeedback {}
                 }
 
                 Behavior on width {
-                    NumberAnimation {
-                        duration: Theme.motionMedium
-                        easing.type: Easing.OutCubic
-                    }
+                    MotionRelocate {}
                 }
 
                 RowLayout {
@@ -1023,10 +1014,7 @@ Rectangle {
                 toolTip: qsTr("Open local and remote files")
                 onActivated: root.currentPage = "sftp"
                 Behavior on width {
-                    NumberAnimation {
-                        duration: Theme.animationsEnabled ? Theme.motionMedium : 0
-                        easing.type: Easing.OutCubic
-                    }
+                    MotionRelocate {}
                 }
             }
 
@@ -1075,27 +1063,16 @@ Rectangle {
                 }
 
                 addDisplaced: Transition {
-                    NumberAnimation {
+                    MotionRelocate {
                         properties: "x"
-                        duration: Theme.motionMedium
-                        easing.type: Easing.OutCubic
                     }
                 }
 
-                remove: Transition {
-                    NumberAnimation {
-                        property: "opacity"
-                        to: 0.0
-                        duration: Theme.motionFast
-                        easing.type: Easing.InCubic
-                    }
-                }
+                remove: MotionExit {}
 
                 removeDisplaced: Transition {
-                    NumberAnimation {
+                    MotionRelocate {
                         properties: "x"
-                        duration: Theme.motionMedium
-                        easing.type: Easing.OutCubic
                     }
                 }
 
@@ -1343,10 +1320,7 @@ Rectangle {
         z: 3
 
         Behavior on height {
-            NumberAnimation {
-                duration: Theme.motionMedium
-                easing.type: Easing.OutCubic
-            }
+            MotionRelocate {}
         }
 
         RowLayout {
@@ -1601,19 +1575,13 @@ Rectangle {
             color: root.panelColor
 
             Behavior on opacity {
-                NumberAnimation {
-                    duration: Theme.motionFast
-                    easing.type: Easing.OutCubic
-                }
+                MotionFeedback {}
             }
 
             Behavior on Layout.preferredWidth {
                 enabled: !workspaceNavigationResizeHandle.pressed
 
-                NumberAnimation {
-                    duration: Theme.motionMedium
-                    easing.type: Easing.OutCubic
-                }
+                MotionRelocate {}
             }
 
             ColumnLayout {
@@ -1806,7 +1774,7 @@ Rectangle {
                 opacity: root.pageReveal
 
                 transform: Translate {
-                    x: Theme.motionDistanceSmall * (1.0 - root.pageReveal)
+                    x: Motion.distance * (1.0 - root.pageReveal)
                 }
 
                 ColumnLayout {
@@ -2284,24 +2252,19 @@ Rectangle {
                             onTerminalSearchRequested: root.openTerminalSearch()
 
                             Behavior on anchors.rightMargin {
-                                NumberAnimation {
-                                    duration: Theme.animationsEnabled && !root.workbenchResizeInProgress ? Theme.motionMedium : 0
-                                    easing.type: Easing.OutCubic
+                                MotionRelocate {
+                                    duration: root.workbenchResizeInProgress ? 0 : Motion.relocate
                                 }
                             }
 
                             Behavior on anchors.leftMargin {
-                                NumberAnimation {
-                                    duration: Theme.animationsEnabled && !root.workbenchResizeInProgress ? Theme.motionMedium : 0
-                                    easing.type: Easing.OutCubic
+                                MotionRelocate {
+                                    duration: root.workbenchResizeInProgress ? 0 : Motion.relocate
                                 }
                             }
 
                             Behavior on anchors.bottomMargin {
-                                NumberAnimation {
-                                    duration: Theme.animationsEnabled ? Theme.motionMedium : 0
-                                    easing.type: Easing.OutCubic
-                                }
+                                MotionRelocate {}
                             }
                         }
 
@@ -2467,10 +2430,7 @@ Rectangle {
                             }
 
                             Behavior on height {
-                                NumberAnimation {
-                                    duration: Theme.animationsEnabled ? Theme.motionMedium : 0
-                                    easing.type: Easing.OutCubic
-                                }
+                                MotionRelocate {}
                             }
                         }
 
@@ -2586,7 +2546,7 @@ Rectangle {
                 onOpenSshImportRequested: openSshConfigImportDialog.open()
 
                 transform: Translate {
-                    x: -Theme.motionDistanceSmall * (1.0 - root.pageReveal)
+                    x: -Motion.distance * (1.0 - root.pageReveal)
                 }
             }
 
@@ -2677,7 +2637,7 @@ Rectangle {
                 }
 
                 transform: Translate {
-                    x: Theme.motionDistanceSmall * (1.0 - root.pageReveal)
+                    x: Motion.distance * (1.0 - root.pageReveal)
                 }
             }
         }

@@ -45,9 +45,7 @@ Rectangle {
     border.color: activateAction.visualFocus ? Theme.focus : "transparent"
     border.width: activateAction.visualFocus ? 1 : 0
     Behavior on feedbackAmount {
-        NumberAnimation {
-            duration: Theme.motionFast
-        }
+        MotionFeedback {}
     }
 
     Rectangle {
@@ -62,17 +60,17 @@ Rectangle {
         color: control.running || control.connecting ? Theme.accent : Theme.textSubtle
 
         SequentialAnimation on opacity {
-            running: control.connecting && Theme.animationsEnabled
+            running: control.connecting && Motion.enabled
             loops: Animation.Infinite
             NumberAnimation {
                 to: 0.3
-                duration: Theme.motionMedium
-                easing.type: Easing.InOutSine
+                duration: Motion.emphasis
+                easing.type: Motion.emphasisEasing
             }
             NumberAnimation {
                 to: 1.0
-                duration: Theme.motionMedium
-                easing.type: Easing.InOutSine
+                duration: Motion.emphasis
+                easing.type: Motion.emphasisEasing
             }
         }
     }
@@ -257,15 +255,11 @@ Rectangle {
         border.width: closeAction.visualFocus ? 1 : 0
 
         Behavior on feedbackAmount {
-            NumberAnimation {
-                duration: Theme.motionFast
-            }
+            MotionFeedback {}
         }
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: Theme.motionFast
-            }
+            MotionFeedback {}
         }
 
         AppIcon {

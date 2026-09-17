@@ -79,9 +79,7 @@ Button {
         border.width: control.visualFocus ? 2 : 1
 
         Behavior on color {
-            ColorAnimation {
-                duration: Theme.motionFast
-            }
+            MotionColor {}
         }
     }
 
