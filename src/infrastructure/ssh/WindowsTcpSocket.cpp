@@ -347,9 +347,16 @@ struct WaitResult final
     }
 }
 
+struct InterruptibleWaitEvents final
+{
+    HANDLE socketEvent = nullptr;
+    HANDLE stopEvent = nullptr;
+};
+
 [[nodiscard]] WaitResult waitForInterruptibleIo(const SOCKET socket, const SocketIoInterest interest,
                                                 const Clock::time_point deadline, const std::stop_token &stopToken,
-                                                const std::uintptr_t interruptEvent) noexcept
+                                                const std::uintptr_t interruptEvent,
+                                                const InterruptibleWaitEvents events) noexcept
 {
     long networkEvents = FD_CLOSE;
     if (interest == SocketIoInterest::Read || interest == SocketIoInterest::ReadWrite)
@@ -361,32 +368,25 @@ struct WaitResult final
         networkEvents |= FD_WRITE;
     }
 
-    UniqueEvent socketEvent(WSACreateEvent());
-    if (socketEvent.get() == WSA_INVALID_EVENT)
-    {
-        return {.outcome = WaitOutcome::Failed, .nativeCode = WSAGetLastError()};
-    }
-
-    UniqueEvent stopEvent(CreateEventW(nullptr, TRUE, FALSE, nullptr));
-    if (stopEvent.get() == nullptr)
+    if (WSAResetEvent(events.socketEvent) == FALSE || ResetEvent(events.stopEvent) == FALSE)
     {
         return {.outcome = WaitOutcome::Failed, .nativeCode = static_cast<int>(GetLastError())};
     }
 
     SocketEventSelection selection(socket);
-    if (!selection.activate(socketEvent.get(), networkEvents))
+    if (!selection.activate(events.socketEvent, networkEvents))
     {
         return {.outcome = WaitOutcome::Failed, .nativeCode = WSAGetLastError()};
     }
 
-    const HANDLE stopEventHandle = stopEvent.get();
+    const HANDLE stopEventHandle = events.stopEvent;
     std::stop_callback stopCallback(stopToken, [stopEventHandle] {
         SetEvent(stopEventHandle);
     });
     const std::array handles{
-        socketEvent.get(),
+        events.socketEvent,
         reinterpret_cast<HANDLE>(interruptEvent), // NOLINT(performance-no-int-to-ptr)
-        stopEvent.get(),
+        events.stopEvent,
     };
 
     while (true)
@@ -413,7 +413,7 @@ struct WaitResult final
         }
 
         WSANETWORKEVENTS occurred{};
-        if (WSAEnumNetworkEvents(socket, socketEvent.get(), &occurred) == SOCKET_ERROR)
+        if (WSAEnumNetworkEvents(socket, events.socketEvent, &occurred) == SOCKET_ERROR)
         {
             return {.outcome = WaitOutcome::Failed, .nativeCode = WSAGetLastError()};
         }
@@ -429,14 +429,8 @@ struct WaitResult final
 }
 
 [[nodiscard]] WaitResult waitForIo(const SOCKET socket, const SocketIoInterest interest,
-                                   const Clock::time_point deadline, const std::stop_token &stopToken,
-                                   const std::uintptr_t interruptEvent) noexcept
+                                   const Clock::time_point deadline, const std::stop_token &stopToken) noexcept
 {
-    if (interruptEvent != 0)
-    {
-        return waitForInterruptibleIo(socket, interest, deadline, stopToken, interruptEvent);
-    }
-
     short events = 0;
     if (interest == SocketIoInterest::Read || interest == SocketIoInterest::ReadWrite)
     {
@@ -539,7 +533,12 @@ WindowsTcpSocket::~WindowsTcpSocket()
     close();
 }
 
-WindowsTcpSocket::WindowsTcpSocket(WindowsTcpSocket &&other) noexcept : m_socket(other.release()) {}
+WindowsTcpSocket::WindowsTcpSocket(WindowsTcpSocket &&other) noexcept
+    : m_socket(other.release()),
+      m_socketEvent(std::exchange(other.m_socketEvent, 0)),
+      m_stopEvent(std::exchange(other.m_stopEvent, 0))
+{
+}
 
 WindowsTcpSocket &WindowsTcpSocket::operator=(WindowsTcpSocket &&other) noexcept
 {
@@ -547,8 +546,40 @@ WindowsTcpSocket &WindowsTcpSocket::operator=(WindowsTcpSocket &&other) noexcept
     {
         close();
         m_socket = other.release();
+        m_socketEvent = std::exchange(other.m_socketEvent, 0);
+        m_stopEvent = std::exchange(other.m_stopEvent, 0);
     }
     return *this;
+}
+
+bool WindowsTcpSocket::ensureWaitEvents() noexcept
+{
+    if (m_socketEvent == 0)
+    {
+        const WSAEVENT event = WSACreateEvent();
+        if (event == WSA_INVALID_EVENT)
+        {
+            return false;
+        }
+        m_socketEvent = reinterpret_cast<std::uintptr_t>(event);
+    }
+    if (m_stopEvent == 0)
+    {
+        m_stopEvent = reinterpret_cast<std::uintptr_t>(CreateEventW(nullptr, TRUE, FALSE, nullptr));
+    }
+    return m_stopEvent != 0;
+}
+
+void WindowsTcpSocket::closeWaitEvents() noexcept
+{
+    if (const std::uintptr_t event = std::exchange(m_socketEvent, 0); event != 0)
+    {
+        WSACloseEvent(reinterpret_cast<WSAEVENT>(event)); // NOLINT(performance-no-int-to-ptr)
+    }
+    if (const std::uintptr_t event = std::exchange(m_stopEvent, 0); event != 0)
+    {
+        CloseHandle(reinterpret_cast<HANDLE>(event)); // NOLINT(performance-no-int-to-ptr)
+    }
 }
 
 std::expected<WindowsTcpSocket, TcpConnectError> WindowsTcpSocket::connect(const std::string_view host,
@@ -747,8 +778,22 @@ WindowsTcpSocket::waitUntilReady(const SocketIoInterest interest, const std::chr
             SshByteTransportError{.kind = SshByteTransportErrorKind::SystemError, .nativeCode = WSAENOTSOCK});
     }
 
-    const WaitResult waitResult =
-        waitForIo(static_cast<SOCKET>(m_socket), interest, deadline, stopToken, interruptHandle);
+    WaitResult waitResult{};
+    if (interruptHandle == 0)
+    {
+        waitResult = waitForIo(static_cast<SOCKET>(m_socket), interest, deadline, stopToken);
+    }
+    else if (!ensureWaitEvents())
+    {
+        waitResult = {.outcome = WaitOutcome::Failed, .nativeCode = WSAGetLastError()};
+    }
+    else
+    {
+        waitResult = waitForInterruptibleIo(
+            static_cast<SOCKET>(m_socket), interest, deadline, stopToken, interruptHandle,
+            {.socketEvent = reinterpret_cast<HANDLE>(m_socketEvent), // NOLINT(performance-no-int-to-ptr)
+             .stopEvent = reinterpret_cast<HANDLE>(m_stopEvent)});   // NOLINT(performance-no-int-to-ptr)
+    }
     switch (waitResult.outcome)
     {
         case WaitOutcome::Ready:
@@ -789,6 +834,7 @@ void WindowsTcpSocket::close() noexcept
     {
         closesocket(static_cast<SOCKET>(socket));
     }
+    closeWaitEvents();
 }
 
 std::uintptr_t WindowsTcpSocket::release() noexcept

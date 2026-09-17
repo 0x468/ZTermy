@@ -94,9 +94,15 @@ private:
     explicit WindowsTcpSocket(std::uintptr_t socket) noexcept;
 
     [[nodiscard]] std::uintptr_t release() noexcept;
+    [[nodiscard]] bool ensureWaitEvents() noexcept;
+    void closeWaitEvents() noexcept;
 
     static constexpr std::uintptr_t InvalidSocket = ~std::uintptr_t{0};
     std::uintptr_t m_socket = InvalidSocket;
+    // Interruptible waits reuse one socket event and one stop event per
+    // socket instead of creating and closing two kernel objects per call.
+    std::uintptr_t m_socketEvent = 0;
+    std::uintptr_t m_stopEvent = 0;
 };
 
 } // namespace ztermy::ssh

@@ -27,6 +27,7 @@ private slots:
     void moveTransfersSocketOwnership();
     void transfersBytesThroughInterface();
     void interruptEventWakesPendingRead();
+    void repeatedInterruptibleWaitsReuseTheSocket();
     void listenerAcceptsLoopbackClient();
     void listenerRejectsConflictingBindAndHonorsCancellation();
 };
@@ -169,6 +170,45 @@ void WindowsTcpSocketTests::interruptEventWakesPendingRead()
     QVERIFY(!result);
     QCOMPARE(result.error().kind, ztermy::ssh::SshByteTransportErrorKind::Cancelled);
     QVERIFY(std::chrono::steady_clock::now() - started < 500ms);
+}
+
+void WindowsTcpSocketTests::repeatedInterruptibleWaitsReuseTheSocket()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+    auto socket = ztermy::ssh::WindowsTcpSocket::connect("127.0.0.1", server.serverPort(), 2s);
+    QVERIFY(socket);
+    QVERIFY(server.waitForNewConnection(1000));
+    QTcpSocket *peer = server.nextPendingConnection();
+    QVERIFY(peer != nullptr);
+
+    ztermy::ssh::WindowsWaitEvent interrupt;
+    QVERIFY(interrupt.valid());
+    // The wait events live with the socket, so many short waits must keep
+    // timing out cleanly and still report readiness once data arrives.
+    for (int round = 0; round < 25; ++round)
+    {
+        const auto result = socket->waitUntilReady(
+            ztermy::ssh::SocketIoInterest::Read, std::chrono::steady_clock::now() + 1ms, {}, interrupt.nativeHandle());
+        QVERIFY(!result);
+        QCOMPARE(result.error().kind, ztermy::ssh::SshByteTransportErrorKind::TimedOut);
+    }
+    QVERIFY(peer->write("ping", 4) == 4);
+    QVERIFY(peer->waitForBytesWritten(1000));
+    QVERIFY(socket->waitUntilReady(ztermy::ssh::SocketIoInterest::Read, std::chrono::steady_clock::now() + 2s, {},
+                                   interrupt.nativeHandle()));
+    std::array<char, 8> buffer{};
+    const auto read = socket->read(buffer);
+    QVERIFY(read);
+    QCOMPARE(*read, std::size_t{4});
+
+    // A moved socket carries its wait events along.
+    ztermy::ssh::WindowsTcpSocket moved(std::move(*socket));
+    QVERIFY(moved.valid());
+    const auto afterMove = moved.waitUntilReady(ztermy::ssh::SocketIoInterest::Read,
+                                                std::chrono::steady_clock::now() + 1ms, {}, interrupt.nativeHandle());
+    QVERIFY(!afterMove);
+    QCOMPARE(afterMove.error().kind, ztermy::ssh::SshByteTransportErrorKind::TimedOut);
 }
 
 void WindowsTcpSocketTests::listenerAcceptsLoopbackClient()

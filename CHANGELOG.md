@@ -60,6 +60,12 @@ The project has not published a release.
   main window's `WM_NCHITTEST` handler and the detached-window filter each
   called `GetDpiForWindow`/`GetSystemMetricsForDpi` on every pointer move
   (the detached path twice); both now share one cached lookup.
+- Keep the SSH socket wait events alive for the socket's lifetime. Every
+  interruptible `waitUntilReady` (one per libssh2 `EAGAIN`, so many per
+  received frame) created a `WSAEVENT` and a stop event, associated the
+  socket and closed both again; the socket now owns one pair, resets them
+  per wait and moves them with the socket. `windows-tcp-socket` gains a test
+  for repeated short waits and a moved socket.
 
 ### 0.4.6 local validation build — 2026-09-15
 
