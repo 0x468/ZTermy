@@ -21,7 +21,7 @@ Rectangle {
         controller.ensureSftpBrowser();
     }
 
-    color: Theme.workspaceBackground
+    color: Theme.contentBackground
     onVisibleChanged: Qt.callLater(ensureRemoteBrowser)
     onActiveTabChanged: Qt.callLater(ensureRemoteBrowser)
 

@@ -8,7 +8,7 @@ Rectangle {
     id: pane
 
     objectName: "hostConnectionPane"
-    property color backgroundColor: Theme.workspaceBackground
+    property color backgroundColor: Theme.contentBackground
     property color raisedColor: Theme.elevatedBackground
     property color borderColor: Theme.border
     property color textColor: Theme.text

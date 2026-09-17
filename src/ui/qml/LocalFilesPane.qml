@@ -10,7 +10,7 @@ Rectangle {
     required property var controller
     signal insertRequested(string path)
 
-    color: Theme.workspaceBackground
+    color: Theme.contentBackground
 
     ColumnLayout {
         anchors.fill: parent

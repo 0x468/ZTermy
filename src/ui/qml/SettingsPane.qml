@@ -48,8 +48,9 @@ Rectangle {
     property real contentReveal: 1.0
     readonly property bool shortcutRecording: shortcutSettings.recording
     readonly property bool draftDark: themeBox.currentIndex === 1 || (themeBox.currentIndex === 0 && Theme.systemDark)
-    readonly property bool adjustableBackdrop: backdropBox.currentIndex === 0 || backdropBox.currentIndex === 1
-    readonly property bool solidBackdrop: backdropBox.currentIndex === 4
+    readonly property bool fullEffects: effectsBox.currentIndex === 0
+    readonly property bool adjustableBackdrop: fullEffects && (backdropBox.currentIndex === 0 || backdropBox.currentIndex === 1)
+    readonly property bool solidBackdrop: !fullEffects || backdropBox.currentIndex === 4
     readonly property bool customAccentSelected: accentBox.currentIndex === 2
     readonly property bool compactLayout: width < Theme.narrowWindowWidth
     readonly property int contentInset: compactLayout ? 10 : 16
@@ -60,7 +61,7 @@ Rectangle {
     readonly property var localShellTokens: controller.availableLocalShells.map(shell => shell.id)
     readonly property var localShellLabels: controller.availableLocalShells.map(shell => shell.available ? shell.name : qsTr("%1 (unavailable)").arg(shell.name))
 
-    signal appearancePreviewRequested(string theme, real opacity, string backdrop, string accent, string customAccent)
+    signal appearancePreviewRequested(string theme, real opacity, string backdrop, string accent, string customAccent, string effects)
     signal appearancePreviewEnded
 
     ListModel {
@@ -136,7 +137,7 @@ Rectangle {
         }
     }
 
-    color: Theme.workspaceBackground
+    color: Theme.contentBackground
     palette.base: Theme.raisedBackground
     palette.text: Theme.text
     palette.windowText: Theme.text
@@ -541,7 +542,7 @@ Rectangle {
             return;
         }
         const previewAccent = customAccentField.acceptableInput ? customAccentField.text : controller.customAccent;
-        appearancePreviewRequested(themeToken(), opacitySlider.value, backdropToken(), accentToken(), previewAccent);
+        appearancePreviewRequested(themeToken(), opacitySlider.value, backdropToken(), accentToken(), previewAccent, effectsBox.model[Math.max(0, effectsBox.currentIndex)]);
     }
 
     function selectCategory(category) {
@@ -588,6 +589,7 @@ Rectangle {
         themeBox.currentIndex = themeIndex(controller.themePreference);
         opacitySlider.value = controller.backdropOpacity;
         backdropBox.currentIndex = backdropIndex(controller.backdropPreference);
+        effectsBox.currentIndex = Math.max(0, effectsBox.model.indexOf(controller.effectsTier));
         accentBox.currentIndex = accentIndex(controller.accentPreference);
         customAccentField.text = controller.customAccent;
         uiFontDraft = controller.uiFontFamily;
@@ -647,7 +649,8 @@ Rectangle {
         const wantsOpaqueSurface = performanceModeDraft;
         const restartRequired = wantsOpaqueSurface !== windowChrome.opaqueSurface || performanceModeDraft !== windowChrome.performanceModeActive;
         const applicationSaved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, keepSelectionAfterCopySwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked, windowBehavior.closeToTray, performanceModeDraft, rightClickToken(), middleClickToken(), wordDelimitersField.text, wheelRowsBox.value);
-        const shellSaved = applicationSaved && controller.saveLocalShellPreference(localShellTokens[Math.max(0, localShellBox.currentIndex)] || "automatic");
+        const effectsSaved = applicationSaved && controller.saveEffectsTier(effectsBox.model[Math.max(0, effectsBox.currentIndex)]);
+        const shellSaved = effectsSaved && controller.saveLocalShellPreference(localShellTokens[Math.max(0, localShellBox.currentIndex)] || "automatic");
         const selectionSaved = shellSaved && controller.saveTerminalSelectionPopupSettings(selectionPopupSwitch.checked, selectionActionDraftValues());
         const saved = selectionSaved && controller.saveWindowInteractionSettings({
             singleInstance: windowBehavior.singleInstance,
@@ -1199,6 +1202,20 @@ Rectangle {
                     }
 
                     Label {
+                        text: qsTr("Visual effects")
+                        color: Theme.text
+                    }
+                    AppComboBox {
+                        id: effectsBox
+                        objectName: "settingsEffectsTier"
+                        Layout.fillWidth: true
+                        model: ["full", "reduced", "off"]
+                        displayTextModel: [qsTr("Full (material, shadows, motion)"), qsTr("Reduced (no shadows, shorter motion)"), qsTr("Off (solid surfaces, no motion)")]
+                        accessibleName: qsTr("Visual effects tier")
+                        onCurrentIndexChanged: pane.previewDraft()
+                    }
+
+                    Label {
                         text: qsTr("Windows backdrop")
                         color: Theme.text
                     }
@@ -1206,6 +1223,7 @@ Rectangle {
                         id: backdropBox
                         objectName: "settingsBackdrop"
                         Layout.fillWidth: true
+                        enabled: pane.fullEffects
                         model: ["acrylic", "transparent", "mica", "micaAlt", "solid"]
                         displayTextModel: [qsTr("Acrylic"), qsTr("Transparent"), "Mica", "Mica Alt", qsTr("No material (solid)")]
                         accessibleName: qsTr("Windows backdrop material")
@@ -1251,7 +1269,7 @@ Rectangle {
                             anchors.fill: parent
                             radius: Theme.radiusControl
                             color: {
-                                const alpha = pane.adjustableBackdrop ? opacitySlider.value : pane.solidBackdrop ? 1.0 : backdropBox.currentIndex === 2 ? 0.82 : 0.88;
+                                const alpha = pane.adjustableBackdrop ? opacitySlider.value : pane.solidBackdrop ? 1.0 : backdropBox.currentIndex === 2 ? 0.60 : 0.72;
                                 return pane.draftDark ? Qt.rgba(0.067, 0.094, 0.153, alpha) : Qt.rgba(1.0, 1.0, 1.0, alpha);
                             }
                             border.color: pane.draftDark ? "#334155" : "#94A3B8"

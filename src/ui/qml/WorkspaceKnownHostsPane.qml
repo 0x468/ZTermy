@@ -35,7 +35,7 @@ Rectangle {
         return result;
     }
 
-    color: Theme.workspaceBackground
+    color: Theme.contentBackground
 
     Timer {
         interval: 100

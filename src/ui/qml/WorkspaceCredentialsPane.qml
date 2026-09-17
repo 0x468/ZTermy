@@ -40,7 +40,7 @@ Rectangle {
         Qt.callLater(labelField.forceActiveFocus);
     }
 
-    color: Theme.workspaceBackground
+    color: Theme.contentBackground
 
     ColumnLayout {
         anchors.fill: parent

@@ -109,7 +109,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: fingerprintLayout.implicitHeight + 24
                 radius: Theme.radiusControl
-                color: Theme.workspaceBackground
+                color: Theme.contentBackground
                 border.color: overlay.borderColor
 
                 ColumnLayout {

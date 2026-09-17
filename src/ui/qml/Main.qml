@@ -46,6 +46,7 @@ Rectangle {
     property string previewThemePreference: "dark"
     property string previewBackdropPreference: "acrylic"
     property real previewBackdropOpacity: 1.0
+    property string previewEffectsTier: "full"
     property string previewAccentPreference: "ztermy"
     property color previewCustomAccent: "#22C55E"
     property double sessionClock: Date.now()
@@ -415,19 +416,19 @@ Rectangle {
     }
 
     function applyWindowAppearance() {
-        root.windowChrome.applyAppearance(Theme.backdropPreference, Theme.dark);
+        root.windowChrome.applyAppearance(Theme.effectiveBackdrop, Theme.dark);
         terminalWindows.applyAppearance();
     }
 
-    function previewWindowAppearance(theme, opacity, backdrop, accent, customAccent) {
+    function previewWindowAppearance(theme, opacity, backdrop, accent, customAccent, effects) {
         previewThemePreference = theme;
         previewBackdropPreference = root.windowChrome.opaqueSurface ? "solid" : backdrop;
         previewBackdropOpacity = opacity;
         previewAccentPreference = accent;
         previewCustomAccent = customAccent;
+        previewEffectsTier = effects;
         appearancePreviewActive = true;
-        const previewDark = theme === "dark" || (theme === "system" && root.windowChrome.systemDarkMode);
-        root.windowChrome.applyAppearance(previewBackdropPreference, previewDark);
+        Qt.callLater(() => root.windowChrome.applyAppearance(Theme.effectiveBackdrop, Theme.dark));
     }
 
     function endWindowAppearancePreview() {
@@ -713,6 +714,12 @@ Rectangle {
 
     Binding {
         target: Theme
+        property: "effectsTier"
+        value: root.appearancePreviewActive ? root.previewEffectsTier : root.controller.effectsTier
+    }
+
+    Binding {
+        target: Theme
         property: "accentPreference"
         value: root.appearancePreviewActive ? root.previewAccentPreference : root.controller.accentPreference
     }
@@ -901,7 +908,7 @@ Rectangle {
 
         function onSystemDarkModeChanged() {
             if (root.appearancePreviewActive) {
-                Qt.callLater(() => root.previewWindowAppearance(root.previewThemePreference, root.previewBackdropOpacity, root.previewBackdropPreference, root.previewAccentPreference, root.previewCustomAccent));
+                Qt.callLater(() => root.previewWindowAppearance(root.previewThemePreference, root.previewBackdropOpacity, root.previewBackdropPreference, root.previewAccentPreference, root.previewCustomAccent, root.previewEffectsTier));
             } else {
                 Qt.callLater(root.applyWindowAppearance);
             }
@@ -2570,7 +2577,7 @@ Rectangle {
                 opacity: root.pageReveal
                 controller: root.controller
                 showPortForwarding: false
-                backgroundColor: Theme.workspaceBackground
+                backgroundColor: Theme.contentBackground
                 raisedColor: root.raisedColor
                 borderColor: root.borderColor
                 textColor: root.textColor
@@ -2668,8 +2675,8 @@ Rectangle {
                 fontCatalog: root.fontCatalog
                 windowChrome: root.windowChrome
                 onAppearancePreviewEnded: root.endWindowAppearancePreview()
-                onAppearancePreviewRequested: (theme, opacity, backdrop, accent, customAccent) => {
-                    root.previewWindowAppearance(theme, opacity, backdrop, accent, customAccent);
+                onAppearancePreviewRequested: (theme, opacity, backdrop, accent, customAccent, effects) => {
+                    root.previewWindowAppearance(theme, opacity, backdrop, accent, customAccent, effects);
                 }
 
                 transform: Translate {

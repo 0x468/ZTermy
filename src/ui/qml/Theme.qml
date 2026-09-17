@@ -13,55 +13,60 @@ QtObject {
     property color highContrastHighlightText: "#000000"
     property string backdropPreference: "acrylic"
     property real backdropOpacity: 1.0
+    // ADR 0120: one switch for material, shadows and motion. "full" keeps the
+    // native material, shadows and complete motion; "reduced" drops shadows
+    // and shortens motion; "off" paints solid surfaces without motion.
+    property string effectsTier: "full"
     property string accentPreference: "ztermy"
     property color systemAccent: "#0078D4"
     property color customAccent: "#22C55E"
     readonly property bool dark: highContrast ? relativeLuminance(highContrastBackground) < 0.5 : preference === "dark" || (preference === "system" && systemDark)
-    readonly property bool micaBackdrop: backdropPreference === "mica"
-    readonly property bool micaAltBackdrop: backdropPreference === "micaAlt"
-    readonly property bool acrylicBackdrop: backdropPreference === "acrylic"
-    readonly property bool transparentBackdrop: backdropPreference === "transparent"
-    readonly property bool solidBackdrop: backdropPreference === "solid"
-    readonly property bool backdropActive: !highContrast && (micaBackdrop || micaAltBackdrop || acrylicBackdrop || transparentBackdrop)
+    readonly property bool fullEffects: effectsTier === "full"
+    readonly property bool reducedEffects: effectsTier === "reduced"
+    readonly property bool materialEnabled: fullEffects && !highContrast
+    readonly property bool shadowsEnabled: fullEffects && !highContrast
+    readonly property bool motionEnabled: animationsEnabled && effectsTier !== "off"
+    // The material the native window should actually apply once the effects
+    // tier and high-contrast mode are taken into account.
+    readonly property string effectiveBackdrop: materialEnabled ? backdropPreference : "solid"
+    readonly property bool micaBackdrop: effectiveBackdrop === "mica"
+    readonly property bool micaAltBackdrop: effectiveBackdrop === "micaAlt"
+    readonly property bool acrylicBackdrop: effectiveBackdrop === "acrylic"
+    readonly property bool transparentBackdrop: effectiveBackdrop === "transparent"
+    readonly property bool solidBackdrop: effectiveBackdrop === "solid"
+    readonly property bool backdropActive: micaBackdrop || micaAltBackdrop || acrylicBackdrop || transparentBackdrop
     readonly property bool adjustableBackdrop: acrylicBackdrop || transparentBackdrop
     readonly property real normalizedBackdropOpacity: Math.max(0.0, Math.min(1.0, backdropOpacity))
 
-    readonly property color windowBackground: highContrast ? highContrastBackground : backdropActive ? "transparent" : (dark ? "#FF0B0F14" : "#FFF8FAFC")
-    readonly property color panelBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#111824" : "#F1F5F9", panelAlpha)
-    readonly property color chromeBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#0F1722" : "#E2E8F0", chromeAlpha)
-    readonly property color contentBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#0A0E14" : "#FFFFFF", contentAlpha)
-    readonly property color workspaceBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#0B1017" : "#FFFFFF", workspaceAlpha)
-    readonly property real panelAlpha: adjustableBackdrop ? normalizedBackdropOpacity : micaBackdrop ? 0.82 : micaAltBackdrop ? 0.88 : 1.0
+    // ADR 0120: the material only shows through the chrome (title bar, tab
+    // strip) and the terminal workspace. Every other surface is opaque and
+    // expresses depth through elevation, never through stacked alpha.
     readonly property real chromeAlpha: adjustableBackdrop ? normalizedBackdropOpacity : micaBackdrop ? 0.60 : micaAltBackdrop ? 0.72 : 1.0
-    readonly property real contentAlpha: adjustableBackdrop ? normalizedBackdropOpacity : micaBackdrop ? 0.82 : micaAltBackdrop ? 0.88 : 1.0
     readonly property real workspaceAlpha: adjustableBackdrop ? normalizedBackdropOpacity : micaBackdrop ? 0.88 : micaAltBackdrop ? 0.92 : 1.0
 
-    // The native window supplies one material layer. QML surfaces add tint and
-    // hierarchy without creating independent blur regions. Adjustable
-    // backdrops reach true opaque at 100%, while cards and controls retain a
-    // readable tint at 0%.
-    readonly property real elevatedAlpha: adjustableBackdrop ? mixAlpha(dark ? 0.64 : 0.84, normalizedBackdropOpacity) : micaBackdrop ? 0.82 : micaAltBackdrop ? 0.88 : 1.0
-    readonly property real raisedAlpha: adjustableBackdrop ? mixAlpha(dark ? 0.70 : 0.88, normalizedBackdropOpacity) : micaBackdrop ? 0.86 : micaAltBackdrop ? 0.91 : 1.0
-    readonly property real controlAlpha: adjustableBackdrop ? mixAlpha(dark ? 0.78 : 0.92, normalizedBackdropOpacity) : micaBackdrop ? 0.90 : micaAltBackdrop ? 0.94 : 1.0
-    readonly property real fieldAlpha: adjustableBackdrop ? mixAlpha(dark ? 0.84 : 0.96, normalizedBackdropOpacity) : micaBackdrop ? 0.94 : micaAltBackdrop ? 0.97 : 1.0
-    readonly property real floatingAlpha: adjustableBackdrop ? mixAlpha(0.94, normalizedBackdropOpacity) : 0.96
-
-    readonly property color raisedBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#1E293B" : "#E2E8F0", raisedAlpha)
-    readonly property color elevatedBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#141E2B" : "#F1F5F9", elevatedAlpha)
-    readonly property color controlBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#172033" : "#E2E8F0", controlAlpha)
-    readonly property color controlDisabled: highContrast ? highContrastBackground : withAlpha(dark ? "#131B29" : "#E8EDF3", controlAlpha)
+    readonly property color windowBackground: highContrast ? highContrastBackground : backdropActive ? "transparent" : (dark ? "#FF0B0F14" : "#FFF8FAFC")
+    readonly property color chromeBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#0F1722" : "#E2E8F0", chromeAlpha)
+    readonly property color workspaceBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#0B1017" : "#FFFFFF", workspaceAlpha)
+    // Opaque skin ladder: content pages sit on contentBackground, navigation
+    // and side panels on panelBackground, cards and popups above them.
+    readonly property color contentBackground: highContrast ? highContrastBackground : dark ? "#0B1017" : "#FFFFFF"
+    readonly property color panelBackground: highContrast ? highContrastBackground : dark ? "#111824" : "#F1F5F9"
+    readonly property color raisedBackground: highContrast ? highContrastBackground : dark ? "#1E293B" : "#E2E8F0"
+    readonly property color elevatedBackground: highContrast ? highContrastBackground : dark ? "#141E2B" : "#F1F5F9"
+    readonly property color controlBackground: highContrast ? highContrastBackground : dark ? "#172033" : "#E2E8F0"
+    readonly property color controlDisabled: highContrast ? highContrastBackground : dark ? "#131B29" : "#E8EDF3"
     // Keep ordinary control labels readable in every Windows high-contrast
     // palette. System highlight colors are reserved for accent controls and
     // text selection, where the matching highlight-text color is also used.
-    readonly property color controlPressed: highContrast ? mixColor(highContrastBackground, highContrastText, 0.32) : withAlpha(dark ? "#263244" : "#CBD5E1", controlAlpha)
-    readonly property color controlHover: highContrast ? mixColor(highContrastBackground, highContrastText, 0.18) : withAlpha(dark ? "#1F2A3A" : "#DCE5EF", controlAlpha)
+    readonly property color controlPressed: highContrast ? mixColor(highContrastBackground, highContrastText, 0.32) : dark ? "#263244" : "#CBD5E1"
+    readonly property color controlHover: highContrast ? mixColor(highContrastBackground, highContrastText, 0.18) : dark ? "#1F2A3A" : "#DCE5EF"
     // Caption buttons sit directly on the chrome surface. The ordinary light
     // control hover is intentionally subtle on cards and fields, but is too
     // close to the light chrome tint to remain visible through a backdrop.
-    readonly property color captionPressed: highContrast ? controlPressed : withAlpha(dark ? "#263244" : "#B8C4D3", controlAlpha)
-    readonly property color captionHover: highContrast ? controlHover : withAlpha(dark ? "#1F2A3A" : "#CBD5E1", controlAlpha)
-    readonly property color fieldBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#111827" : "#FFFFFF", fieldAlpha)
-    readonly property color floatingBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#1E293B" : "#FFFFFF", floatingAlpha)
+    readonly property color captionPressed: highContrast ? controlPressed : dark ? "#263244" : "#B8C4D3"
+    readonly property color captionHover: highContrast ? controlHover : dark ? "#1F2A3A" : "#CBD5E1"
+    readonly property color fieldBackground: highContrast ? highContrastBackground : dark ? "#111827" : "#FFFFFF"
+    readonly property color floatingBackground: highContrast ? highContrastBackground : dark ? "#1E293B" : "#FFFFFF"
 
     readonly property color border: highContrast ? highContrastText : dark ? "#263244" : "#CBD5E1"
     readonly property color borderStrong: highContrast ? highContrastText : dark ? "#334155" : "#94A3B8"
@@ -108,10 +113,12 @@ QtObject {
     readonly property int radiusSmall: 4
     readonly property int radiusControl: 8
     readonly property int radiusPanel: 12
-    readonly property int motionFast: animationsEnabled ? 120 : 0
-    readonly property int motionMedium: animationsEnabled ? 180 : 0
-    readonly property int motionSlow: animationsEnabled ? 220 : 0
-    readonly property int motionDistanceSmall: animationsEnabled ? 8 : 0
+    // Motion follows the effects tier: "reduced" keeps the choreography but
+    // shortens it, "off" (or the Windows animation preference) removes it.
+    readonly property int motionFast: !motionEnabled ? 0 : reducedEffects ? 80 : 120
+    readonly property int motionMedium: !motionEnabled ? 0 : reducedEffects ? 120 : 180
+    readonly property int motionSlow: !motionEnabled ? 0 : reducedEffects ? 150 : 220
+    readonly property int motionDistanceSmall: !motionEnabled ? 0 : reducedEffects ? 4 : 8
 
     function withAlpha(baseColor: color, alpha: real): color {
         return Qt.rgba(baseColor.r, baseColor.g, baseColor.b, Math.max(0.0, Math.min(1.0, alpha)));

@@ -38,7 +38,7 @@ keep `reduced` and `off` tiers for low-end machines and the Windows
 
 | # | Chapter | Deliverable | Status |
 |---|---------|-------------|--------|
-| 1 | Material scope + effects tier | Opaque content pages/popups, material limited to chrome + workspace, `effectsTier` token, ADR 0120 | ☐ |
+| 1 | Material scope + effects tier | Opaque content pages/popups, material limited to chrome + workspace, `effectsTier` token, ADR 0120 | ☑ 2026-09-18 |
 | 2 | Token layers + Elevation | `Theme` split into palette/skin, `AppSurface`/`AppShadow`, hard-coded radii removed | ☐ |
 | 3 | Motion library | `Motion` singleton, shared transitions for page/tab/pane/menu/toast, respects tier and Windows animation preference | ☐ |
 | 4 | Theme library + picker | Built-in themes, JSON custom themes, Windows Terminal/Ghostty import, picker dialog with hover preview, ADR 0121 | ☐ |
@@ -58,3 +58,13 @@ runtime smokes passing; a before/after screenshot pair per chapter goes under
 ## Progress log
 
 - 2026-09-18: branch created, plan and ADR 0120 written.
+- 2026-09-18: Chapter 1 landed. `effectsTier` persisted (settings schema 34,
+  `AppController.effectsTier`/`saveEffectsTier`), `Theme.effectsTier` gates
+  material (`effectiveBackdrop`), shadows and motion; the per-surface alpha
+  ladder is gone and only `chromeBackground`/`workspaceBackground` keep the
+  material tint. Settings gains a "Visual effects" row; the backdrop combo is
+  disabled outside `full`. Evidence: ctest `application-settings`,
+  `app-controller`, `workspace-state-store`; `--ui-layout-smoke` and
+  `--pane-scrollbar-smoke` exit 0; code health gate PASS; captures in
+  `docs/design/ui-v2/ch1/` (the "before" state is reproducible from `main`
+  at 713ee66 with `--ui-layout-smoke`).

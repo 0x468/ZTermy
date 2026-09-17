@@ -10,7 +10,7 @@ Rectangle {
     required property var controller
     property bool editing: false
 
-    color: Theme.workspaceBackground
+    color: Theme.contentBackground
 
     function beginNew() {
         editing = true;

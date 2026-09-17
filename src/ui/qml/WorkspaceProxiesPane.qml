@@ -19,7 +19,7 @@ Rectangle {
         return result;
     }
 
-    color: Theme.workspaceBackground
+    color: Theme.contentBackground
 
     ColumnLayout {
         anchors.fill: parent

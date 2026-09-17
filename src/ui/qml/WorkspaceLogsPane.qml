@@ -17,7 +17,7 @@ Rectangle {
     signal openTerminalRequested(string tabId)
     signal toggleActiveLogRequested
 
-    color: Theme.workspaceBackground
+    color: Theme.contentBackground
 
     onVisibleChanged: {
         if (!visible)
