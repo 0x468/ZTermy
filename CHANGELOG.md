@@ -73,6 +73,13 @@ The project has not published a release.
   with the labels and visibility bound inside the delegate. The "new pane"
   menu only instantiates its host and shell entries on first open instead of
   once per pane.
+- Release evidence after the whole pass (five serial runs, medians, same
+  20k-line PowerShell burst): completion 1575 → 1471 ms, paint P50/P95
+  buckets 4 ms → 2 ms, uploaded texture bytes 408.5 → 366.5 MB, heartbeat
+  gap unchanged at 18 ms; engine-side snapshot builds equal deliveries
+  (about 120–210 per run, 18k reads coalesced). Deferred pending new
+  evidence: damage-aware partial repaint and grapheme compaction in
+  `TerminalCell` (see `docs/PERFORMANCE_PROGRAM.md`).
 
 ### 0.4.6 local validation build — 2026-09-15
 
