@@ -46,12 +46,10 @@ ToolTip {
         lineHeight: 1.2
     }
 
-    background: Rectangle {
+    background: AppSurface {
         implicitWidth: 32
         implicitHeight: 28
-        radius: Theme.radiusControl
-        color: Theme.floatingBackground
-        border.color: Theme.borderStrong
-        border.width: 1
+        elevation: 2
+        compact: true
     }
 }

@@ -53,7 +53,7 @@ Control {
         color: "transparent"
         border.color: Theme.focus
         border.width: 1
-        radius: 3
+        radius: Theme.radiusSmall
     }
 
     Canvas {

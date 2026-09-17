@@ -31,11 +31,8 @@ Popup {
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
 
-    background: Rectangle {
-        radius: Theme.radiusPanel
-        color: Theme.floatingBackground
-        border.color: Theme.borderStrong
-        border.width: 1
+    background: AppSurface {
+        elevation: 2
     }
 
     contentItem: ColumnLayout {
@@ -47,7 +44,7 @@ Popup {
             Rectangle {
                 Layout.preferredWidth: 8
                 Layout.preferredHeight: 8
-                radius: 4
+                radius: height / 2
                 color: Theme.danger
             }
             Text {
@@ -160,10 +157,8 @@ Popup {
         focus: true
         closePolicy: Popup.CloseOnEscape
         padding: 18
-        background: Rectangle {
-            radius: Theme.radiusPanel
-            color: Theme.floatingBackground
-            border.color: Theme.borderStrong
+        background: AppSurface {
+            elevation: 3
         }
         contentItem: ColumnLayout {
             spacing: 12

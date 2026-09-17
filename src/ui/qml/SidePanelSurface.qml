@@ -1,11 +1,11 @@
 import QtQuick
 
-Rectangle {
+AppSurface {
     required property string panelTitle
-    property bool floating: false
+    property bool raised: false
 
-    color: floating ? Theme.floatingBackground : Theme.panelBackground
-    border.color: Theme.border
+    elevation: raised ? 2 : 0
+    radius: 0
     Accessible.role: Accessible.Pane
     Accessible.name: panelTitle
 }

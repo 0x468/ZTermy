@@ -173,6 +173,8 @@ if(ZTERMY_INSTALLER_FLAVOR STREQUAL "dynamic")
             "Qt6Gui.dll"
             "Qt6Qml.dll"
             "Qt6Quick.dll"
+            "Qt6QuickEffects.dll"
+            "effectsplugin.dll"
             "libcrypto-3-x64.dll"
             "qwindows.dll")
         string(TOLOWER "${required_payload_name}" required_payload_name_lower)
@@ -191,7 +193,7 @@ if(ZTERMY_INSTALLER_FLAVOR STREQUAL "dynamic")
         cmake_path(GET extracted_file FILENAME extracted_name)
         string(TOLOWER "${extracted_name}" extracted_name_lower)
         if(extracted_name_lower MATCHES
-           "^qt6(core|gui|network|qml|quick|svg)d\\.dll$")
+           "^qt6(core|gui|network|qml|quick|quickeffects|svg)d\\.dll$")
             message(FATAL_ERROR
                 "Dynamic MSI contains a Debug Qt library: ${extracted_file}"
             )

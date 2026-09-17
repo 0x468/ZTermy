@@ -271,7 +271,7 @@ Item {
                         onClicked: strip.controller.refreshRemoteTelemetry()
                         Accessible.name: qsTr("Refresh remote telemetry")
                         background: Rectangle {
-                            radius: 13
+                            radius: height / 2
                             color: refreshTelemetryButton.hovered ? Theme.controlHover : "transparent"
                         }
                         contentItem: AppIcon {
@@ -340,7 +340,7 @@ Item {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 7
-                        radius: 3.5
+                        radius: height / 2
                         color: Theme.controlBackground
                         Rectangle {
                             width: parent.width * Math.max(0, Math.min(1, Number(strip.telemetry.memoryUsedKiB || 0) / Math.max(1, Number(strip.telemetry.memoryTotalKiB || 1))))

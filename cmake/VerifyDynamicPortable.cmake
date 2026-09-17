@@ -36,6 +36,8 @@ foreach(required_path
         "Qt6Gui.dll"
         "Qt6Qml.dll"
         "Qt6Quick.dll"
+        "Qt6QuickEffects.dll"
+        "qml/QtQuick/Effects/effectsplugin.dll"
         "libcrypto-3-x64.dll"
         "plugins/platforms/qwindows.dll")
     if(NOT EXISTS "${package_root}/${required_path}")
@@ -54,7 +56,7 @@ foreach(packaged_file IN LISTS packaged_files)
     string(TOLOWER "${packaged_name}" packaged_name_lower)
     if(packaged_name_lower MATCHES "\\.pdb$"
        OR packaged_name_lower MATCHES
-          "^qt6(core|gui|network|qml|quick|svg)d\\.dll$")
+          "^qt6(core|gui|network|qml|quick|quickeffects|svg)d\\.dll$")
         message(FATAL_ERROR
             "Dynamic portable archive contains a development artifact: "
             "${packaged_file}"

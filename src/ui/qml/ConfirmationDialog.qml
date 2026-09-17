@@ -63,9 +63,8 @@ Dialog {
         color: Theme.modalScrim
     }
 
-    background: Rectangle {
-        radius: Theme.radiusPanel
-        color: Theme.elevatedBackground
+    background: AppSurface {
+        elevation: 3
         border.color: control.destructive ? Theme.dangerBorder : Theme.borderStrong
 
         transform: Translate {

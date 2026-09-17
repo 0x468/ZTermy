@@ -37,7 +37,7 @@ Row {
             anchors.topMargin: 7
             width: 6
             height: 6
-            radius: 3
+            radius: height / 2
             color: Theme.danger
             border.color: Theme.chromeBackground
             border.width: 1
@@ -204,7 +204,7 @@ Row {
             visible: controls.hostRoot.controller.activeTransferCount > 0
             width: Math.max(12, transferCountText.implicitWidth + 4)
             height: 12
-            radius: 6
+            radius: height / 2
             color: Theme.accent
 
             Text {

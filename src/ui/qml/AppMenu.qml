@@ -45,12 +45,10 @@ Menu {
         ScrollIndicator.vertical: ScrollIndicator {}
     }
 
-    background: Rectangle {
+    background: AppSurface {
         implicitWidth: 196
         implicitHeight: 36
-        radius: Theme.radiusControl
-        color: Theme.floatingBackground
-        border.color: Theme.borderStrong
-        border.width: 1
+        elevation: 2
+        compact: true
     }
 }

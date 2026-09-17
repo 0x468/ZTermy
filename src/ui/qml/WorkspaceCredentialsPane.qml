@@ -64,7 +64,7 @@ Rectangle {
                 Rectangle {
                     implicitWidth: countLabel.implicitWidth + 14
                     implicitHeight: 24
-                    radius: 12
+                    radius: height / 2
                     color: Theme.selectedBackground
                     Text {
                         id: countLabel

@@ -1524,10 +1524,8 @@ Rectangle {
             color: Theme.modalScrim
         }
 
-        background: Rectangle {
-            radius: Theme.radiusPanel
-            color: Theme.elevatedBackground
-            border.color: Theme.borderStrong
+        background: AppSurface {
+            elevation: 3
         }
 
         contentItem: ColumnLayout {
@@ -1630,7 +1628,7 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.bottomMargin: 8
                     Layout.preferredHeight: 38
-                    radius: 7
+                    radius: Theme.radiusControl
                     color: workspaceNavigationHeaderAction.hovered ? Theme.raisedBackground : "transparent"
                     border.color: workspaceNavigationHeaderAction.visualFocus ? Theme.focus : "transparent"
                     border.width: workspaceNavigationHeaderAction.visualFocus ? 1 : 0
@@ -1839,7 +1837,7 @@ Rectangle {
                                 Layout.alignment: Qt.AlignVCenter
                                 Layout.preferredWidth: 6
                                 Layout.preferredHeight: 6
-                                radius: 3
+                                radius: height / 2
                                 color: root.activeTerminalTab && root.activeTerminalTab.running ? root.accentColor : Theme.textSubtle
                             }
 
@@ -2060,7 +2058,7 @@ Rectangle {
                                         anchors.verticalCenter: parent.verticalCenter
                                         width: 7
                                         height: 7
-                                        radius: 4
+                                        radius: height / 2
                                         color: Theme.danger
                                     }
                                     Text {
@@ -2326,7 +2324,7 @@ Rectangle {
                             terminalTab: root.activeTerminalTab
                         }
 
-                        Rectangle {
+                        AppSurface {
                             id: searchPanel
 
                             anchors.top: parent.top
@@ -2335,9 +2333,8 @@ Rectangle {
                             anchors.rightMargin: (root.activeTerminalWorkbenchSide === "right" ? root.activeTerminalWorkbenchWidth : 0) + 12
                             width: 420
                             height: 42
-                            radius: 8
-                            color: Theme.floatingBackground
-                            border.color: root.borderColor
+                            elevation: 2
+                            compact: true
                             visible: root.terminalSearchVisible
                             z: 10
 
@@ -2713,10 +2710,8 @@ Rectangle {
             color: Theme.modalScrim
         }
 
-        background: Rectangle {
-            radius: Theme.radiusPanel
-            color: Theme.floatingBackground
-            border.color: Theme.borderStrong
+        background: AppSurface {
+            elevation: 3
         }
 
         contentItem: ColumnLayout {
@@ -2915,15 +2910,15 @@ Rectangle {
         onActivated: paneDragCapture.cancelDrag()
     }
 
-    Rectangle {
+    AppSurface {
         z: 91
         visible: paneDragCapture.dragging
         x: paneDragCapture.pointerPoint.x + 16
         y: paneDragCapture.pointerPoint.y + 18
         width: 220
         height: 32
-        radius: 5
-        color: Theme.elevatedBackground
+        elevation: 2
+        compact: true
         border.color: Theme.accent
         Text {
             anchors.fill: parent
@@ -2945,7 +2940,7 @@ Rectangle {
         color: terminalWindows.dropTarget.mode === "insert" ? Theme.accent : Theme.withAlpha(Theme.accent, 0.18)
         border.color: Theme.accent
         border.width: 2
-        radius: 2
+        radius: Theme.radiusSmall
     }
 
     HostKeyPrompt {

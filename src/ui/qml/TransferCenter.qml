@@ -124,10 +124,8 @@ Popup {
         return "file:///" + encodeURI(path.replace(/\\/g, "/"));
     }
 
-    background: Rectangle {
-        radius: Theme.radiusPanel
-        color: Theme.floatingBackground
-        border.color: Theme.borderStrong
+    background: AppSurface {
+        elevation: 2
     }
 
     contentItem: ColumnLayout {

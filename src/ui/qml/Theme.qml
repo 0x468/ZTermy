@@ -110,9 +110,22 @@ QtObject {
     readonly property int textLabel: 11
     readonly property int textCompact: 9
 
+    // Radius scale: small for chips and focus rings, compact for tab/pane
+    // affordances, control for buttons/fields/menus, panel for cards and
+    // dialogs. Dots and pills use height / 2 rather than a token.
     readonly property int radiusSmall: 4
+    readonly property int radiusCompact: 6
     readonly property int radiusControl: 8
     readonly property int radiusPanel: 12
+    // Elevation shadows (AppSurface). Light skins need far less weight
+    // than dark ones to read as depth rather than dirt.
+    readonly property color shadowColor: dark ? "#000000" : "#0F172A"
+    readonly property real shadowOpacityFloating: dark ? 0.55 : 0.16
+    readonly property real shadowOpacityDialog: dark ? 0.65 : 0.24
+    readonly property real shadowBlurFloating: 0.5
+    readonly property real shadowBlurDialog: 1.0
+    readonly property int shadowOffsetFloating: 3
+    readonly property int shadowOffsetDialog: 10
     // Motion follows the effects tier: "reduced" keeps the choreography but
     // shortens it, "off" (or the Windows animation preference) removes it.
     readonly property int motionFast: !motionEnabled ? 0 : reducedEffects ? 80 : 120

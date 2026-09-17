@@ -57,7 +57,7 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         width: 6
         height: 6
-        radius: 3
+        radius: height / 2
         visible: control.iconName.length === 0
         color: control.running || control.connecting ? Theme.accent : Theme.textSubtle
 
@@ -132,13 +132,13 @@ Rectangle {
         y: pointerPosition.y
         width: 1
         height: 1
-        Rectangle {
+        AppSurface {
             x: 16
             y: 18
             width: 220
             height: 32
-            radius: 5
-            color: Theme.elevatedBackground
+            elevation: 2
+            compact: true
             border.color: Theme.accent
             visible: reorderDrag.active && !control.dropCompleted
             Text {
@@ -248,7 +248,7 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         width: control.closeButtonMode === "hidden" ? 0 : 24
         height: 24
-        radius: 5
+        radius: Theme.radiusCompact
         property real feedbackAmount: closeAction.hovered || closeAction.visualFocus ? 1 : 0
         color: closeAction.pressed ? Theme.captionPressed : Theme.withAlpha(Theme.borderStrong, Theme.borderStrong.a * feedbackAmount)
         visible: !control.compact && control.closeButtonMode !== "hidden"

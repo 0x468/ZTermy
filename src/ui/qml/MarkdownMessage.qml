@@ -293,7 +293,7 @@ Item {
                     Rectangle {
                         Layout.preferredHeight: 18
                         Layout.preferredWidth: languagePill.implicitWidth + 14
-                        radius: 4
+                        radius: Theme.radiusSmall
                         color: Theme.controlPressed
 
                         Text {

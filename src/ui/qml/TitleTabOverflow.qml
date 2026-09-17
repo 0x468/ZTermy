@@ -68,7 +68,7 @@ Rectangle {
                     Rectangle {
                         Layout.preferredWidth: 7
                         Layout.preferredHeight: 7
-                        radius: 4
+                        radius: height / 2
                         color: entry.modelData.connecting ? Theme.warning : entry.modelData.running ? Theme.accent : Theme.textSubtle
                     }
                     ColumnLayout {
@@ -94,7 +94,7 @@ Rectangle {
                         focusPolicy: Qt.TabFocus
                         hoverEnabled: true
                         background: Rectangle {
-                            radius: 5
+                            radius: Theme.radiusCompact
                             color: close.down ? Theme.controlPressed : close.hovered || close.visualFocus ? Theme.borderStrong : "transparent"
                             border.color: close.visualFocus ? Theme.focus : "transparent"
                             border.width: close.visualFocus ? 1 : 0

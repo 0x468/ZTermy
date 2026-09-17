@@ -3,7 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 
-Rectangle {
+AppSurface {
     id: control
 
     default property alias actionData: actionRow.data
@@ -24,8 +24,6 @@ Rectangle {
     readonly property int normalizedActiveStep: stepCount > 0 ? Math.max(0, Math.min(activeStep, stepCount - 1)) : -1
 
     implicitHeight: stateLayout.implicitHeight + 36
-    radius: Theme.radiusPanel
-    color: Theme.elevatedBackground
     border.color: error ? Theme.dangerBorder : loading ? Theme.accent : Theme.border
     Accessible.role: error ? Accessible.AlertMessage : Accessible.StaticText
     Accessible.name: heading + (description.length > 0 ? ". " + description : "")

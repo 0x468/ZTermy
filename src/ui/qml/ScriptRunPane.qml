@@ -184,7 +184,7 @@ Item {
                 Rectangle {
                     Layout.preferredWidth: 8
                     Layout.preferredHeight: 8
-                    radius: 4
+                    radius: height / 2
                     color: root.targetTab && root.targetTab.scriptExecutionState === "timed-out" ? Theme.danger : root.executionActive ? Theme.accent : Theme.successText
                 }
 

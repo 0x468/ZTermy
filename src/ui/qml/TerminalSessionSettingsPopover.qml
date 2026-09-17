@@ -40,11 +40,8 @@ Popup {
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
 
-    background: Rectangle {
-        radius: Theme.radiusPanel
-        color: Theme.floatingBackground
-        border.color: Theme.borderStrong
-        border.width: 1
+    background: AppSurface {
+        elevation: 2
     }
 
     contentItem: ColumnLayout {

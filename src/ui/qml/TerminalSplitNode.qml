@@ -569,13 +569,13 @@ Item {
                     height: 1
                     Drag.source: paneHeader
                     Drag.keys: ["ztermy-terminal-pane"]
-                    Rectangle {
+                    AppSurface {
                         x: 16
                         y: 18
                         width: 220
                         height: 32
-                        radius: 5
-                        color: Theme.elevatedBackground
+                        elevation: 2
+                        compact: true
                         border.color: Theme.accent
                         visible: paneDetachDrag.active && !paneHeader.dropCompleted && !root.detachedPane
                         Text {

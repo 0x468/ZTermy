@@ -139,7 +139,7 @@ Popup {
 
     background: SidePanelSurface {
         panelTitle: drawer.panelTitle
-        floating: true
+        raised: true
     }
     contentItem: ColumnLayout {
         spacing: 12

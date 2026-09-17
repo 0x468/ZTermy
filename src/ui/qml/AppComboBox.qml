@@ -149,10 +149,9 @@ ComboBox {
             ScrollIndicator.vertical: ScrollIndicator {}
         }
 
-        background: Rectangle {
-            radius: Theme.radiusControl
-            color: Theme.floatingBackground
-            border.color: Theme.borderStrong
+        background: AppSurface {
+            elevation: 2
+            compact: true
 
             transform: Translate {
                 y: control.popup.visible ? 0 : -Theme.motionDistanceSmall

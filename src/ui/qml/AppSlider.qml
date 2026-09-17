@@ -17,7 +17,7 @@ Slider {
         y: (control.height - height) / 2
         width: control.availableWidth
         height: 4
-        radius: 2
+        radius: height / 2
         color: Theme.controlBackground
 
         Rectangle {

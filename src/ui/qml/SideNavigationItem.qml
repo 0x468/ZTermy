@@ -14,7 +14,7 @@ Rectangle {
     signal activated
 
     implicitHeight: 34
-    radius: 7
+    radius: Theme.radiusControl
     color: control.selected || action.hovered ? Theme.raisedBackground : "transparent"
     border.color: action.visualFocus ? Theme.focus : "transparent"
     border.width: action.visualFocus ? 1 : 0
@@ -24,7 +24,7 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         width: 3
         height: 18
-        radius: 2
+        radius: width / 2
         color: control.selected ? Theme.accent : "transparent"
     }
 

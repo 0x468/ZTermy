@@ -56,7 +56,7 @@ ToolButton {
             anchors.bottom: parent.bottom
             width: control.selected ? 12 : 0
             height: 2
-            radius: 1
+            radius: height / 2
             color: Theme.accent
             Behavior on width {
                 NumberAnimation {

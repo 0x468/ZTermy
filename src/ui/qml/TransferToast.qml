@@ -47,18 +47,15 @@ Popup {
         }
     }
 
-    background: Rectangle {
-        radius: Theme.radiusPanel
-        color: Theme.floatingBackground
-        border.color: Theme.borderStrong
-        border.width: 1
+    background: AppSurface {
+        elevation: 2
 
         Rectangle {
             anchors.left: parent.left
             anchors.top: parent.top
             anchors.bottom: parent.bottom
             width: 3
-            radius: 1.5
+            radius: width / 2
             color: root.statusColor
         }
     }

@@ -3,18 +3,15 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 
-Rectangle {
+AppSurface {
     id: control
 
     default property alias contentData: contentLayout.data
     property string heading: ""
     property string description: ""
-    property bool compact: false
 
     implicitHeight: cardLayout.implicitHeight + (compact ? 20 : 36)
-    radius: compact ? Theme.radiusControl : Theme.radiusPanel
-    color: compact ? Theme.panelBackground : Theme.elevatedBackground
-    border.color: Theme.border
+    elevation: compact ? 0 : 1
     Accessible.name: heading
 
     ColumnLayout {

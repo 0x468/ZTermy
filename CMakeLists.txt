@@ -1194,6 +1194,10 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS SectionCard.qml
 )
 set_source_files_properties(
+    src/ui/qml/AppSurface.qml
+    PROPERTIES QT_RESOURCE_ALIAS AppSurface.qml
+)
+set_source_files_properties(
     src/ui/qml/SideNavigationItem.qml
     PROPERTIES QT_RESOURCE_ALIAS SideNavigationItem.qml
 )
@@ -1315,6 +1319,7 @@ qt_add_qml_module(ztermy
     VERSION 1.0
     DEPENDENCIES
         QtQuick
+        QtQuick.Effects
     QML_FILES
         src/ui/qml/ActionButton.qml
         src/ui/qml/AiAssistantPane.qml
@@ -1353,6 +1358,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/RemoteTelemetryStrip.qml
         src/ui/qml/ScriptEditor.qml
         src/ui/qml/ScriptRunPane.qml
+        src/ui/qml/AppSurface.qml
         src/ui/qml/SectionCard.qml
         src/ui/qml/SettingsPane.qml
         src/ui/qml/SftpBrowser.qml

@@ -125,7 +125,7 @@ Item {
         }
     }
 
-    Rectangle {
+    AppSurface {
         id: panel
 
         anchors.horizontalCenter: parent.horizontalCenter
@@ -133,11 +133,8 @@ Item {
         anchors.topMargin: Math.max(54, Math.min(104, palette.height * 0.12))
         width: Math.min(720, Math.max(360, palette.width - 32))
         height: Math.min(520, Math.max(176, actionList.contentHeight + 62))
-        radius: Theme.radiusPanel
-        color: Theme.elevatedBackground
-        border.color: Theme.borderStrong
+        elevation: 3
         scale: 0.985 + (palette.reveal * 0.015)
-        clip: true
 
         TapHandler {
             onTapped: eventPoint => eventPoint.accepted = true

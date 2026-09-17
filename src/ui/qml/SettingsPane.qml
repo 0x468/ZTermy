@@ -99,7 +99,7 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             width: 3
             height: 18
-            radius: 2
+            radius: width / 2
             visible: categoryControl.selected
             color: Theme.accent
         }
@@ -1282,7 +1282,7 @@ Rectangle {
                                     Layout.alignment: Qt.AlignVCenter
                                     Layout.preferredWidth: 8
                                     Layout.preferredHeight: 8
-                                    radius: 4
+                                    radius: height / 2
                                     color: Theme.accent
                                 }
                                 Text {
@@ -2699,7 +2699,7 @@ Rectangle {
                                     Rectangle {
                                         Layout.preferredWidth: 8
                                         Layout.preferredHeight: 8
-                                        radius: 4
+                                        radius: height / 2
                                         color: aiRuleRow.modelData.decision === "allow" ? Theme.success : aiRuleRow.modelData.decision === "deny" ? Theme.danger : Theme.warning
                                     }
 
@@ -2831,7 +2831,7 @@ Rectangle {
                                 Rectangle {
                                     Layout.preferredWidth: 8
                                     Layout.preferredHeight: 8
-                                    radius: 4
+                                    radius: height / 2
                                     color: mcpServerRow.modelData.state === "ready" ? Theme.success : mcpServerRow.modelData.state === "error" ? Theme.danger : Theme.textMuted
                                 }
 
