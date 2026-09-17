@@ -40,7 +40,7 @@ keep `reduced` and `off` tiers for low-end machines and the Windows
 |---|---------|-------------|--------|
 | 1 | Material scope + effects tier | Opaque content pages/popups, material limited to chrome + workspace, `effectsTier` token, ADR 0120 | ☑ 2026-09-18 |
 | 2 | Elevation library | `AppSurface` elevation 0–3 with built-in shadow, radius tokens, hard-coded radii removed | ☑ 2026-09-18 |
-| 3 | Motion library | `Motion` singleton, shared transitions for page/tab/pane/menu/toast, respects tier and Windows animation preference | ☐ |
+| 3 | Motion library | `Motion` singleton, shared transitions for page/tab/pane/menu/toast, respects tier and Windows animation preference | ☑ 2026-09-18 |
 | 4 | Theme library + picker | `Theme` split into palette/skin, built-in themes, JSON custom themes, Windows Terminal/Ghostty import, picker dialog with hover preview, ADR 0121 | ☐ |
 | 5 | Settings reorganisation | Grouped navigation, search, per-row reset, appearance page rebuilt around the theme strip | ☐ |
 | 6 | Chrome polish | Tab strip, caption buttons, pane headers, drag previews on the new library | ☐ |
@@ -82,3 +82,13 @@ runtime smokes passing; a before/after screenshot pair per chapter goes under
   `ztermy_qml_format_check`, `ztermy_qmllint`, `ztermy_dynamic_deploy`;
   `--ui-layout-smoke` and `--pane-scrollbar-smoke` exit 0; code health gate
   PASS; captures in `docs/design/ui-v2/ch2/`.
+- 2026-09-18: Chapter 3 landed. `Motion` singleton exposes roles (feedback,
+  enter, exit, relocate, page, emphasis) with durations, easings, travel
+  distance and reveal scale, all scaled by the effects tier and zeroed by
+  `off`/Windows animation preference. `MotionColor`, `MotionFeedback`,
+  `MotionRelocate`, `MotionEnter`, `MotionExit` and `MotionReveal` replace
+  every ad-hoc `NumberAnimation`/`ColorAnimation`/`Transition`; the old
+  `Theme.motion*` tokens and the per-site `animationsEnabled ? x : 0` guards
+  are gone. Evidence: `ztermy_qml_format_check`, `ztermy_qmllint`;
+  `--ui-layout-smoke` and `--pane-scrollbar-smoke` exit 0; code health gate
+  PASS.

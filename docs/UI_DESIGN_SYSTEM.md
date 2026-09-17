@@ -214,20 +214,30 @@ and all dialogs require a keyboard-only acceptance pass.
 
 ## Motion
 
-- Ordinary hover and color feedback uses at most 120 ms.
-- Compact content entry uses 180 ms; work-tab and coordinated theme
-  transitions use at most 220 ms.
-- Entry transitions may combine opacity with at most 8 px of spatial movement.
+Motion is expressed by role through the `Motion` singleton; QML never writes
+a numeric duration or picks an easing curve on its own.
+
+| Role | Use | Full | Reduced |
+|------|-----|------|---------|
+| `feedback` | hover/press colour, opacity, indicator moves | 120 ms | 72 ms |
+| `enter` | popups, menus, tool tips, toasts, dialogs appearing | 200 ms | 120 ms |
+| `exit` | the same surfaces leaving | 120 ms | 72 ms |
+| `relocate` | widths, margins, drawer slides, tab reordering | 200 ms | 120 ms |
+| `page` | page and settings-category reveals | 220 ms | 132 ms |
+| `emphasis` | connecting pulses and other continuous cues | 360 ms | 216 ms |
+
+Shared components wrap the roles: `MotionColor`, `MotionFeedback` and
+`MotionRelocate` inside `Behavior`, `MotionEnter`/`MotionExit` as popup
+transitions, `MotionReveal` for 0..1 reveal properties. Entering surfaces fade
+while settling from `Motion.revealScale` (97%) and pages travel
+`Motion.distance` (8 px); reduced motion keeps the fade and drops the travel.
+The `off` tier and the Windows client-area animation preference set every
+duration to 0, so transitions become immediate without per-site guards.
+
 - No scale-on-hover, parallax, scroll hijacking, glow, glitch, or continuous
-  decorative animation.
+  decorative animation outside the `emphasis` role.
 - Terminal rendering and cursor behavior are not driven by decorative QML
   animations.
-- When Windows disables client-area animation, nonessential application
-  transitions must become immediate.
-
-The native window observes the Windows client-area animation preference and
-updates QML motion tokens while the application is running. A separate
-application-only toggle is not a substitute for this system preference.
 
 ## Layout behavior
 
