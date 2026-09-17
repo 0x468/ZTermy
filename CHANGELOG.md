@@ -32,6 +32,14 @@ The project has not published a release.
   `scrollbarChanged` is only emitted when the scrollbar geometry moves. Same
   20k-line burst: paint P50/P95 buckets 4 ms → 2 ms, paint max 7.5 → 7.0 ms,
   completion and heartbeat gap unchanged.
+- Replace idle polling with native waits. The local session's exit monitor
+  blocked on `WaitForSingleObject` in 50 ms slices (20 wakeups per second per
+  tab); it now waits on the process handle plus a stop event via
+  `ConPtyProcess::waitForExitOrEvent` and only wakes on exit or shutdown. The
+  100 ms script-execution timer only runs while a script is active, and the
+  AI frame/command wait timers use coarse timers so a 50 ms wait no longer
+  pins the Windows timer resolution. `conpty-process` gains a test for the
+  event-interrupted wait.
 
 ### 0.4.6 local validation build — 2026-09-15
 

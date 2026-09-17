@@ -3,6 +3,7 @@
 #include <Windows.h>
 
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <utility>
 #include <vector>
@@ -325,18 +326,27 @@ std::error_code ConPtyProcess::resize(const TerminalSize size)
 
 std::expected<bool, std::error_code> ConPtyProcess::waitForExit(const std::chrono::milliseconds timeout) const
 {
+    return waitForExitOrEvent(timeout, nullptr);
+}
+
+std::expected<bool, std::error_code> ConPtyProcess::waitForExitOrEvent(const std::chrono::milliseconds timeout,
+                                                                       void *const wakeEvent) const
+{
     if (!m_impl->process)
     {
         return std::unexpected(std::make_error_code(std::errc::not_connected));
     }
 
     const auto timeoutCount = std::clamp<std::int64_t>(timeout.count(), 0, std::numeric_limits<DWORD>::max() - 1);
-    const DWORD waitResult = WaitForSingleObject(m_impl->process.get(), static_cast<DWORD>(timeoutCount));
+    const std::array<HANDLE, 2> handles{m_impl->process.get(), static_cast<HANDLE>(wakeEvent)};
+    const DWORD handleCount = wakeEvent == nullptr ? 1U : 2U;
+    const DWORD waitResult =
+        WaitForMultipleObjects(handleCount, handles.data(), FALSE, static_cast<DWORD>(timeoutCount));
     if (waitResult == WAIT_OBJECT_0)
     {
         return true;
     }
-    if (waitResult == WAIT_TIMEOUT)
+    if (waitResult == WAIT_TIMEOUT || waitResult == WAIT_OBJECT_0 + 1)
     {
         return false;
     }

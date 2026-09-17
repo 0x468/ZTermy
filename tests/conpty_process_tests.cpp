@@ -27,6 +27,7 @@ private slots:
     void rejectsInvalidDimensions();
     void capturesUtf8OutputFromChildProcess();
     void closingParallelConsolesEndsOwnedShellProcesses();
+    void wakeEventInterruptsExitWait();
 };
 
 void ConPtyProcessTests::rejectsInvalidDimensions()
@@ -120,6 +121,43 @@ void ConPtyProcessTests::closingParallelConsolesEndsOwnedShellProcesses()
     second.close();
     for (const HANDLE child : children)
         QCOMPARE(WaitForSingleObject(child, 5'000), DWORD{WAIT_OBJECT_0});
+}
+
+void ConPtyProcessTests::wakeEventInterruptsExitWait()
+{
+    using namespace std::chrono_literals;
+    ztermy::terminal::ConPtyProcess process;
+    const std::error_code startError =
+        process.start(L"C:\\Windows\\System32\\cmd.exe", L"cmd.exe /d /q", {.columns = 80, .rows = 24});
+    QVERIFY2(!startError, startError.message().c_str());
+    const auto closeProcess = qScopeGuard([&process] {
+        process.close();
+    });
+
+    const HANDLE wakeEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    QVERIFY(wakeEvent != nullptr);
+    const auto closeEvent = qScopeGuard([wakeEvent] {
+        CloseHandle(wakeEvent);
+    });
+
+    // The shell is still running: a signalled event must end the wait early.
+    SetEvent(wakeEvent);
+    const auto started = std::chrono::steady_clock::now();
+    const auto woken = process.waitForExitOrEvent(5s, wakeEvent);
+    QVERIFY(woken.has_value());
+    QVERIFY(!*woken);
+    QVERIFY(std::chrono::steady_clock::now() - started < 2s);
+
+    ResetEvent(wakeEvent);
+    const auto timedOut = process.waitForExitOrEvent(0ms, wakeEvent);
+    QVERIFY(timedOut.has_value());
+    QVERIFY(!*timedOut);
+
+    constexpr std::string_view command = "exit\r\n";
+    QVERIFY(!process.write(std::as_bytes(std::span(command))));
+    const auto exited = process.waitForExitOrEvent(5s, wakeEvent);
+    QVERIFY(exited.has_value());
+    QVERIFY(*exited);
 }
 
 } // namespace

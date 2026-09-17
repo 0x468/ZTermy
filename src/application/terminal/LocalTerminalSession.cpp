@@ -125,34 +125,27 @@ std::error_code LocalTerminalSession::start(const TerminalGeometry geometry)
     emit statusChanged(tr("Local %1 connected").arg(launchSpec.displayName));
     publishSnapshot();
 
-    m_readThread = std::jthread([this](const std::stop_token &token) {
-        try
-        {
-            readLoop(token);
-        }
-        catch (const std::exception &exception)
-        {
-            postStatus(tr("Terminal read worker failed: %1").arg(QString::fromUtf8(exception.what())));
-        }
-        catch (...)
-        {
-            postStatus(tr("Terminal read worker failed with an unknown error"));
-        }
-    });
-    m_writeThread = std::jthread([this](const std::stop_token &token) {
-        try
-        {
-            writeLoop(token);
-        }
-        catch (const std::exception &exception)
-        {
-            postStatus(tr("Terminal write worker failed: %1").arg(QString::fromUtf8(exception.what())));
-        }
-        catch (...)
-        {
-            postStatus(tr("Terminal write worker failed with an unknown error"));
-        }
-    });
+    const auto guardedWorker = [this](void (LocalTerminalSession::*loop)(const std::stop_token &),
+                                      const QString &failure, const QString &unknownFailure) {
+        return [this, loop, failure, unknownFailure](const std::stop_token &token) {
+            try
+            {
+                (this->*loop)(token);
+            }
+            catch (const std::exception &exception)
+            {
+                postStatus(failure.arg(QString::fromUtf8(exception.what())));
+            }
+            catch (...)
+            {
+                postStatus(unknownFailure);
+            }
+        };
+    };
+    m_readThread = std::jthread(guardedWorker(&LocalTerminalSession::readLoop, tr("Terminal read worker failed: %1"),
+                                              tr("Terminal read worker failed with an unknown error")));
+    m_writeThread = std::jthread(guardedWorker(&LocalTerminalSession::writeLoop, tr("Terminal write worker failed: %1"),
+                                               tr("Terminal write worker failed with an unknown error")));
     m_exitThread = std::jthread([this](const std::stop_token &token) {
         monitorProcessExit(token);
     });
@@ -948,26 +941,29 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
 void LocalTerminalSession::monitorProcessExit(const std::stop_token &stopToken)
 {
     using namespace std::chrono_literals;
+    // Block on the process handle plus a stop event instead of polling every
+    // 50 ms; the stop callback wakes the wait when the session shuts down.
+    const HANDLE wakeEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    const std::stop_callback wake(stopToken, [wakeEvent] {
+        SetEvent(wakeEvent);
+    });
     while (!stopToken.stop_requested())
     {
-        const auto exited = m_process->waitForExit(50ms);
+        const auto exited = wakeEvent == nullptr ? m_process->waitForExit(50ms)
+                                                 : m_process->waitForExitOrEvent(std::chrono::hours{1}, wakeEvent);
         if (!exited)
         {
             postStatus(tr("Unable to monitor local shell: %1").arg(QString::fromStdString(exited.error().message())));
-            return;
+            break;
         }
         if (!*exited)
-        {
             continue;
-        }
         if (m_readThread.joinable())
-        {
-            const auto readHandle = static_cast<HANDLE>(m_readThread.native_handle());
-            CancelSynchronousIo(readHandle);
-        }
+            CancelSynchronousIo(static_cast<HANDLE>(m_readThread.native_handle()));
         emit processExitObserved();
-        return;
+        break;
     }
+    CloseHandle(wakeEvent);
 }
 
 bool LocalTerminalSession::writeToProcess(const std::span<const std::byte> bytes)

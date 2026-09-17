@@ -6283,6 +6283,10 @@ bool AppController::runScript(const QString &id, const QVariantMap &values, cons
     }
     m_quickCommandOperationError.clear();
     dispatchScriptCommands(*tab, *commands);
+    if (!m_scriptExecutionTimer.isActive() && !m_shutdownStarted)
+    {
+        m_scriptExecutionTimer.start();
+    }
     emit quickCommandsChanged();
     emit terminalTabsChanged();
     return true;
@@ -13440,7 +13444,9 @@ AppController::handleAiTerminalFrameTool(TerminalTab &owner, const QString &owne
 
     auto *timer = new QTimer(this);
     timer->setInterval(50);
-    timer->setTimerType(Qt::PreciseTimer);
+    // Coarse: a precise 50 ms timer would pin the Windows timer resolution
+    // to 1 ms for the whole wait.
+    timer->setTimerType(Qt::CoarseTimer);
     timer->setProperty("ztermyAiRemainingMs", static_cast<qint64>(waitRequest->timeoutMilliseconds));
     const QPointer<QTimer> timerGuard(timer);
     const auto callGuard = std::make_shared<const ai::AiToolCall>(call);
@@ -13608,7 +13614,7 @@ ai::AiTurnRunner::ToolHandlingResult AppController::handleAiRunCommand(TerminalT
 
     auto *timer = new QTimer(this);
     timer->setInterval(lifecycleTracked ? 100 : 50);
-    timer->setTimerType(lifecycleTracked ? Qt::CoarseTimer : Qt::PreciseTimer);
+    timer->setTimerType(Qt::CoarseTimer);
     timer->setProperty("ztermyAiRemainingMs", static_cast<qint64>(action.timeoutMilliseconds));
     timer->setProperty("ztermyAiFrameChanged", false);
     const QPointer<QTimer> timerGuard(timer);
@@ -15043,19 +15049,26 @@ void AppController::initializeScriptExecutionTimer()
 {
     m_scriptExecutionTimer.setInterval(100);
     m_scriptExecutionTimer.setTimerType(Qt::CoarseTimer);
+    // The timer only runs while a script is executing; startScript() starts
+    // it and the tick stops it once no tab has an active script.
     QObject::connect(&m_scriptExecutionTimer, &QTimer::timeout, this, [this] {
         bool changed = false;
+        bool anyActive = false;
         const auto now = scriptExecutionNow();
         for (const auto &tab : m_tabs)
         {
             changed = tab->scriptExecution.tick(now) || changed;
+            anyActive = anyActive || tab->scriptExecution.active();
+        }
+        if (!anyActive)
+        {
+            m_scriptExecutionTimer.stop();
         }
         if (changed)
         {
             emit terminalTabsChanged();
         }
     });
-    m_scriptExecutionTimer.start();
 }
 
 void AppController::connectLocalTabSignals(TerminalTab &tab)

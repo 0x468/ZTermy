@@ -43,6 +43,11 @@ public:
     [[nodiscard]] std::error_code write(std::span<const std::byte> source);
     [[nodiscard]] std::error_code resize(TerminalSize size);
     [[nodiscard]] std::expected<bool, std::error_code> waitForExit(std::chrono::milliseconds timeout) const;
+    // Waits for the process to exit or for the native event handle to be
+    // signalled, whichever comes first. Returns false when the event won or
+    // the timeout elapsed.
+    [[nodiscard]] std::expected<bool, std::error_code> waitForExitOrEvent(std::chrono::milliseconds timeout,
+                                                                          void *wakeEvent) const;
 
     [[nodiscard]] bool running() const noexcept;
     void close() noexcept;
