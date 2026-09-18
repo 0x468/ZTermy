@@ -173,6 +173,9 @@ add_library(ztermy_core_config STATIC
     src/core/config/ApplicationSettings.cpp
     src/core/config/ApplicationSettings.h
     src/core/config/ApplicationSettingsTokens.cpp
+    src/core/config/TerminalColorScheme.h
+    src/core/config/TerminalThemeCatalog.cpp
+    src/core/config/TerminalThemeCatalog.h
 )
 
 add_library(ztermy_core_persistence STATIC
@@ -908,6 +911,7 @@ target_link_libraries(ztermy_icon_rendering
 
 add_library(ztermy_application_controller STATIC
     src/application/AppController.cpp
+    src/application/AppControllerThemes.cpp
     src/application/AppControllerWorkspaceTransfers.cpp
     src/application/AppControllerWorkspace.cpp
     src/application/ApplicationInstance.cpp
@@ -1158,6 +1162,14 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS ConfirmationDialog.qml
 )
 set_source_files_properties(
+    src/ui/qml/ThemePickerDialog.qml
+    PROPERTIES QT_RESOURCE_ALIAS ThemePickerDialog.qml
+)
+set_source_files_properties(
+    src/ui/qml/TerminalThemeStrip.qml
+    PROPERTIES QT_RESOURCE_ALIAS TerminalThemeStrip.qml
+)
+set_source_files_properties(
     src/ui/qml/CommandPalette.qml
     PROPERTIES QT_RESOURCE_ALIAS CommandPalette.qml
 )
@@ -1375,6 +1387,8 @@ qt_add_qml_module(ztermy
         src/ui/qml/EditableSuggestionField.qml
         src/ui/qml/CaptionButton.qml
         src/ui/qml/ConfirmationDialog.qml
+        src/ui/qml/ThemePickerDialog.qml
+        src/ui/qml/TerminalThemeStrip.qml
         src/ui/qml/CommandPalette.qml
         src/ui/qml/FontPicker.qml
         src/ui/qml/HostConnectionPane.qml
@@ -2164,6 +2178,27 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME application-settings COMMAND ztermy_application_settings_tests)
+
+    qt_add_executable(ztermy_terminal_theme_catalog_tests
+        tests/terminal_theme_catalog_tests.cpp
+    )
+
+    target_compile_features(ztermy_terminal_theme_catalog_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_terminal_theme_catalog_tests PRIVATE
+        ztermy_core_config
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_terminal_theme_catalog_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME terminal-theme-catalog COMMAND ztermy_terminal_theme_catalog_tests)
 
     qt_add_executable(ztermy_last_known_good_file_tests
         tests/last_known_good_file_tests.cpp
