@@ -2,6 +2,8 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 
+// Right-hand title-bar group: portable vault status, pin, file transfers,
+// command palette, settings, then the three window caption buttons.
 Row {
     id: controls
     required property var hostRoot
@@ -14,21 +16,17 @@ Row {
     anchors.top: parent.top
     height: parent.height
 
-    Rectangle {
+    TitleChromeAction {
+        id: portableVaultStatus
+
         width: controls.hostRoot.titleSecurityActionWidth
         height: controls.height
         visible: controls.hostRoot.portableVaultNeedsAttention
-        color: portableVaultStatusAction.feedbackColor
-        border.color: portableVaultStatusAction.visualFocus ? Theme.focus : "transparent"
-        border.width: portableVaultStatusAction.visualFocus ? 1 : 0
-
-        AppIcon {
-            anchors.centerIn: parent
-            width: 16
-            height: 16
-            name: "lock"
-            color: Theme.dangerText
-        }
+        iconName: "lock"
+        iconColor: Theme.dangerText
+        actionObjectName: "portableVaultStatusAction"
+        accessibleName: controls.hostRoot.controller.portableVaultInitialized ? qsTr("Portable vault locked; unlock") : qsTr("Portable vault not configured; open Security settings")
+        onActivated: controls.hostRoot.requestPortableVaultAccess(portableVaultStatus.focusTarget)
 
         Rectangle {
             anchors.right: parent.right
@@ -41,16 +39,6 @@ Row {
             color: Theme.danger
             border.color: Theme.chromeBackground
             border.width: 1
-        }
-
-        KeyboardAction {
-            id: portableVaultStatusAction
-
-            objectName: "portableVaultStatusAction"
-            anchors.fill: parent
-            anchors.margins: 2
-            accessibleName: controls.hostRoot.controller.portableVaultInitialized ? qsTr("Portable vault locked; unlock") : qsTr("Portable vault not configured; open Security settings")
-            onActivated: controls.hostRoot.requestPortableVaultAccess(portableVaultStatusAction)
         }
     }
 
@@ -65,80 +53,48 @@ Row {
         Row {
             anchors.fill: parent
 
-            Rectangle {
+            TitleChromeAction {
+                id: alwaysOnTopAction
+
                 width: 26
                 height: parent.height
-                color: alwaysOnTopAction.feedbackColor
-
-                AppIcon {
-                    anchors.centerIn: parent
-                    width: 16
-                    height: 16
-                    name: controls.hostRoot.windowAlwaysOnTopRequested ? "pin-window" : controls.hostRoot.currentTerminalTabPinned ? "pin-tab" : "pin"
-                    color: controls.hostRoot.windowAlwaysOnTopRequested || controls.hostRoot.currentTerminalTabPinned ? Theme.accent : controls.hostRoot.mutedColor
-                }
-
-                KeyboardAction {
-                    id: alwaysOnTopAction
-
-                    objectName: "alwaysOnTopAction"
-                    anchors.fill: parent
-                    anchors.margins: 2
-                    enabled: true
-                    doubleClickEnabled: true
-                    accessibleName: controls.hostRoot.windowAlwaysOnTopRequested ? qsTr("Turn off window always on top") : controls.hostRoot.currentPage !== "terminal" || controls.hostRoot.activeTerminalTab === null ? qsTr("Keep window always on top") : controls.hostRoot.currentTerminalTabPinned ? qsTr("Unpin current terminal tab") : qsTr("Pin current terminal tab")
-                    onActivated: controls.hostRoot.activatePinPrimary()
-                    onDoubleActivated: controls.hostRoot.activatePinDouble()
-                }
-
-                AppToolTip {
-                    visible: alwaysOnTopAction.hovered && !alwaysOnTopMenu.visible
-                    text: {
-                        if (controls.hostRoot.windowAlwaysOnTopRequested && controls.hostRoot.currentTerminalTabPinned) {
-                            return qsTr("Current tab pinned · window always on top\nDouble-click to turn off window pinning");
-                        }
-                        if (controls.hostRoot.windowAlwaysOnTopRequested) {
-                            return qsTr("Window always on top\nClick to turn off · Double-click toggles window pinning");
-                        }
-                        if (controls.hostRoot.currentTerminalTabPinned) {
-                            return qsTr("Current terminal tab pinned\nClick to unpin · Double-click pins the whole window");
-                        }
-                        if (controls.hostRoot.currentPage !== "terminal" || controls.hostRoot.activeTerminalTab === null) {
-                            return qsTr("Click or double-click to keep the whole window always on top");
-                        }
-                        return qsTr("Click to pin this tab · Double-click to pin the whole window");
+                iconName: controls.hostRoot.windowAlwaysOnTopRequested ? "pin-window" : controls.hostRoot.currentTerminalTabPinned ? "pin-tab" : "pin"
+                iconColor: controls.hostRoot.windowAlwaysOnTopRequested || controls.hostRoot.currentTerminalTabPinned ? Theme.accent : controls.hostRoot.mutedColor
+                actionObjectName: "alwaysOnTopAction"
+                doubleClickEnabled: true
+                menuOpen: alwaysOnTopMenu.visible
+                accessibleName: controls.hostRoot.windowAlwaysOnTopRequested ? qsTr("Turn off window always on top") : controls.hostRoot.currentPage !== "terminal" || controls.hostRoot.activeTerminalTab === null ? qsTr("Keep window always on top") : controls.hostRoot.currentTerminalTabPinned ? qsTr("Unpin current terminal tab") : qsTr("Pin current terminal tab")
+                toolTip: {
+                    if (controls.hostRoot.windowAlwaysOnTopRequested && controls.hostRoot.currentTerminalTabPinned) {
+                        return qsTr("Current tab pinned · window always on top\nDouble-click to turn off window pinning");
                     }
+                    if (controls.hostRoot.windowAlwaysOnTopRequested) {
+                        return qsTr("Window always on top\nClick to turn off · Double-click toggles window pinning");
+                    }
+                    if (controls.hostRoot.currentTerminalTabPinned) {
+                        return qsTr("Current terminal tab pinned\nClick to unpin · Double-click pins the whole window");
+                    }
+                    if (controls.hostRoot.currentPage !== "terminal" || controls.hostRoot.activeTerminalTab === null) {
+                        return qsTr("Click or double-click to keep the whole window always on top");
+                    }
+                    return qsTr("Click to pin this tab · Double-click to pin the whole window");
                 }
+                onActivated: controls.hostRoot.activatePinPrimary()
+                onDoubleActivated: controls.hostRoot.activatePinDouble()
             }
 
-            Rectangle {
+            TitleChromeAction {
                 width: 14
                 height: parent.height
-                color: alwaysOnTopMenuAction.pressed ? Theme.captionPressed : alwaysOnTopMenu.visible ? Theme.captionHover : alwaysOnTopMenuAction.feedbackColor
-                border.color: alwaysOnTopMenuAction.visualFocus ? Theme.focus : "transparent"
-                border.width: alwaysOnTopMenuAction.visualFocus ? 1 : 0
-
-                AppIcon {
-                    anchors.centerIn: parent
-                    width: 10
-                    height: 10
-                    name: "chevron-down"
-                    color: controls.hostRoot.mutedColor
-                }
-
-                KeyboardAction {
-                    id: alwaysOnTopMenuAction
-
-                    objectName: "alwaysOnTopMenuAction"
-                    anchors.fill: parent
-                    accessibleName: qsTr("Open pin options")
-                    onActivated: alwaysOnTopMenu.open()
-                }
-
-                AppToolTip {
-                    visible: alwaysOnTopMenuAction.hovered && !alwaysOnTopMenu.visible
-                    text: qsTr("Pin options")
-                }
+                iconName: "chevron-down"
+                iconSize: 10
+                iconColor: controls.hostRoot.mutedColor
+                actionInset: 0
+                actionObjectName: "alwaysOnTopMenuAction"
+                accessibleName: qsTr("Open pin options")
+                toolTip: qsTr("Pin options")
+                menuOpen: alwaysOnTopMenu.visible
+                onActivated: alwaysOnTopMenu.open()
             }
         }
 
@@ -180,21 +136,16 @@ Row {
         }
     }
 
-    Rectangle {
+    TitleChromeAction {
         visible: !controls.compact
         width: visible ? controls.hostRoot.titleQuickActionWidth : 0
         height: controls.height
-        color: transferCenterAction.feedbackColor
-        border.color: transferCenterAction.visualFocus ? Theme.focus : "transparent"
-        border.width: transferCenterAction.visualFocus ? 1 : 0
-
-        AppIcon {
-            anchors.centerIn: parent
-            width: 16
-            height: 16
-            name: "transfer"
-            color: controls.transferPopup.visible ? controls.hostRoot.textColor : controls.hostRoot.mutedColor
-        }
+        iconName: "transfer"
+        iconColor: controls.transferPopup.visible ? controls.hostRoot.textColor : controls.hostRoot.mutedColor
+        actionObjectName: "transferCenterAction"
+        accessibleName: qsTr("Open file transfers")
+        toolTip: qsTr("File transfers")
+        onActivated: controls.transferPopup.visible ? controls.transferPopup.close() : controls.transferPopup.open()
 
         Rectangle {
             anchors.right: parent.right
@@ -218,82 +169,33 @@ Row {
                 font.weight: Font.Bold
             }
         }
-
-        KeyboardAction {
-            id: transferCenterAction
-
-            objectName: "transferCenterAction"
-            anchors.fill: parent
-            anchors.margins: 2
-            accessibleName: qsTr("Open file transfers")
-            onActivated: controls.transferPopup.visible ? controls.transferPopup.close() : controls.transferPopup.open()
-        }
-
-        AppToolTip {
-            visible: transferCenterAction.hovered
-            text: qsTr("File transfers")
-        }
     }
 
-    Rectangle {
+    TitleChromeAction {
         visible: !controls.compact
         width: visible ? controls.hostRoot.titleQuickActionWidth : 0
         height: controls.height
-        color: commandPaletteAction.feedbackColor
-        border.color: commandPaletteAction.visualFocus ? Theme.focus : "transparent"
-        border.width: commandPaletteAction.visualFocus ? 1 : 0
-
-        AppIcon {
-            anchors.centerIn: parent
-            width: 16
-            height: 16
-            name: "search"
-            color: controls.commandPopup.visible ? controls.hostRoot.textColor : controls.hostRoot.mutedColor
+        iconName: "search"
+        iconColor: controls.commandPopup.visible ? controls.hostRoot.textColor : controls.hostRoot.mutedColor
+        actionObjectName: "commandPaletteAction"
+        accessibleName: qsTr("Open command palette")
+        toolTip: {
+            const shortcut = controls.hostRoot.shortcutFor("application.commandPalette");
+            return shortcut.length > 0 ? qsTr("Command palette") + " · " + shortcut : qsTr("Command palette");
         }
-
-        KeyboardAction {
-            id: commandPaletteAction
-
-            objectName: "commandPaletteAction"
-            anchors.fill: parent
-            anchors.margins: 2
-            accessibleName: qsTr("Open command palette")
-            onActivated: controls.commandPopup.open()
-        }
-
-        AppToolTip {
-            visible: commandPaletteAction.hovered
-            text: {
-                const shortcut = controls.hostRoot.shortcutFor("application.commandPalette");
-                return shortcut.length > 0 ? qsTr("Command palette") + " · " + shortcut : qsTr("Command palette");
-            }
-        }
+        onActivated: controls.commandPopup.open()
     }
 
-    Rectangle {
+    TitleChromeAction {
         width: controls.hostRoot.titleQuickActionWidth
         height: controls.height
-        color: settingsShortcutAction.feedbackColor
-        border.color: settingsShortcutAction.visualFocus ? Theme.focus : "transparent"
-        border.width: settingsShortcutAction.visualFocus ? 1 : 0
-
-        AppIcon {
-            anchors.centerIn: parent
-            width: 16
-            height: 16
-            name: controls.compact ? "more" : "settings"
-            color: controls.hostRoot.currentPage === "settings" ? controls.hostRoot.textColor : controls.hostRoot.mutedColor
-        }
-
-        KeyboardAction {
-            id: settingsShortcutAction
-
-            objectName: "settingsShortcutAction"
-            anchors.fill: parent
-            anchors.margins: 2
-            accessibleName: controls.compact ? qsTr("More window actions") : qsTr("Open Settings")
-            onActivated: controls.compact ? compactMenu.open() : controls.hostRoot.openSettingsTab()
-        }
+        iconName: controls.compact ? "more" : "settings"
+        iconColor: controls.hostRoot.currentPage === "settings" ? controls.hostRoot.textColor : controls.hostRoot.mutedColor
+        actionObjectName: "settingsShortcutAction"
+        accessibleName: controls.compact ? qsTr("More window actions") : qsTr("Open Settings")
+        toolTip: controls.compact ? qsTr("More window actions") : qsTr("Settings")
+        menuOpen: compactMenu.visible
+        onActivated: controls.compact ? compactMenu.open() : controls.hostRoot.openSettingsTab()
     }
 
     CaptionButton {
@@ -327,6 +229,7 @@ Row {
         accessibleName: qsTr("Close")
         onActivated: controls.hostRoot.windowChrome.closeWindow()
     }
+
     AppMenu {
         id: compactMenu
         y: controls.height

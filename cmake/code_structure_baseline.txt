@@ -10,7 +10,7 @@ src/infrastructure/ssh/Libssh2Session.cpp|2517
 src/main.cpp|4783
 src/ui/qml/AiAssistantPane.qml|3318
 src/ui/qml/HostConnectionPane.qml|2901
-src/ui/qml/Main.qml|2923
+src/ui/qml/Main.qml|2857
 src/ui/qml/SettingsPane.qml|3454
 src/ui/qml/SftpBrowser.qml|1160
 src/ui/qml/TerminalSplitNode.qml|1335

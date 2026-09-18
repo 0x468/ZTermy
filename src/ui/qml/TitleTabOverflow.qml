@@ -4,52 +4,25 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-Rectangle {
+// Overflow entry point for the terminal tab strip: lists every tab with its
+// session status and a close affordance.
+TitleChromeAction {
     id: control
 
     required property var controller
-    required property color iconColor
     property var tabs: controller.terminalTabs
     signal terminalActivated(string tabId)
     signal terminalCloseRequested(var tab)
 
     implicitWidth: visible ? 26 : 0
-    implicitHeight: Theme.titleBarHeight
     visible: tabs.length > 1
-    color: "transparent"
-
-    Row {
-        anchors.fill: parent
-
-        Rectangle {
-            width: 26
-            height: parent.height
-            color: overflowAction.feedbackColor
-
-            AppIcon {
-                anchors.centerIn: parent
-                width: 14
-                height: 14
-                name: "chevron-down"
-                color: control.iconColor
-            }
-
-            KeyboardAction {
-                id: overflowAction
-
-                objectName: "titleTabOverflowAction"
-                anchors.fill: parent
-                anchors.margins: 2
-                accessibleName: qsTranslate("Main", "Show all terminal tabs")
-                onActivated: overflowMenu.open()
-            }
-
-            AppToolTip {
-                visible: overflowAction.hovered && !overflowMenu.visible
-                text: qsTranslate("Main", "All terminal tabs")
-            }
-        }
-    }
+    iconName: "chevron-down"
+    iconSize: 14
+    actionObjectName: "titleTabOverflowAction"
+    accessibleName: qsTranslate("Main", "Show all terminal tabs")
+    toolTip: qsTranslate("Main", "All terminal tabs")
+    menuOpen: overflowMenu.visible
+    onActivated: overflowMenu.open()
 
     AppMenu {
         id: overflowMenu
@@ -65,11 +38,11 @@ Rectangle {
                 text: modelData.title
                 onTriggered: control.terminalActivated(modelData.id)
                 contentItem: RowLayout {
-                    Rectangle {
+                    SessionStatusDot {
                         Layout.preferredWidth: 7
                         Layout.preferredHeight: 7
-                        radius: height / 2
-                        color: entry.modelData.connecting ? Theme.warning : entry.modelData.running ? Theme.accent : Theme.textSubtle
+                        running: !!entry.modelData.running
+                        connecting: !!entry.modelData.connecting
                     }
                     ColumnLayout {
                         Layout.fillWidth: true
@@ -87,31 +60,17 @@ Rectangle {
                             font.pixelSize: Theme.textCompact
                         }
                     }
-                    ToolButton {
+                    AppIconButton {
                         id: close
                         Layout.preferredWidth: 28
                         Layout.preferredHeight: 28
-                        focusPolicy: Qt.TabFocus
-                        hoverEnabled: true
-                        background: Rectangle {
-                            radius: Theme.radiusCompact
-                            color: close.down ? Theme.controlPressed : close.hovered || close.visualFocus ? Theme.borderStrong : "transparent"
-                            border.color: close.visualFocus ? Theme.focus : "transparent"
-                            border.width: close.visualFocus ? 1 : 0
-                        }
-                        Accessible.name: qsTr("Close %1").arg(entry.modelData.title)
-                        contentItem: AppIcon {
-                            name: "close"
-                            color: close.down ? Theme.accent : close.hovered || close.activeFocus ? Theme.text : Theme.textMuted
-                            scale: close.down ? 0.82 : 1
-                        }
+                        label: qsTr("Close %1").arg(entry.modelData.title)
+                        iconName: "close"
+                        iconColor: close.down ? Theme.accent : close.hovered || close.activeFocus ? Theme.text : Theme.textMuted
                         onClicked: {
                             const tab = entry.modelData;
                             overflowMenu.close();
                             Qt.callLater(() => control.terminalCloseRequested(tab));
-                        }
-                        AppToolTip {
-                            text: close.Accessible.name
                         }
                     }
                 }

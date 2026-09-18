@@ -77,6 +77,10 @@ QtObject {
     // close to the light chrome tint to remain visible through a backdrop.
     readonly property color captionPressed: highContrast ? controlPressed : dark ? "#263244" : "#B8C4D3"
     readonly property color captionHover: highContrast ? controlHover : dark ? "#1F2A3A" : "#CBD5E1"
+    // Selected title-bar tab: an opaque card that reads lighter than the
+    // chrome in both skins (the light chrome tint equals controlBackground,
+    // so the control colour cannot mark a selected tab there).
+    readonly property color tabSelectedBackground: highContrast ? selectedBackground : dark ? "#1B2637" : "#F8FAFC"
     readonly property color fieldBackground: highContrast ? highContrastBackground : dark ? "#111827" : "#FFFFFF"
     readonly property color floatingBackground: highContrast ? highContrastBackground : dark ? "#1E293B" : "#FFFFFF"
 

@@ -234,7 +234,7 @@ Rectangle {
     }
 
     function terminalTabPreferredWidth(title) {
-        return Math.min(184, Math.max(112, titleTabFontMetrics.advanceWidth(String(title || "")) + 54));
+        return Math.min(184, Math.max(112, titleTabFontMetrics.advanceWidth(String(title || "")) + 66));
     }
 
     function terminalTabStripDesiredWidth() {
@@ -826,7 +826,7 @@ Rectangle {
             Qt.callLater(root.applyAlwaysOnTopPreference);
             if (root.currentPage === "terminal" && root.mainTerminalTabs.length === 0) {
                 root.currentPage = "hosts";
-                Qt.callLater(hostsTitleAction.forceActiveFocus);
+                Qt.callLater(hostsTitleTab.focusAction);
             }
             if (root.detachedTerminalPaneId.length > 0) {
                 root.detachedTerminalWorkspace = root.controller.terminalWorkspace(root.detachedTerminalWorkspaceId);
@@ -947,78 +947,52 @@ Rectangle {
             spacing: 0
             onWidthChanged: root.scheduleTitleBarMetrics()
 
-            Rectangle {
+            TitleTab {
                 id: hostsTitleTab
 
                 width: root.currentPage === "hosts" && root.width >= 700 ? 124 : 44
                 height: titleNavigation.height
-                property real feedbackAmount: root.currentPage === "hosts" || hostsTitleAction.hovered || hostsTitleAction.visualFocus ? 1 : 0
-                readonly property color feedbackColor: hostsTitleAction.pressed ? Theme.captionPressed : root.currentPage === "hosts" ? Theme.controlBackground : Theme.captionHover
-                color: Theme.withAlpha(feedbackColor, feedbackColor.a * feedbackAmount)
-                border.color: hostsTitleAction.visualFocus ? Theme.focus : "transparent"
-                border.width: hostsTitleAction.visualFocus ? 1 : 0
-
-                Behavior on feedbackAmount {
-                    MotionFeedback {}
-                }
+                title: qsTr("Workspace")
+                titlePixelSize: Theme.textBody
+                customIcon: true
+                iconSize: 24
+                selected: root.currentPage === "hosts"
+                compact: root.currentPage !== "hosts" || root.width < 700
+                actionObjectName: "hostsTitleAction"
+                accessibleName: qsTr("Workspace")
+                toolTip: qsTr("Workspace")
+                toolTipEnabled: root.currentPage !== "hosts"
+                onActivated: root.currentPage = "hosts"
 
                 Behavior on width {
                     MotionRelocate {}
                 }
 
-                RowLayout {
-                    anchors.centerIn: parent
-                    spacing: 8
-
-                    BrandIcon {
-                        objectName: "titleBrandIcon"
-                        Layout.alignment: Qt.AlignVCenter
-                        Layout.preferredWidth: 24
-                        Layout.preferredHeight: 24
-                        tileColor: root.accentColor
-                        ribbonColor: Theme.accentText
-                        promptColor: Theme.contrastText(ribbonColor)
-                        promptStrokeWidth: 0.86
-                    }
-
-                    Text {
-                        Layout.alignment: Qt.AlignVCenter
-                        visible: root.currentPage === "hosts" && root.width >= 700
-                        text: qsTr("Workspace")
-                        color: root.currentPage === "hosts" ? root.textColor : root.mutedColor
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.textBody
-                        font.weight: root.currentPage === "hosts" ? Font.DemiBold : Font.Normal
-                    }
-                }
-
-                KeyboardAction {
-                    id: hostsTitleAction
-
-                    objectName: "hostsTitleAction"
+                BrandIcon {
+                    objectName: "titleBrandIcon"
+                    parent: hostsTitleTab.iconSlot
                     anchors.fill: parent
-                    anchors.margins: 2
-                    accessibleName: qsTr("Workspace")
-                    onActivated: root.currentPage = "hosts"
-                }
-
-                AppToolTip {
-                    visible: root.currentPage !== "hosts" && hostsTitleAction.hovered
-                    text: qsTr("Workspace")
+                    tileColor: root.accentColor
+                    ribbonColor: Theme.accentText
+                    promptColor: Theme.contrastText(ribbonColor)
+                    promptStrokeWidth: 0.86
                 }
             }
 
-            TitlePageAction {
+            TitleTab {
                 id: sftpTitleTab
+
                 width: root.currentPage === "sftp" && root.width >= 700 ? 82 : 38
                 height: titleNavigation.height
-                title: root.currentPage === "sftp" && root.width >= 700 ? qsTr("SFTP") : ""
+                title: qsTr("SFTP")
                 iconName: "folder"
                 selected: root.currentPage === "sftp"
+                compact: root.currentPage !== "sftp" || root.width < 700
                 actionObjectName: "sftpTitleAction"
                 accessibleName: qsTr("SFTP files")
                 toolTip: qsTr("Open local and remote files")
                 onActivated: root.currentPage = "sftp"
+
                 Behavior on width {
                     MotionRelocate {}
                 }
@@ -1188,37 +1162,18 @@ Rectangle {
                 }
             }
 
-            Rectangle {
+            TitleChromeAction {
                 id: titleNewTabContainer
                 objectName: "titleNewTabContainer"
                 width: 36
                 height: titleNavigation.height
-                color: titleNewTabAction.feedbackColor
-                border.color: titleNewTabAction.visualFocus ? Theme.focus : "transparent"
-                border.width: titleNewTabAction.visualFocus ? 1 : 0
-
-                AppIcon {
-                    anchors.centerIn: parent
-                    width: 16
-                    height: 16
-                    name: "plus"
-                    color: root.textColor
-                }
-
-                KeyboardAction {
-                    id: titleNewTabAction
-
-                    objectName: "titleNewTabAction"
-                    anchors.fill: parent
-                    anchors.margins: 2
-                    accessibleName: qsTr("Open new terminal menu")
-                    onActivated: newTerminalMenu.open()
-                }
-
-                AppToolTip {
-                    visible: titleNewTabAction.hovered && !newTerminalMenu.visible
-                    text: qsTr("New terminal")
-                }
+                iconName: "plus"
+                iconColor: root.textColor
+                actionObjectName: "titleNewTabAction"
+                accessibleName: qsTr("Open new terminal menu")
+                toolTip: qsTr("New terminal")
+                menuOpen: newTerminalMenu.visible
+                onActivated: newTerminalMenu.open()
 
                 AppMenu {
                     id: newTerminalMenu
@@ -1262,7 +1217,7 @@ Rectangle {
                         text: qsTr("Browse hosts")
                         onTriggered: {
                             root.currentPage = "hosts";
-                            Qt.callLater(hostsTitleAction.forceActiveFocus);
+                            Qt.callLater(hostsTitleTab.focusAction);
                         }
                     }
 
