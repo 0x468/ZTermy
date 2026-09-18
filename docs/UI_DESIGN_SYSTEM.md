@@ -192,6 +192,13 @@ Space activate button-like controls once and ignore key auto-repeat.
   accessible announcements.
 - `SideNavigationItem`: compact sidebar navigation with selected, hover,
   keyboard-focus, and accessible-button states.
+- `SettingsCategoryRail`, `SettingsCategoryButton`, and `SettingsRowLabel`:
+  the settings navigation contract. The rail groups categories by intent,
+  owns the search index (row key, category, title, keywords), and asks the
+  pane to open a category or jump to one row. A row label carries the caption,
+  a reset affordance that only appears while the draft differs from the
+  default reported by the controller, and the highlight pulse the search uses
+  to point at the row.
 - `TerminalTabAction`: bounded title-bar terminal action with session status,
   activation, close, keyboard focus, and accessible names.
 - `CaptionButton`: native-title-bar commands while preserving Win32 hit
@@ -261,6 +268,10 @@ duration to 0, so transitions become immediate without per-site guards.
 - Hover, error, and focus states do not change layout size.
 - No terminal cells, scrollback lines, or selection cells are represented as
   QML object trees.
+- Settings pages keep one scrolling column of cards; a search jump scrolls the
+  target row into view with a fixed 96 px lead and never rebuilds the page.
+  Defaults shown by reset affordances come from one controller map, not from
+  literals repeated in QML.
 
 ## Performance boundary
 

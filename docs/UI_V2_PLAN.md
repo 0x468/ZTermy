@@ -42,7 +42,7 @@ keep `reduced` and `off` tiers for low-end machines and the Windows
 | 2 | Elevation library | `AppSurface` elevation 0–3 with built-in shadow, radius tokens, hard-coded radii removed | ☑ 2026-09-18 |
 | 3 | Motion library | `Motion` singleton, shared transitions for page/tab/pane/menu/toast, respects tier and Windows animation preference | ☑ 2026-09-18 |
 | 4 | Theme library + picker | `Theme` split into palette/skin, built-in themes, JSON custom themes, Windows Terminal/Ghostty import, picker dialog with hover preview, ADR 0121 | ☑ 2026-09-18 |
-| 5 | Settings reorganisation | Grouped navigation, search, per-row reset, appearance page rebuilt around the theme strip | ☐ |
+| 5 | Settings reorganisation | Grouped navigation, search, per-row reset, appearance page rebuilt around the theme strip, ADR 0122 | ☑ 2026-09-18 |
 | 6 | Chrome polish | Tab strip, caption buttons, pane headers, drag previews on the new library | ☐ |
 
 Each chapter lands as small Conventional Commits with tests and the existing
@@ -107,3 +107,19 @@ runtime smokes passing; a before/after screenshot pair per chapter goes under
   `ztermy_qmllint`; `--ui-layout-smoke` and `--pane-scrollbar-smoke` exit 0;
   code health gate PASS (baseline ratcheted); captures in
   `docs/design/ui-v2/ch4/`. ADR 0121.
+- 2026-09-18: Chapter 5 landed. `SettingsCategoryRail` groups the categories
+  (General, Connections, Assistant, About) with a search field whose index
+  maps row keys to categories; Enter or a result opens the category, scrolls
+  to the row and pulses its highlight. `SettingsRowLabel` carries the caption
+  plus a reset affordance that appears when the draft differs from the
+  default; defaults come from `AppController::applicationSettingsDefaults`
+  (`AppControllerDefaults.cpp`), so QML never repeats a default value. The
+  Window appearance card now opens with the terminal theme strip.
+  `settingsEffectsTier` joined the appearance Tab order. Keyboard smoke
+  helpers (`sendKey`, `sendText`, `focusItem`, `processWindowEventsUntil`)
+  moved to `RuntimeSmokeItems.h`; the keyboard smoke covers search -> jump
+  -> per-row reset and waits for the overflow tab strip to settle instead of
+  a fixed delay. Evidence: ctest `app-controller`; `ztermy_qml_format_check`,
+  `ztermy_qmllint`; `--ui-keyboard-smoke`, `--ui-layout-smoke` and
+  `--pane-scrollbar-smoke` exit 0; code health gate PASS (baseline
+  ratcheted); captures in `docs/design/ui-v2/ch5/`. ADR 0122.
