@@ -185,3 +185,24 @@ runtime smokes passing; a before/after screenshot pair per chapter goes under
   profile the `full` chrome during the burst (title-bar colour behaviours,
   page reveal) and decide whether `reduced` should be the default on
   battery.
+- 2026-09-19: Quality gates. The branch had not run `ztermy_clang_tidy_check`
+  (303 translation units, `--warnings-as-errors=*`); it stopped on four
+  new-code diagnostics: `modernize-use-designated-initializers` on the ten
+  built-in `BuiltInSpec` entries and on the smoke's `SurfaceAlphas`,
+  `bugprone-implicit-widening-of-multiplication-result` on the icon cache
+  budget, and `bugprone-narrowing-conversions` on the `qreal` → `float`
+  slider alpha helper. All four are fixed without behaviour change (the
+  theme values were diffed token by token); `SurfaceAlphas` now lives in
+  `WindowStateRuntimeSmoke.h` and main.cpp ratchets 4778 → 4739 lines. The
+  next passes stopped in the new tests: an `int` from `qsizetype`
+  (`bugprone-narrowing-conversions`) in `app_controller_tests.cpp` and
+  `bugprone-unchecked-optional-access` on two `catalog.find()` results in
+  `terminal_theme_catalog_tests.cpp`, both fixed the way the existing tests
+  do it (`static_cast`, `value_or` after `QVERIFY(has_value())`).
+  `ztermy_qml_quality_check` also reported an unused `QtQuick.Controls`
+  import in `TitleTabOverflow.qml`, removed. The `startCopyMode`
+  missing-property qmllint warning predates the branch (same on `main`).
+  Re-verified on the rebuilt binaries: `ztermy_format_check`,
+  `ztermy_qml_quality_check`, full clang-tidy, Debug and Release ctest
+  129/129, `ztermy_dynamic_deploy_smoke`, the six runtime smokes and the
+  code health gate all pass.

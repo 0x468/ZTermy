@@ -42,6 +42,13 @@ The project has not published a release.
   event loop between press and release, so a native `WM_MOUSELEAVE` posted
   while a detached window changed state cleared the MouseArea hover and the
   release was not a click. Press and release are now delivered back to back.
+- Pass the full clang-tidy gate on the branch: the built-in theme specs and
+  the smoke's `SurfaceAlphas` use designated initialisers, the icon cache
+  budget multiplies in `qsizetype`, the slider alpha helper converts to
+  `float` explicitly, and the unused `QtQuick.Controls` import is gone from
+  the tab overflow. `SurfaceAlphas` moved to `WindowStateRuntimeSmoke.h`
+  (main.cpp 4778 → 4739 lines). The new tests cast `qsizetype` counts
+  explicitly and read `find()` results through `value_or`.
 - Terminal benchmark against same-day `main` (Release, acrylic, 24 runs each):
   paint P50/max and heartbeat gap unchanged, completion median 1580 → 1678 ms
   (one 100 ms marker-search tick in about a quarter more runs; tier `off`
