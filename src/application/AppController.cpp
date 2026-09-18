@@ -9301,55 +9301,35 @@ bool AppController::saveApplicationSettings(
         return false;
     }
 
-    return persistApplicationSettings({
-        .backdropOpacity = backdropOpacity,
-        .terminalBackgroundOpacity = terminalBackgroundOpacity,
-        .shortcutOverrides = m_settings.shortcutOverrides,
-        .customAccent = customAccent.trimmed().toUpper(),
-        .uiFontFamily = uiFontFamily,
-        .terminalFontFamily = fontFamily,
-        .terminalWordDelimiters = terminalWordDelimiters,
-        .aiBaseUrl = m_settings.aiBaseUrl,
-        .aiEndpointPath = m_settings.aiEndpointPath,
-        .aiModel = m_settings.aiModel,
-        .aiCredentialReference = m_settings.aiCredentialReference,
-        .aiProxyUrl = m_settings.aiProxyUrl,
-        .aiProxyUsername = m_settings.aiProxyUsername,
-        .terminalFontSize = fontSize,
-        .terminalScrollRows = terminalScrollRows,
-        .terminalSelectionActionOrder = m_settings.terminalSelectionActionOrder,
-        .terminalSelectionPrimaryActions = m_settings.terminalSelectionPrimaryActions,
-        .terminalSelectionRetainActions = m_settings.terminalSelectionRetainActions,
-        .localShell = m_settings.localShell,
-        .theme = *parsedTheme,
-        .backdrop = *parsedBackdrop,
-        .accent = *parsedAccent,
-        .showAllTerminalFonts = showAllFonts,
-        .terminalLigatures = ligatures,
-        .cursor = *parsedCursor,
-        .cursorBlink = cursorShouldBlink,
-        .copyOnSelect = shouldCopyOnSelect,
-        .keepSelectionAfterCopy = shouldKeepSelectionAfterCopy,
-        .confirmMultilinePaste = shouldConfirmMultilinePaste,
-        .terminalSelectionPopupEnabled = m_settings.terminalSelectionPopupEnabled,
-        .terminalRightClick = *parsedRightClick,
-        .terminalMiddleClick = *parsedMiddleClick,
-        .sftpShowHiddenFiles = shouldShowHiddenSftpFiles,
-        .sftpConfirmDelete = shouldConfirmSftpDelete,
-        .closeToTray = shouldCloseToTray,
-        .performanceMode = shouldPreferPerformance,
-        .connectionHistoryEnabled = m_settings.connectionHistoryEnabled,
-        .credentialStorage = m_settings.credentialStorage,
-        .language = *parsedLanguage,
-        .aiProvider = m_settings.aiProvider,
-        .aiAutomaticContext = m_settings.aiAutomaticContext,
-        .aiPermission = m_settings.aiPermission,
-        .aiConversationHistoryEnabled = m_settings.aiConversationHistoryEnabled,
-        .aiDebugTraceEnabled = m_settings.aiDebugTraceEnabled,
-        .aiReasoning = m_settings.aiReasoning,
-        .aiProxy = m_settings.aiProxy,
-        .windowInteraction = m_settings.windowInteraction,
-    });
+    // Start from the stored settings so everything the page saves through its own
+    // invokable (effects tier, terminal theme, AI, shortcuts, ...) survives an Apply.
+    auto updated = m_settings;
+    updated.backdropOpacity = backdropOpacity;
+    updated.terminalBackgroundOpacity = terminalBackgroundOpacity;
+    updated.customAccent = customAccent.trimmed().toUpper();
+    updated.uiFontFamily = uiFontFamily;
+    updated.terminalFontFamily = fontFamily;
+    updated.terminalWordDelimiters = terminalWordDelimiters;
+    updated.terminalFontSize = fontSize;
+    updated.terminalScrollRows = terminalScrollRows;
+    updated.theme = *parsedTheme;
+    updated.backdrop = *parsedBackdrop;
+    updated.accent = *parsedAccent;
+    updated.showAllTerminalFonts = showAllFonts;
+    updated.terminalLigatures = ligatures;
+    updated.cursor = *parsedCursor;
+    updated.cursorBlink = cursorShouldBlink;
+    updated.copyOnSelect = shouldCopyOnSelect;
+    updated.keepSelectionAfterCopy = shouldKeepSelectionAfterCopy;
+    updated.confirmMultilinePaste = shouldConfirmMultilinePaste;
+    updated.terminalRightClick = *parsedRightClick;
+    updated.terminalMiddleClick = *parsedMiddleClick;
+    updated.sftpShowHiddenFiles = shouldShowHiddenSftpFiles;
+    updated.sftpConfirmDelete = shouldConfirmSftpDelete;
+    updated.closeToTray = shouldCloseToTray;
+    updated.performanceMode = shouldPreferPerformance;
+    updated.language = *parsedLanguage;
+    return persistApplicationSettings(updated);
 }
 
 bool AppController::saveLocalShellPreference(const QString &preference)

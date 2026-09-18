@@ -1106,6 +1106,8 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(
         !controller.terminalSelectionActions().constFirst().toMap().value(QStringLiteral("retainSelection")).toBool());
     QVERIFY(!controller.saveTerminalSelectionPopupSettings(true, QVariantList{}));
+    QVERIFY(controller.saveEffectsTier(QStringLiteral("reduced")));
+    QVERIFY(controller.saveTerminalTheme(QStringLiteral("nord")));
     settingsChanged.clear();
 
     QVERIFY(controller.saveApplicationSettings(
@@ -1139,6 +1141,9 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(controller.closeToTray());
     QVERIFY(controller.performanceMode());
     QCOMPARE(controller.languagePreference(), QStringLiteral("zh_CN"));
+    // Fields saved through their own invokables must survive a full save (UI V2 regression).
+    QCOMPARE(controller.effectsTier(), QStringLiteral("reduced"));
+    QCOMPARE(controller.terminalThemeId(), QStringLiteral("nord"));
     QCOMPARE(controller.aiProviderPreference(), QStringLiteral("ollama"));
     QCOMPARE(controller.aiModel(), QStringLiteral("qwen3"));
 
@@ -1186,6 +1191,8 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(reloaded.closeToTray());
     QVERIFY(reloaded.performanceMode());
     QCOMPARE(reloaded.languagePreference(), QStringLiteral("zh_CN"));
+    QCOMPARE(reloaded.effectsTier(), QStringLiteral("reduced"));
+    QCOMPARE(reloaded.terminalThemeId(), QStringLiteral("nord"));
     QCOMPARE(reloaded.aiProviderPreference(), QStringLiteral("ollama"));
     QVERIFY(!reloaded.aiWebSearchAvailable());
     QCOMPARE(reloaded.aiBaseUrl(), QStringLiteral("http://127.0.0.1:11434"));
