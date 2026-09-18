@@ -55,6 +55,11 @@ From lowest to highest:
 `controlBackground`, `controlHover`, and `controlPressed` are interaction
 surfaces. They must not be substituted with page-specific blues or greens.
 
+`tabSelectedBackground` is the opaque card behind the selected title-bar tab
+(ADR 0123). It reads lighter than `chromeBackground` in both skins (the light
+chrome tint equals `controlBackground`, so the control colour cannot mark a
+selected tab) and joins the page below the bar.
+
 Every opaque surface is an `AppSurface { elevation: n }` (ADR 0120). The
 component owns the fill, hairline (`border` below elevation 2, `borderStrong`
 from elevation 2), radius (`radiusPanel`, or `radiusControl` when `compact`)
@@ -199,10 +204,28 @@ Space activate button-like controls once and ignore key auto-repeat.
   a reset affordance that only appears while the draft differs from the
   default reported by the controller, and the highlight pulse the search uses
   to point at the row.
-- `TerminalTabAction`: bounded title-bar terminal action with session status,
-  activation, close, keyboard focus, and accessible names.
-- `CaptionButton`: native-title-bar commands while preserving Win32 hit
-  testing and Snap Layouts.
+- `TitleTab` and `TitleChromeAction`: the two title-bar treatments (ADR
+  0123). A tab (Workspace, SFTP, Settings, terminal tabs) shows an inset
+  hover pill, an opaque `tabSelectedBackground` card whose rounded top
+  corners meet the page, and the shared focus ring; a chrome action (new
+  terminal, tab overflow, pin, transfers, command palette, settings) fills
+  the bar height on hover like a caption button and keeps that fill while
+  its menu is open.
+- `TerminalTabAction`: a `TitleTab` for one terminal session with the status
+  dot, reorder drag (`DragPreview` on the overlay), close affordance, context
+  menu, keyboard focus and accessible names.
+- `CaptionButton`: native-title-bar commands drawn with the `window-*` icons
+  while preserving Win32 hit testing and Snap Layouts.
+- `SessionStatusDot`: the session-state dot (accent while running, pulsing
+  while connecting, subtle ink otherwise) shared by tabs, the tab overflow
+  menu and pane headers.
+- `TerminalPaneHeader`: the strip above a terminal pane with the status dot,
+  the pane title and the divider hairline. It exposes `paneId`, `paneTitle`
+  and `dragAreaWidth` for the main-window drag capture and moves a detached
+  window by itself.
+- `DragPreview` and `DropTargetIndicator`: the one drag ghost (elevation 2,
+  accent hairline, icon and title) and the one drop highlight (accent insert
+  bar or tinted merge area) used by tab reorder and pane drag.
 - `KeyboardAction`: mouse, keyboard, focus, accessibility, and pointer
   behavior for self-drawn actions.
 - `HostKeyPrompt`: modal host-identity security boundary.
@@ -272,6 +295,10 @@ duration to 0, so transitions become immediate without per-site guards.
   target row into view with a fixed 96 px lead and never rebuilds the page.
   Defaults shown by reset affordances come from one controller map, not from
   literals repeated in QML.
+- Title-bar tabs keep fixed widths per page and breakpoint; the selected card
+  and hover pill never change a tab's width. A pane header sits inside the
+  pane frame so the active accent border wraps it, and the viewport reserves
+  the header height rather than the header pushing the viewport.
 
 ## Performance boundary
 

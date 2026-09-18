@@ -43,7 +43,7 @@ keep `reduced` and `off` tiers for low-end machines and the Windows
 | 3 | Motion library | `Motion` singleton, shared transitions for page/tab/pane/menu/toast, respects tier and Windows animation preference | ☑ 2026-09-18 |
 | 4 | Theme library + picker | `Theme` split into palette/skin, built-in themes, JSON custom themes, Windows Terminal/Ghostty import, picker dialog with hover preview, ADR 0121 | ☑ 2026-09-18 |
 | 5 | Settings reorganisation | Grouped navigation, search, per-row reset, appearance page rebuilt around the theme strip, ADR 0122 | ☑ 2026-09-18 |
-| 6 | Chrome polish | Tab strip, caption buttons, pane headers, drag previews on the new library | ☐ |
+| 6 | Chrome polish | Tab strip, caption buttons, pane headers, drag previews on the new library, ADR 0123 | ☑ 2026-09-19 |
 
 Each chapter lands as small Conventional Commits with tests and the existing
 runtime smokes passing; a before/after screenshot pair per chapter goes under
@@ -123,3 +123,25 @@ runtime smokes passing; a before/after screenshot pair per chapter goes under
   `ztermy_qmllint`; `--ui-keyboard-smoke`, `--ui-layout-smoke` and
   `--pane-scrollbar-smoke` exit 0; code health gate PASS (baseline
   ratcheted); captures in `docs/design/ui-v2/ch5/`. ADR 0122.
+- 2026-09-19: Chapter 6 landed. `TitleTab` (inset hover pill, opaque
+  `tabSelectedBackground` card, focus ring; `iconSlot` hosts the brand mark)
+  and `TitleChromeAction` (bar-height hover, `menuOpen`, `focusTarget`)
+  replace `TitlePageAction`, `TitleTabNavigationAction` and the per-file
+  title-bar rectangles; `TerminalTabAction`, `TitleTabOverflow` and every
+  quick action in `TitleWindowActions` sit on them. `CaptionButton` draws
+  `window-minimize/maximize/restore/close` icons instead of Canvas paths.
+  `SessionStatusDot` is shared by tabs, the overflow menu and the new
+  `TerminalPaneHeader` (inside the pane frame, hairline divider,
+  `paneId`/`paneTitle`/`dragAreaWidth` for the `Main.qml` drag capture,
+  `startSystemMove` in detached windows). `DragPreview` and
+  `DropTargetIndicator` replace three drag ghosts and two drop highlights;
+  the dead QML `DropArea`/`managedPaneDrag` path is gone. The
+  `--window-appearance-smoke` now asserts the ADR 0120 contract (chrome and
+  workspace alpha follow the material, content/panel/elevated/control/field
+  stay opaque) instead of the pre-V2 whole-window alpha ladder it still
+  encoded. Evidence: ctest `app-controller`; `ztermy_qml_format_check`,
+  `ztermy_qmllint`; `--ui-keyboard-smoke`, `--ui-layout-smoke`,
+  `--title-navigation-mouse-smoke`, `--terminal-render-smoke`,
+  `--pane-scrollbar-smoke`, `--lifecycle-runtime-smoke` and
+  `--window-appearance-smoke` exit 0; code health gate PASS (baseline
+  ratcheted); captures in `docs/design/ui-v2/ch6/`. ADR 0123.
