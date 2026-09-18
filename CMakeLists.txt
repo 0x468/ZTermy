@@ -912,6 +912,7 @@ target_link_libraries(ztermy_icon_rendering
 add_library(ztermy_application_controller STATIC
     src/application/AppController.cpp
     src/application/AppControllerThemes.cpp
+    src/application/AppControllerDefaults.cpp
     src/application/AppControllerWorkspaceTransfers.cpp
     src/application/AppControllerWorkspace.cpp
     src/application/ApplicationInstance.cpp

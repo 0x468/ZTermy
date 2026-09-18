@@ -1931,6 +1931,16 @@ void AppControllerTests::persistsConnectionHistorySwitchWithoutStoppingSessions(
         QCOMPARE(state->colorSchemes, schemesBefore + (3 * tabCount));
         QVERIFY(reopened.resetApplicationSettings());
         QCOMPARE(reopened.terminalThemeId(), QStringLiteral("ztermy-dark"));
+        // Per-row reset (UI V2 chapter 5) compares drafts against these tokens.
+        const QVariantMap defaults = reopened.applicationSettingsDefaults();
+        QCOMPARE(defaults.size(), 26);
+        QCOMPARE(defaults.value(QStringLiteral("terminalTheme")).toString(), QStringLiteral("ztermy-dark"));
+        QCOMPARE(defaults.value(QStringLiteral("theme")).toString(), reopened.themePreference());
+        QCOMPARE(defaults.value(QStringLiteral("effectsTier")).toString(), QStringLiteral("full"));
+        QCOMPARE(defaults.value(QStringLiteral("terminalFontSize")).toInt(), reopened.terminalFontSize());
+        QCOMPARE(defaults.value(QStringLiteral("terminalWordDelimiters")).toString(),
+                 reopened.terminalWordDelimiters());
+        QVERIFY(defaults.value(QStringLiteral("confirmMultilinePaste")).toBool());
         QFile futureSettings(settings);
         QVERIFY(futureSettings.open(QIODevice::WriteOnly | QIODevice::Truncate));
         QVERIFY(futureSettings.write("{\"version\":9999}") > 0);

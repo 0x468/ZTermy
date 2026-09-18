@@ -432,8 +432,7 @@ public:
     Q_INVOKABLE bool setConnectionHistoryEnabled(bool enabled);
     [[nodiscard]] QString effectsTier() const;
     Q_INVOKABLE bool saveEffectsTier(const QString &tier);
-    // Terminal theme library (ADR 0121). The active theme is the preview when
-    // one is running, otherwise the persisted id resolved against the catalog.
+    // Terminal theme library (ADR 0121); the active theme is the preview if one runs.
     [[nodiscard]] QString terminalThemeId() const;
     [[nodiscard]] QVariantMap terminalThemeColors() const;
     [[nodiscard]] QVariantList terminalThemes() const;
@@ -713,6 +712,7 @@ public:
     Q_INVOKABLE bool setAiContextItemPinned(const QString &itemId, bool pinned);
     Q_INVOKABLE void resetAiContextItems();
     Q_INVOKABLE bool resetApplicationSettings();
+    [[nodiscard]] Q_INVOKABLE QVariantMap applicationSettingsDefaults() const;
     Q_INVOKABLE bool initializePortableCredentialVault(const QString &masterPassword);
     Q_INVOKABLE bool unlockPortableCredentialVault(const QString &masterPassword);
     Q_INVOKABLE bool changePortableVaultMasterPassword(const QString &masterPassword);
