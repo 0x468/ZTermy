@@ -41,7 +41,7 @@ keep `reduced` and `off` tiers for low-end machines and the Windows
 | 1 | Material scope + effects tier | Opaque content pages/popups, material limited to chrome + workspace, `effectsTier` token, ADR 0120 | ☑ 2026-09-18 |
 | 2 | Elevation library | `AppSurface` elevation 0–3 with built-in shadow, radius tokens, hard-coded radii removed | ☑ 2026-09-18 |
 | 3 | Motion library | `Motion` singleton, shared transitions for page/tab/pane/menu/toast, respects tier and Windows animation preference | ☑ 2026-09-18 |
-| 4 | Theme library + picker | `Theme` split into palette/skin, built-in themes, JSON custom themes, Windows Terminal/Ghostty import, picker dialog with hover preview, ADR 0121 | ☐ |
+| 4 | Theme library + picker | `Theme` split into palette/skin, built-in themes, JSON custom themes, Windows Terminal/Ghostty import, picker dialog with hover preview, ADR 0121 | ☑ 2026-09-18 |
 | 5 | Settings reorganisation | Grouped navigation, search, per-row reset, appearance page rebuilt around the theme strip | ☐ |
 | 6 | Chrome polish | Tab strip, caption buttons, pane headers, drag previews on the new library | ☐ |
 
@@ -92,3 +92,18 @@ runtime smokes passing; a before/after screenshot pair per chapter goes under
   are gone. Evidence: `ztermy_qml_format_check`, `ztermy_qmllint`;
   `--ui-layout-smoke` and `--pane-scrollbar-smoke` exit 0; code health gate
   PASS.
+- 2026-09-18: Chapter 4 landed. `TerminalColorScheme` + `TerminalEngine::setColorScheme`
+  (Ghostty palette/fg/bg/cursor options), sessions queue `ColorSchemeCommand`
+  and reapply on restart; `TerminalThemeCatalog` with ten built-ins, JSON
+  custom themes in `<data>/themes`, Windows Terminal and Ghostty importers;
+  settings schema 35 `terminalTheme`; `AppController` theme properties,
+  preview, import and remove (`AppControllerThemes.cpp`); `Theme` palette
+  layer bound from the controller, workspace fill and selection colors derive
+  from it, "ztermy" accent follows the theme's accent hint; `TerminalItem`
+  selection colors are properties; `ThemePickerDialog` (elevation 3, hover
+  preview, import/remove) opened from the `TerminalThemeStrip` in Settings.
+  Evidence: ctest `terminal-engine`, `terminal-theme-catalog`,
+  `application-settings`, `app-controller`; `ztermy_qml_format_check`,
+  `ztermy_qmllint`; `--ui-layout-smoke` and `--pane-scrollbar-smoke` exit 0;
+  code health gate PASS (baseline ratcheted); captures in
+  `docs/design/ui-v2/ch4/`. ADR 0121.

@@ -28,6 +28,16 @@ design-system inputs.
 `Theme.qml` is the runtime source of truth. Pages and components use semantic
 roles instead of page-owned color literals.
 
+`Theme` has two layers (ADR 0121). The **terminal palette** (`terminalPalette`,
+`terminalBackground`, `terminalForeground`, `terminalCursor`,
+`terminalSelectionBackground/Foreground`, `terminalAnsi`) is bound from
+`AppController.terminalThemeColors`, which resolves the persisted
+`terminalTheme` id (or a running preview) against `TerminalThemeCatalog`. The
+**chrome skin** (surface ladder, ink ladder, accent family, status colors) is
+derived: `workspaceBackground` tints the terminal background, the selection
+pair goes to `TerminalItem`, and the "ztermy" accent choice follows the
+theme's accent hint when it has one. Chrome never reads the ANSI table.
+
 ### Surface hierarchy
 
 From lowest to highest:
