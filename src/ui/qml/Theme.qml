@@ -20,6 +20,18 @@ QtObject {
     property string accentPreference: "ztermy"
     property color systemAccent: "#0078D4"
     property color customAccent: "#22C55E"
+    // Terminal palette layer (ADR 0121): bound from the controller's active
+    // terminal theme. The chrome skin below derives only the workspace fill,
+    // the selection pair and an optional accent hint from it.
+    property var terminalPalette: ({})
+    readonly property bool terminalPaletteReady: !!terminalPalette && typeof terminalPalette.background === "string"
+    readonly property color terminalBackground: terminalPaletteReady ? terminalPalette.background : (dark ? "#0B1017" : "#FFFFFF")
+    readonly property color terminalForeground: terminalPaletteReady ? terminalPalette.foreground : (dark ? "#F8FAFC" : "#0F172A")
+    readonly property color terminalCursor: terminalPaletteReady ? terminalPalette.cursor : terminalForeground
+    readonly property color terminalSelectionBackground: terminalPaletteReady ? terminalPalette.selectionBackground : "#2A5B91"
+    readonly property color terminalSelectionForeground: terminalPaletteReady ? terminalPalette.selectionForeground : "#FFFFFF"
+    readonly property var terminalAnsi: terminalPaletteReady ? terminalPalette.ansi : []
+    readonly property bool terminalAccentHint: terminalPaletteReady && typeof terminalPalette.accent === "string" && terminalPalette.accent.length === 7
     readonly property bool dark: highContrast ? relativeLuminance(highContrastBackground) < 0.5 : preference === "dark" || (preference === "system" && systemDark)
     readonly property bool fullEffects: effectsTier === "full"
     readonly property bool reducedEffects: effectsTier === "reduced"
@@ -46,7 +58,7 @@ QtObject {
 
     readonly property color windowBackground: highContrast ? highContrastBackground : backdropActive ? "transparent" : (dark ? "#FF0B0F14" : "#FFF8FAFC")
     readonly property color chromeBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#0F1722" : "#E2E8F0", chromeAlpha)
-    readonly property color workspaceBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#0B1017" : "#FFFFFF", workspaceAlpha)
+    readonly property color workspaceBackground: highContrast ? highContrastBackground : withAlpha(terminalBackground, workspaceAlpha)
     // Opaque skin ladder: content pages sit on contentBackground, navigation
     // and side panels on panelBackground, cards and popups above them.
     readonly property color contentBackground: highContrast ? highContrastBackground : dark ? "#0B1017" : "#FFFFFF"
@@ -75,8 +87,9 @@ QtObject {
     readonly property color textSoft: highContrast ? highContrastText : dark ? "#CBD5E1" : "#334155"
     readonly property color textSubtle: highContrast ? highContrastText : dark ? "#64748B" : "#64748B"
 
-    readonly property bool ztermyAccent: accentPreference === "ztermy"
-    readonly property color accentBase: accentPreference === "system" ? systemAccent : customAccent
+    // "ztermy" follows the terminal theme's accent hint when it has one.
+    readonly property bool ztermyAccent: accentPreference === "ztermy" && !terminalAccentHint
+    readonly property color accentBase: accentPreference === "system" ? systemAccent : accentPreference === "custom" ? customAccent : terminalPalette.accent
     readonly property color accent: highContrast ? highContrastHighlight : ztermyAccent ? (dark ? "#A78BFA" : "#7C3AED") : accentBase
     readonly property color accentText: highContrast ? highContrastHighlightText : ztermyAccent ? (dark ? "#160D2B" : "#FFFFFF") : contrastText(accentBase)
     readonly property color accentHover: ztermyAccent ? (dark ? "#C4B5FD" : "#6D28D9") : mixColor(accentBase, accentText, 0.14)

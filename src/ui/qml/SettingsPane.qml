@@ -1254,40 +1254,15 @@ Rectangle {
                         }
                     }
 
-                    Item {
-                        Layout.columnSpan: appearanceLayout.columns
+                    Label {
+                        text: qsTr("Terminal theme")
+                        color: Theme.text
+                    }
+                    TerminalThemeStrip {
+                        objectName: "settingsTerminalTheme"
                         Layout.fillWidth: true
-                        implicitHeight: 52
-
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: Theme.radiusControl
-                            color: {
-                                const alpha = pane.adjustableBackdrop ? opacitySlider.value : pane.solidBackdrop ? 1.0 : backdropBox.currentIndex === 2 ? 0.60 : 0.72;
-                                return pane.draftDark ? Qt.rgba(0.067, 0.094, 0.153, alpha) : Qt.rgba(1.0, 1.0, 1.0, alpha);
-                            }
-                            border.color: pane.draftDark ? "#334155" : "#94A3B8"
-
-                            RowLayout {
-                                anchors.centerIn: parent
-                                spacing: 8
-
-                                Rectangle {
-                                    Layout.alignment: Qt.AlignVCenter
-                                    Layout.preferredWidth: 8
-                                    Layout.preferredHeight: 8
-                                    radius: height / 2
-                                    color: Theme.accent
-                                }
-                                Text {
-                                    Layout.alignment: Qt.AlignVCenter
-                                    text: pane.adjustableBackdrop ? qsTr("%1 · %2 · %3 · %4%").arg(themeBox.effectiveDisplayText).arg(accentBox.effectiveDisplayText).arg(backdropBox.effectiveDisplayText).arg(Math.round(opacitySlider.value * 100)) : pane.solidBackdrop ? qsTr("%1 · %2 · %3 · opaque").arg(themeBox.effectiveDisplayText).arg(accentBox.effectiveDisplayText).arg(backdropBox.effectiveDisplayText) : qsTr("%1 · %2 · %3 · system controlled").arg(themeBox.effectiveDisplayText).arg(accentBox.effectiveDisplayText).arg(backdropBox.effectiveDisplayText)
-                                    color: pane.draftDark ? "#F8FAFC" : "#0F172A"
-                                    font.family: Theme.uiFont
-                                    font.pixelSize: Theme.textBody
-                                }
-                            }
-                        }
+                        controller: pane.controller
+                        onActivated: themePicker.openWithCurrent()
                     }
                 }
             }
@@ -3521,6 +3496,13 @@ Rectangle {
         acceptText: qsTr("Migrate and remove")
         destructive: pane.credentialStorageToken() === "session"
         onAccepted: pane.performCredentialMigration()
+    }
+
+    ThemePickerDialog {
+        id: themePicker
+
+        controller: pane.controller
+        onThemeApplied: pane.presentStatus(qsTr("Terminal theme applied."), false, true)
     }
 
     FileDialog {

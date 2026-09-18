@@ -732,6 +732,12 @@ Rectangle {
 
     Binding {
         target: Theme
+        property: "terminalPalette"
+        value: root.controller.terminalThemeColors
+    }
+
+    Binding {
+        target: Theme
         property: "systemAccent"
         value: root.windowChrome.systemAccentColor
     }

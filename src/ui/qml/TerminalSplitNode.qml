@@ -401,6 +401,8 @@ Item {
                 cursorPreference: leaf.tab.sessionCursor && leaf.tab.sessionCursor.length > 0 ? leaf.tab.sessionCursor : root.defaultCursor
                 foregroundOverride: leaf.tab.sessionForeground || ""
                 backgroundOverride: leaf.tab.sessionBackground || ""
+                selectionBackground: Theme.terminalSelectionBackground
+                selectionForeground: Theme.terminalSelectionForeground
                 cursorBlink: root.cursorBlink
                 copyOnSelect: root.copyOnSelect
                 keepSelectionAfterCopy: root.keepSelectionAfterCopy

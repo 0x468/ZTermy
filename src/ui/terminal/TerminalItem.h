@@ -89,6 +89,10 @@ class TerminalItem : public QQuickItem
         QColor foregroundOverride READ foregroundOverride WRITE setForegroundOverride NOTIFY paletteOverrideChanged)
     Q_PROPERTY(
         QColor backgroundOverride READ backgroundOverride WRITE setBackgroundOverride NOTIFY paletteOverrideChanged)
+    Q_PROPERTY(
+        QColor selectionBackground READ selectionBackground WRITE setSelectionBackground NOTIFY paletteOverrideChanged)
+    Q_PROPERTY(
+        QColor selectionForeground READ selectionForeground WRITE setSelectionForeground NOTIFY paletteOverrideChanged)
 
 public:
     explicit TerminalItem(QQuickItem *parent = nullptr);
@@ -130,6 +134,8 @@ public:
     [[nodiscard]] QVariantList keywordHighlightRules() const;
     [[nodiscard]] QColor foregroundOverride() const;
     [[nodiscard]] QColor backgroundOverride() const;
+    [[nodiscard]] QColor selectionBackground() const;
+    [[nodiscard]] QColor selectionForeground() const;
     void setPerformanceMetricsEnabled(bool enabled) noexcept;
     void resetPerformanceMetrics() noexcept;
     [[nodiscard]] TerminalRenderMetricsSnapshot performanceMetrics() const noexcept;
@@ -160,6 +166,8 @@ public slots:
     void setKeywordHighlightRules(const QVariantList &rules);
     void setForegroundOverride(const QColor &color);
     void setBackgroundOverride(const QColor &color);
+    void setSelectionBackground(const QColor &color);
+    void setSelectionForeground(const QColor &color);
     Q_INVOKABLE void resolveMultilinePaste(bool accepted);
     Q_INVOKABLE void scrollToFraction(qreal fraction);
     Q_INVOKABLE void scrollFractionDelta(qreal from, qreal to);
@@ -358,6 +366,8 @@ private:
     QColor m_searchCurrentForeground = QColor(15, 23, 42);
     QColor m_foregroundOverride;
     QColor m_backgroundOverride;
+    QColor m_selectionBackground = QColor(42, 91, 145);
+    QColor m_selectionForeground = QColor(255, 255, 255);
     TerminalRenderMetrics m_renderMetrics;
     int m_wheelRemainder = 0;
     int m_scrollRowsPerWheel = 3;

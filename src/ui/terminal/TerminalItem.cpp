@@ -423,6 +423,16 @@ QColor TerminalItem::backgroundOverride() const
     return m_backgroundOverride;
 }
 
+QColor TerminalItem::selectionBackground() const
+{
+    return m_selectionBackground;
+}
+
+QColor TerminalItem::selectionForeground() const
+{
+    return m_selectionForeground;
+}
+
 void TerminalItem::setPerformanceMetricsEnabled(const bool enabled) noexcept
 {
     m_renderMetrics.setEnabled(enabled);
@@ -855,6 +865,28 @@ void TerminalItem::setBackgroundOverride(const QColor &value)
     emit paletteOverrideChanged();
 }
 
+void TerminalItem::setSelectionBackground(const QColor &value)
+{
+    if (m_selectionBackground == value)
+    {
+        return;
+    }
+    m_selectionBackground = value;
+    invalidateRenderer(true);
+    emit paletteOverrideChanged();
+}
+
+void TerminalItem::setSelectionForeground(const QColor &value)
+{
+    if (m_selectionForeground == value)
+    {
+        return;
+    }
+    m_selectionForeground = value;
+    invalidateRenderer(true);
+    emit paletteOverrideChanged();
+}
+
 void TerminalItem::resolveMultilinePaste(const bool accepted)
 {
     QByteArray pending = std::move(m_pendingMultilinePaste);
@@ -1121,8 +1153,8 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 
     const terminal::TerminalColor fallbackForeground{.red = 248, .green = 250, .blue = 252};
     const terminal::TerminalColor fallbackBackground{.red = 11, .green = 16, .blue = 23};
-    const QColor selectionBackground(42, 91, 145);
-    const QColor selectionForeground(255, 255, 255);
+    const QColor &selectionBackground = m_selectionBackground;
+    const QColor &selectionForeground = m_selectionForeground;
     const terminal::TerminalColor defaultForeground = m_snapshot ? m_snapshot->defaultForeground : fallbackForeground;
     const terminal::TerminalColor defaultBackground = m_snapshot ? m_snapshot->defaultBackground : fallbackBackground;
 
