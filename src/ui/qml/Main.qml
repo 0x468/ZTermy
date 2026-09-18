@@ -2223,7 +2223,6 @@ Rectangle {
                             visible: root.activeTerminalTab !== null && !!root.visibleTerminalLayoutRoot.kind
                             controller: root.controller
                             node: root.visibleTerminalLayoutRoot
-                            managedPaneDrag: true
                             zoomedPaneId: root.zoomedTerminalPaneId
                             paneCount: root.mainWorkspace.paneCount || 1
                             headersVisible: root.paneHeadersVisible
@@ -2876,37 +2875,17 @@ Rectangle {
         onActivated: paneDragCapture.cancelDrag()
     }
 
-    AppSurface {
+    DragPreview {
         z: 91
         visible: paneDragCapture.dragging
         x: paneDragCapture.pointerPoint.x + 16
         y: paneDragCapture.pointerPoint.y + 18
-        width: 220
-        height: 32
-        elevation: 2
-        compact: true
-        border.color: Theme.accent
-        Text {
-            anchors.fill: parent
-            anchors.margins: 8
-            text: paneDragCapture.paneTitle
-            color: Theme.text
-            font.family: Theme.uiFont
-            elide: Text.ElideRight
-        }
+        title: paneDragCapture.paneTitle
     }
 
-    Rectangle {
+    DropTargetIndicator {
         z: 90
-        visible: !!terminalWindows.dropTarget.mode
-        x: terminalWindows.dropTarget.x || 0
-        y: terminalWindows.dropTarget.y || 0
-        width: terminalWindows.dropTarget.width || 0
-        height: terminalWindows.dropTarget.height || 0
-        color: terminalWindows.dropTarget.mode === "insert" ? Theme.accent : Theme.withAlpha(Theme.accent, 0.18)
-        border.color: Theme.accent
-        border.width: 2
-        radius: Theme.radiusSmall
+        target: terminalWindows.dropTarget
     }
 
     HostKeyPrompt {

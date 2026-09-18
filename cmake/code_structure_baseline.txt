@@ -13,6 +13,6 @@ src/ui/qml/HostConnectionPane.qml|2901
 src/ui/qml/Main.qml|2923
 src/ui/qml/SettingsPane.qml|3454
 src/ui/qml/SftpBrowser.qml|1160
-src/ui/qml/TerminalSplitNode.qml|1462
+src/ui/qml/TerminalSplitNode.qml|1335
 src/ui/qml/TerminalWorkbench.qml|1016
 src/ui/terminal/TerminalItem.cpp|2813

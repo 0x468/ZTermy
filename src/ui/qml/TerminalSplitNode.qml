@@ -26,7 +26,6 @@ Item {
     property string defaultCursor: "terminal"
     property string zoomedPaneId: ""
     property bool detachedPane: false
-    property bool managedPaneDrag: false
     property int paneCount: 1
     property bool headersVisible: false
     // Dynamic self-loading is required because QML rejects static recursive type instantiation.
@@ -535,156 +534,32 @@ Item {
                 }
             }
 
-            Rectangle {
+            TerminalPaneHeader {
                 id: paneHeader
-                objectName: "terminalPaneHeader-" + paneId
 
-                property string paneId: leaf.node.id || ""
-                property bool dropCompleted: false
-                readonly property string paneTitle: leaf.tab.title || leaf.tab.identity || qsTr("Terminal pane")
-                readonly property real dragAreaWidth: width - (paneActions.visible ? paneActions.implicitWidth + 12 : 0)
+                // Sits inside the pane frame so the accent border wraps it.
+                readonly property int inset: leaf.node.active ? 2 : 1
 
+                paneId: leaf.node.id || ""
+                paneTitle: leaf.tab.title || leaf.tab.identity || qsTr("Terminal pane")
+                active: !!leaf.node.active
+                detached: root.detachedPane
+                running: !!leaf.tab.running
+                connecting: !!leaf.tab.connecting || !!leaf.tab.reconnecting
+                actionsWidth: paneActions.visible ? paneActions.implicitWidth + 12 : 0
+                cornerRadius: Theme.radiusControl - inset
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                height: leaf.paneHeaderVisible ? 32 : 0
+                anchors.leftMargin: inset
+                anchors.rightMargin: inset
+                anchors.topMargin: inset
+                height: leaf.paneHeaderVisible ? 32 - inset : 0
                 visible: height > 0
-                color: leaf.node.active ? Theme.controlBackground : Theme.chromeBackground
-                border.color: paneDetachDrag.active ? Theme.accent : Theme.border
                 z: 12
-                TapHandler {
-                    acceptedButtons: Qt.LeftButton
-                    onTapped: {
-                        if (root.controller.activateTerminalPane(leaf.node.id))
-                            viewport.forceActiveFocus();
-                    }
-                }
-                Item {
-                    id: paneDragProxy
-                    parent: Overlay.overlay
-                    readonly property point pointerPosition: paneHeader.mapToItem(parent, paneDetachDrag.centroid.position.x, paneDetachDrag.centroid.position.y)
-                    x: pointerPosition.x
-                    y: pointerPosition.y
-                    width: 1
-                    height: 1
-                    Drag.source: paneHeader
-                    Drag.keys: ["ztermy-terminal-pane"]
-                    AppSurface {
-                        x: 16
-                        y: 18
-                        width: 220
-                        height: 32
-                        elevation: 2
-                        compact: true
-                        border.color: Theme.accent
-                        visible: paneDetachDrag.active && !paneHeader.dropCompleted && !root.detachedPane
-                        Text {
-                            anchors.fill: parent
-                            anchors.margins: 8
-                            text: leaf.tab.title || qsTr("Terminal pane")
-                            elide: Text.ElideRight
-                            color: Theme.text
-                            font.family: Theme.uiFont
-                        }
-                    }
-                }
-
-                Text {
-                    anchors.left: parent.left
-                    anchors.leftMargin: 10
-                    anchors.right: parent.right
-                    anchors.rightMargin: paneActions.visible ? paneActions.implicitWidth + 12 : 8
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: leaf.tab.title || leaf.tab.identity || qsTr("Terminal pane")
-                    color: leaf.node.active ? Theme.text : Theme.textMuted
-                    elide: Text.ElideRight
-                    font.family: Theme.uiFont
-                    font.pixelSize: Theme.textLabel
-                    font.weight: leaf.node.active ? Font.DemiBold : Font.Normal
-                }
-
-                DragHandler {
-                    id: paneDetachDrag
-
-                    target: null
-                    acceptedButtons: Qt.LeftButton
-                    dragThreshold: 10
-                    enabled: !root.managedPaneDrag
-                    onActiveChanged: {
-                        if (active) {
-                            if (paneActions.visible && centroid.pressPosition.x > paneHeader.width - paneActions.implicitWidth - 12) {
-                                paneHeader.dropCompleted = true;
-                                return;
-                            }
-                            paneHeader.dropCompleted = false;
-                            if (root.detachedPane) {
-                                paneHeader.dropCompleted = true;
-                                root.Window.window.startSystemMove();
-                                return;
-                            }
-                            paneDragProxy.Drag.active = true;
-                        } else {
-                            const point = paneDragProxy.mapToItem(null, 0, 0);
-                            paneDragProxy.Drag.drop();
-                            const window = root.Window.window;
-                            if (!paneHeader.dropCompleted && window && (point.x < 0 || point.y < 0 || point.x > window.width || point.y > window.height))
-                                root.detachPaneRequested(leaf.node.id);
-                        }
-                    }
-                    onCanceled: paneDragProxy.Drag.cancel()
-                }
-
-                Shortcut {
-                    sequence: "Escape"
-                    enabled: paneDetachDrag.active
-                    onActivated: {
-                        paneHeader.dropCompleted = true;
-                        paneDragProxy.Drag.cancel();
-                    }
-                }
-            }
-
-            DropArea {
-                id: paneDropArea
-
-                anchors.fill: parent
-                keys: ["ztermy-terminal-pane"]
-                enabled: !root.detachedPane && !root.managedPaneDrag
-                z: 11
-                onEntered: drag => {
-                    // qmllint disable missing-property
-                    drag.accepted = !!drag.source && drag.source["paneId"] !== leaf.node.id;
-                    // qmllint enable missing-property
-                }
-                onDropped: drop => {
-                    // qmllint disable missing-property
-                    if (!drop.source || drop.source["dropCompleted"] || drop.source["paneId"] === leaf.node.id)
-                        return;
-                    const horizontalEdge = drop.x < width * 0.25 || drop.x > width * 0.75;
-                    const center = !horizontalEdge && drop.y >= height * 0.25 && drop.y <= height * 0.75;
-                    const orientation = center ? "swap" : horizontalEdge ? "horizontal" : "vertical";
-                    const placeAfter = horizontalEdge ? drop.x > width / 2 : drop.y > height / 2;
-                    const sourceId = drop.source["paneId"];
-                    const targetId = leaf.node.id;
-                    drop.source["dropCompleted"] = true;
-                    drop.acceptProposedAction();
-                    Qt.callLater(() => {
-                        root.controller.moveTerminalPane(sourceId, targetId, orientation, placeAfter);
-                    });
-                    // qmllint enable missing-property
-                }
-
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.leftMargin: paneDropArea.drag.x < paneDropArea.width * 0.25 ? 0 : paneDropArea.drag.x > paneDropArea.width * 0.75 ? paneDropArea.width / 2 : 0
-                    anchors.rightMargin: paneDropArea.drag.x < paneDropArea.width * 0.25 ? paneDropArea.width / 2 : 0
-                    anchors.topMargin: paneDropArea.drag.x >= paneDropArea.width * 0.25 && paneDropArea.drag.x <= paneDropArea.width * 0.75 && paneDropArea.drag.y > paneDropArea.height / 2 ? paneDropArea.height / 2 : 0
-                    anchors.bottomMargin: paneDropArea.drag.x >= paneDropArea.width * 0.25 && paneDropArea.drag.x <= paneDropArea.width * 0.75 && paneDropArea.drag.y <= paneDropArea.height / 2 ? paneDropArea.height / 2 : 0
-                    visible: paneDropArea.containsDrag
-                    color: Theme.controlHover
-                    border.color: Theme.accent
-                    border.width: 2
-                    opacity: 0.72
+                onActivated: {
+                    if (root.controller.activateTerminalPane(leaf.node.id))
+                        viewport.forceActiveFocus();
                 }
             }
 
@@ -1156,7 +1031,6 @@ Item {
                         item.defaultCursor = root.defaultCursor;
                         item.zoomedPaneId = root.zoomedPaneId;
                         item.detachedPane = root.detachedPane;
-                        item.managedPaneDrag = Qt.binding(() => root.managedPaneDrag);
                         item.paneCount = Qt.binding(() => root.paneCount);
                         item.headersVisible = Qt.binding(() => root.headersVisible);
                     }
@@ -1326,7 +1200,6 @@ Item {
                         item.defaultCursor = root.defaultCursor;
                         item.zoomedPaneId = root.zoomedPaneId;
                         item.detachedPane = root.detachedPane;
-                        item.managedPaneDrag = Qt.binding(() => root.managedPaneDrag);
                         item.paneCount = Qt.binding(() => root.paneCount);
                         item.headersVisible = Qt.binding(() => root.headersVisible);
                     }
