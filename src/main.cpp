@@ -384,6 +384,47 @@ struct ResizeHitRuntimeCase
     return windowRemainsOpaque && darkModeMatches && cornerPreferenceMatches && backdropMatches;
 }
 
+// ADR 0120: the native material shows through the chrome and the terminal
+// workspace only; content pages, panels and controls stay opaque under every
+// backdrop, so lowering the backdrop opacity can never wash out a page.
+struct SurfaceAlphas
+{
+    int root = -1;
+    int chrome = -1;
+    int workspace = -1;
+    int content = -1;
+    int panel = -1;
+    int elevated = -1;
+    int control = -1;
+    int field = -1;
+
+    [[nodiscard]] bool contentOpaque() const
+    {
+        return content == 255 && panel == 255 && elevated == 255 && control == 255 && field == 255;
+    }
+
+    [[nodiscard]] bool materialTint(const int chromeAlpha, const int workspaceAlpha) const
+    {
+        return root == 0 && chrome == chromeAlpha && workspace == workspaceAlpha && contentOpaque();
+    }
+};
+
+[[nodiscard]] SurfaceAlphas sampleSurfaceAlphas(const ztermy::NativeWindow &window, const char *state)
+{
+    const QQuickItem *rootObject = window.rootObject();
+    const auto alpha = [rootObject](const char *propertyName) {
+        return rootObject == nullptr ? -1 : rootObject->property(propertyName).value<QColor>().alpha();
+    };
+    const SurfaceAlphas alphas{alpha("backgroundColor"), alpha("chromeColor"), alpha("workspaceColor"),
+                               alpha("contentColor"),    alpha("panelColor"),  alpha("elevatedColor"),
+                               alpha("controlColor"),    alpha("fieldColor")};
+    qCInfo(applicationLog) << "Window appearance surface alphas" << state << "root=" << alphas.root
+                           << "chrome=" << alphas.chrome << "workspace=" << alphas.workspace
+                           << "content=" << alphas.content << "panel=" << alphas.panel << "elevated=" << alphas.elevated
+                           << "control=" << alphas.control << "field=" << alphas.field;
+    return alphas;
+}
+
 [[nodiscard]] bool runWindowAppearanceRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller)
 {
     window.resize(QSize{1120, 800});
@@ -397,6 +438,10 @@ struct ResizeHitRuntimeCase
     constexpr int micaBackdrop = 2;
     constexpr int acrylicBackdrop = 3;
     constexpr int micaAltBackdrop = 4;
+    // Alpha exactly as QML's Qt.rgba stores a slider value.
+    const auto alphaOf = [](const qreal alpha) {
+        return QColor::fromRgbF(0.0, 0.0, 0.0, alpha).alpha();
+    };
     const auto saveAppearance = [&controller](const QString &theme, const qreal backdropOpacity,
                                               const QString &backdrop) {
         return controller.saveApplicationSettings(
@@ -407,128 +452,78 @@ struct ResizeHitRuntimeCase
             controller.keepSelectionAfterCopy(), controller.confirmMultilinePaste(), controller.languagePreference(),
             controller.sftpShowHiddenFiles(), controller.sftpConfirmDelete());
     };
-    const auto surfaceAlpha = [&window](const char *propertyName) {
-        QQuickItem *rootObject = window.rootObject();
-        return rootObject == nullptr ? -1 : rootObject->property(propertyName).value<QColor>().alpha();
+    // Saves the appearance, lets the window apply it and verifies the DWM state.
+    const auto apply = [&window, &saveAppearance](const QString &theme, const qreal backdropOpacity,
+                                                  const QString &backdrop, const int expectedBackdrop) {
+        const bool saved = saveAppearance(theme, backdropOpacity, backdrop);
+        processWindowEventsFor(std::chrono::milliseconds{150});
+        return saved && verifyWindowAppearance(window, backdrop, theme == QStringLiteral("dark"), expectedBackdrop);
     };
-    const bool darkAcrylicSaved = saveAppearance(QStringLiteral("dark"), 0.55, QStringLiteral("acrylic"));
-    processWindowEventsFor(std::chrono::milliseconds{150});
-    const bool darkAcrylic = verifyWindowAppearance(window, QStringLiteral("acrylic"), true, acrylicBackdrop);
-    const int acrylicRootAlpha = surfaceAlpha("backgroundColor");
-    const int acrylicContentAlpha = surfaceAlpha("contentColor");
-    const int acrylicChromeAlpha = surfaceAlpha("chromeColor");
-    const int acrylicElevatedAlpha = surfaceAlpha("elevatedColor");
-    const int acrylicControlAlpha = surfaceAlpha("controlColor");
-    const int acrylicFieldAlpha = surfaceAlpha("fieldColor");
-    const bool acrylicSurfaceContract = acrylicRootAlpha == 0 && acrylicContentAlpha > 0 && acrylicContentAlpha < 255
-                                        && acrylicChromeAlpha == acrylicContentAlpha
-                                        && acrylicElevatedAlpha > acrylicContentAlpha
-                                        && acrylicControlAlpha > acrylicElevatedAlpha
-                                        && acrylicFieldAlpha > acrylicControlAlpha && acrylicFieldAlpha < 255;
+
+    const bool acrylicApplied = apply(QStringLiteral("dark"), 0.55, QStringLiteral("acrylic"), acrylicBackdrop);
+    const SurfaceAlphas acrylic = sampleSurfaceAlphas(window, "dark acrylic 0.55");
+    const bool acrylicContract = acrylic.materialTint(alphaOf(0.55), alphaOf(0.55));
     const bool invalidBackdropRejected =
         !window.applyAppearance(QStringLiteral("invalid"), false) && qAbs(window.opacity() - 1.0) < 0.001;
     const bool invalidBackdropOpacityRejected =
         !saveAppearance(QStringLiteral("dark"), -0.1, QStringLiteral("acrylic"));
 
-    const bool transparentSaved = saveAppearance(QStringLiteral("dark"), 0.55, QStringLiteral("transparent"));
-    processWindowEventsFor(std::chrono::milliseconds{150});
-    const bool transparent = verifyWindowAppearance(window, QStringLiteral("transparent"), true, transparentBackdrop);
-    const int transparentContentAlpha = surfaceAlpha("contentColor");
-    const bool transparentSurfaceContract = surfaceAlpha("backgroundColor") == 0 && transparentContentAlpha > 0
-                                            && transparentContentAlpha < 255
-                                            && surfaceAlpha("chromeColor") == transparentContentAlpha
-                                            && surfaceAlpha("panelColor") == transparentContentAlpha
-                                            && surfaceAlpha("workspaceColor") == transparentContentAlpha;
-
-    const bool transparentOpaqueSaved = saveAppearance(QStringLiteral("dark"), 1.0, QStringLiteral("transparent"));
-    processWindowEventsFor(std::chrono::milliseconds{150});
-    const bool transparentOpaque =
-        verifyWindowAppearance(window, QStringLiteral("transparent"), true, transparentBackdrop);
-    const bool transparentOpaqueSurfaceContract =
-        surfaceAlpha("backgroundColor") == 0 && surfaceAlpha("contentColor") == 255
-        && surfaceAlpha("chromeColor") == 255 && surfaceAlpha("panelColor") == 255
-        && surfaceAlpha("workspaceColor") == 255 && surfaceAlpha("elevatedColor") == 255
-        && surfaceAlpha("controlColor") == 255 && surfaceAlpha("fieldColor") == 255;
-
-    const bool transparentClearSaved = saveAppearance(QStringLiteral("dark"), 0.0, QStringLiteral("transparent"));
-    processWindowEventsFor(std::chrono::milliseconds{150});
-    const bool transparentClear =
-        verifyWindowAppearance(window, QStringLiteral("transparent"), true, transparentBackdrop);
-    const int transparentClearElevatedAlpha = surfaceAlpha("elevatedColor");
-    const int transparentClearControlAlpha = surfaceAlpha("controlColor");
-    const int transparentClearFieldAlpha = surfaceAlpha("fieldColor");
-    const bool transparentClearSurfaceContract =
-        surfaceAlpha("backgroundColor") == 0 && surfaceAlpha("contentColor") == 0 && surfaceAlpha("chromeColor") == 0
-        && surfaceAlpha("panelColor") == 0 && surfaceAlpha("workspaceColor") == 0 && transparentClearElevatedAlpha > 0
-        && transparentClearControlAlpha > transparentClearElevatedAlpha
-        && transparentClearFieldAlpha > transparentClearControlAlpha && transparentClearFieldAlpha < 255;
-
-    const bool lightMicaSaved = saveAppearance(QStringLiteral("light"), 0.1, QStringLiteral("mica"));
-    processWindowEventsFor(std::chrono::milliseconds{150});
-    const bool lightMica = verifyWindowAppearance(window, QStringLiteral("mica"), false, micaBackdrop);
-    const int micaRootAlpha = surfaceAlpha("backgroundColor");
-    const int micaContentAlpha = surfaceAlpha("contentColor");
-    const int micaChromeAlpha = surfaceAlpha("chromeColor");
-    const bool micaSurfaceContract =
-        micaRootAlpha == 0 && micaContentAlpha > 0 && micaContentAlpha < 255 && micaChromeAlpha > 0;
-
-    const bool darkMicaAltSaved = saveAppearance(QStringLiteral("dark"), 0.9, QStringLiteral("micaAlt"));
-    processWindowEventsFor(std::chrono::milliseconds{150});
-    const bool darkMicaAlt = verifyWindowAppearance(window, QStringLiteral("micaAlt"), true, micaAltBackdrop);
-    const int micaAltContentAlpha = surfaceAlpha("contentColor");
-    const int micaAltChromeAlpha = surfaceAlpha("chromeColor");
-    const bool micaAltSurfaceContract = surfaceAlpha("backgroundColor") == 0 && micaAltContentAlpha > micaContentAlpha
-                                        && micaAltChromeAlpha > micaChromeAlpha;
+    const bool transparentApplied =
+        apply(QStringLiteral("dark"), 0.55, QStringLiteral("transparent"), transparentBackdrop);
+    const SurfaceAlphas transparent = sampleSurfaceAlphas(window, "dark transparent 0.55");
+    const bool transparentContract = transparent.materialTint(alphaOf(0.55), alphaOf(0.55));
     const bool adjustableSurfacesConsistent =
-        acrylicContentAlpha == transparentContentAlpha && acrylicChromeAlpha == transparentContentAlpha;
+        acrylic.chrome == transparent.chrome && acrylic.workspace == transparent.workspace;
 
-    const bool solidSaved = saveAppearance(QStringLiteral("dark"), 1.0, QStringLiteral("solid"));
-    processWindowEventsFor(std::chrono::milliseconds{150});
-    const bool solid = verifyWindowAppearance(window, QStringLiteral("solid"), true, transparentBackdrop);
-    const bool solidSurfaceContract = window.color().alpha() == 255 && surfaceAlpha("backgroundColor") == 255
-                                      && surfaceAlpha("contentColor") == 255 && surfaceAlpha("chromeColor") == 255
-                                      && surfaceAlpha("panelColor") == 255 && surfaceAlpha("workspaceColor") == 255;
+    const bool transparentOpaqueApplied =
+        apply(QStringLiteral("dark"), 1.0, QStringLiteral("transparent"), transparentBackdrop);
+    const bool transparentOpaqueContract = sampleSurfaceAlphas(window, "dark transparent 1.0").materialTint(255, 255);
 
-    const bool restoredSaved = saveAppearance(QStringLiteral("dark"), 1.0, QStringLiteral("acrylic"));
-    processWindowEventsFor(std::chrono::milliseconds{150});
-    const bool restored = verifyWindowAppearance(window, QStringLiteral("acrylic"), true, acrylicBackdrop);
+    const bool transparentClearApplied =
+        apply(QStringLiteral("dark"), 0.0, QStringLiteral("transparent"), transparentBackdrop);
+    const bool transparentClearContract = sampleSurfaceAlphas(window, "dark transparent 0.0").materialTint(0, 0);
 
-    qCInfo(applicationLog)
-        << "Window appearance runtime summary"
-        << "defaultAlphaBuffer=" << defaultAlphaBuffer << "surfaceAlphaBits=" << surfaceAlphaBits
-        << "transparentClearColor=" << (window.color().alpha() == 0)
-        << "translucentSurfaceCapable=" << translucentSurfaceCapable << "darkAcrylicSaved=" << darkAcrylicSaved
-        << "darkAcrylic=" << darkAcrylic << "acrylicRootAlpha=" << acrylicRootAlpha
-        << "acrylicContentAlpha=" << acrylicContentAlpha << "acrylicChromeAlpha=" << acrylicChromeAlpha
-        << "acrylicElevatedAlpha=" << acrylicElevatedAlpha << "acrylicControlAlpha=" << acrylicControlAlpha
-        << "acrylicFieldAlpha=" << acrylicFieldAlpha << "acrylicSurfaceContract=" << acrylicSurfaceContract
-        << "invalidBackdropRejected=" << invalidBackdropRejected
-        << "invalidBackdropOpacityRejected=" << invalidBackdropOpacityRejected
-        << "transparentSaved=" << transparentSaved << "transparent=" << transparent
-        << "transparentContentAlpha=" << transparentContentAlpha
-        << "transparentSurfaceContract=" << transparentSurfaceContract
-        << "transparentOpaqueSaved=" << transparentOpaqueSaved << "transparentOpaque=" << transparentOpaque
-        << "transparentOpaqueSurfaceContract=" << transparentOpaqueSurfaceContract
-        << "transparentClearSaved=" << transparentClearSaved << "transparentClear=" << transparentClear
-        << "transparentClearElevatedAlpha=" << transparentClearElevatedAlpha
-        << "transparentClearControlAlpha=" << transparentClearControlAlpha
-        << "transparentClearFieldAlpha=" << transparentClearFieldAlpha
-        << "transparentClearSurfaceContract=" << transparentClearSurfaceContract << "lightMica=" << lightMica
-        << "lightMicaSaved=" << lightMicaSaved << "micaRootAlpha=" << micaRootAlpha
-        << "micaContentAlpha=" << micaContentAlpha << "micaChromeAlpha=" << micaChromeAlpha
-        << "micaSurfaceContract=" << micaSurfaceContract << "darkMicaAltSaved=" << darkMicaAltSaved
-        << "darkMicaAlt=" << darkMicaAlt << "micaAltContentAlpha=" << micaAltContentAlpha
-        << "micaAltChromeAlpha=" << micaAltChromeAlpha << "micaAltSurfaceContract=" << micaAltSurfaceContract
-        << "adjustableSurfacesConsistent=" << adjustableSurfacesConsistent << "solidSaved=" << solidSaved
-        << "solid=" << solid << "solidSurfaceContract=" << solidSurfaceContract << "restoredSaved=" << restoredSaved
-        << "restored=" << restored;
-    return translucentSurfaceCapable && darkAcrylicSaved && darkAcrylic && acrylicSurfaceContract
-           && invalidBackdropRejected && invalidBackdropOpacityRejected && transparentSaved && transparent
-           && transparentSurfaceContract && transparentOpaqueSaved && transparentOpaque
-           && transparentOpaqueSurfaceContract && transparentClearSaved && transparentClear
-           && transparentClearSurfaceContract && lightMicaSaved && lightMica && micaSurfaceContract && darkMicaAltSaved
-           && darkMicaAlt && micaAltSurfaceContract && adjustableSurfacesConsistent && solidSaved && solid
-           && solidSurfaceContract && restoredSaved && restored;
+    // Mica keeps a fixed tint: the slider value must not leak into the chrome,
+    // and the workspace stays denser than the chrome.
+    const bool micaApplied = apply(QStringLiteral("light"), 0.1, QStringLiteral("mica"), micaBackdrop);
+    const SurfaceAlphas mica = sampleSurfaceAlphas(window, "light mica 0.1");
+    const bool micaContract = mica.root == 0 && mica.chrome > alphaOf(0.1) && mica.chrome < 255
+                              && mica.workspace > mica.chrome && mica.workspace < 255 && mica.contentOpaque();
+
+    const bool micaAltApplied = apply(QStringLiteral("dark"), 0.9, QStringLiteral("micaAlt"), micaAltBackdrop);
+    const SurfaceAlphas micaAlt = sampleSurfaceAlphas(window, "dark micaAlt 0.9");
+    const bool micaAltContract = micaAlt.root == 0 && micaAlt.chrome > mica.chrome && micaAlt.chrome < 255
+                                 && micaAlt.workspace > mica.workspace && micaAlt.workspace < 255
+                                 && micaAlt.contentOpaque();
+
+    const bool solidApplied = apply(QStringLiteral("dark"), 1.0, QStringLiteral("solid"), transparentBackdrop);
+    const SurfaceAlphas solid = sampleSurfaceAlphas(window, "dark solid");
+    const bool solidContract = window.color().alpha() == 255 && solid.root == 255 && solid.chrome == 255
+                               && solid.workspace == 255 && solid.contentOpaque();
+
+    const bool restored = apply(QStringLiteral("dark"), 1.0, QStringLiteral("acrylic"), acrylicBackdrop);
+
+    qCInfo(applicationLog) << "Window appearance runtime summary" << "defaultAlphaBuffer=" << defaultAlphaBuffer
+                           << "surfaceAlphaBits=" << surfaceAlphaBits
+                           << "translucentSurfaceCapable=" << translucentSurfaceCapable
+                           << "acrylicApplied=" << acrylicApplied << "acrylicContract=" << acrylicContract
+                           << "invalidBackdropRejected=" << invalidBackdropRejected
+                           << "invalidBackdropOpacityRejected=" << invalidBackdropOpacityRejected
+                           << "transparentApplied=" << transparentApplied
+                           << "transparentContract=" << transparentContract
+                           << "adjustableSurfacesConsistent=" << adjustableSurfacesConsistent
+                           << "transparentOpaqueApplied=" << transparentOpaqueApplied
+                           << "transparentOpaqueContract=" << transparentOpaqueContract
+                           << "transparentClearApplied=" << transparentClearApplied
+                           << "transparentClearContract=" << transparentClearContract << "micaApplied=" << micaApplied
+                           << "micaContract=" << micaContract << "micaAltApplied=" << micaAltApplied
+                           << "micaAltContract=" << micaAltContract << "solidApplied=" << solidApplied
+                           << "solidContract=" << solidContract << "restored=" << restored;
+    return translucentSurfaceCapable && acrylicApplied && acrylicContract && invalidBackdropRejected
+           && invalidBackdropOpacityRejected && transparentApplied && transparentContract
+           && adjustableSurfacesConsistent && transparentOpaqueApplied && transparentOpaqueContract
+           && transparentClearApplied && transparentClearContract && micaApplied && micaContract && micaAltApplied
+           && micaAltContract && solidApplied && solidContract && restored;
 }
 
 [[nodiscard]] bool captureLayout(ztermy::NativeWindow &window, const QString &outputDirectory, const QString &name)

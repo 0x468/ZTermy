@@ -7,7 +7,7 @@ src/core/config/ApplicationSettings.cpp|681
 src/domain/terminal/GhosttyTerminalEngine.cpp|2268
 src/domain/terminal/TerminalEngine.h|536
 src/infrastructure/ssh/Libssh2Session.cpp|2517
-src/main.cpp|4783
+src/main.cpp|4778
 src/ui/qml/AiAssistantPane.qml|3318
 src/ui/qml/HostConnectionPane.qml|2901
 src/ui/qml/Main.qml|2857
