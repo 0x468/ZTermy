@@ -46,6 +46,8 @@ Rectangle {
     property string mcpWorkingDirectoryDraft: ""
     property var mcpReviewTool: null
     property real contentReveal: 1.0
+    property string highlightedRow: ""
+    readonly property var defaults: controller.applicationSettingsDefaults()
     readonly property bool shortcutRecording: shortcutSettings.recording
     readonly property bool draftDark: themeBox.currentIndex === 1 || (themeBox.currentIndex === 0 && Theme.systemDark)
     readonly property bool fullEffects: effectsBox.currentIndex === 0
@@ -66,73 +68,6 @@ Rectangle {
 
     ListModel {
         id: selectionActionDraftModel
-    }
-
-    component CategoryButton: Rectangle {
-        id: categoryControl
-
-        required property string title
-        required property string iconName
-        property bool selected: false
-        property string actionObjectName: ""
-        signal activated
-
-        implicitHeight: 36
-        radius: Theme.radiusControl
-        color: selected ? Theme.controlBackground : (categoryAction.hovered || categoryAction.visualFocus ? Theme.controlHover : "transparent")
-        border.color: categoryAction.visualFocus ? Theme.focus : "transparent"
-        border.width: categoryAction.visualFocus ? 1 : 0
-
-        function focusAction() {
-            categoryAction.forceActiveFocus();
-        }
-
-        Behavior on color {
-            MotionColor {}
-        }
-
-        Rectangle {
-            anchors.left: parent.left
-            anchors.leftMargin: 8
-            anchors.verticalCenter: parent.verticalCenter
-            width: 3
-            height: 18
-            radius: width / 2
-            visible: categoryControl.selected
-            color: Theme.accent
-        }
-
-        Row {
-            anchors.left: parent.left
-            anchors.leftMargin: 12
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: 8
-
-            AppIcon {
-                width: 16
-                height: 16
-                name: categoryControl.iconName
-                color: categoryControl.selected ? Theme.text : Theme.textMuted
-            }
-
-            Text {
-                text: categoryControl.title
-                color: categoryControl.selected ? Theme.text : Theme.textSoft
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.textLabel
-                font.weight: categoryControl.selected ? Font.DemiBold : Font.Normal
-            }
-        }
-
-        KeyboardAction {
-            id: categoryAction
-
-            objectName: categoryControl.actionObjectName
-            anchors.fill: parent
-            anchors.margins: 2
-            accessibleName: qsTr("%1 settings").arg(categoryControl.title)
-            onActivated: categoryControl.activated()
-        }
     }
 
     color: Theme.contentBackground
@@ -563,23 +498,37 @@ Rectangle {
     }
 
     function focusCurrentCategory() {
-        if (currentCategory === "application") {
-            applicationCategory.focusAction();
-        } else if (currentCategory === "about") {
-            aboutCategory.focusAction();
-        } else if (currentCategory === "terminal") {
-            terminalCategory.focusAction();
-        } else if (currentCategory === "shortcuts") {
-            shortcutsCategory.focusAction();
-        } else if (currentCategory === "sftp") {
-            sftpCategory.focusAction();
-        } else if (currentCategory === "ai") {
-            aiCategory.focusAction();
-        } else if (currentCategory === "security") {
-            securityCategory.focusAction();
-        } else {
-            appearanceCategory.focusAction();
+        categoryRail.focusCategory(currentCategory);
+    }
+
+    function jumpToRow(category, key) {
+        selectCategory(category);
+        highlightedRow = key;
+        highlightTimer.restart();
+        Qt.callLater(revealHighlightedRow);
+    }
+
+    function revealHighlightedRow() {
+        const row = highlightedRowItem();
+        if (!row) {
+            return;
         }
+        const y = row.mapToItem(contentColumn, 0, 0).y;
+        scrollView.contentItem.contentY = Math.max(0, Math.min(y - 96, scrollView.contentHeight - scrollView.height));
+    }
+
+    function highlightedRowItem() {
+        const stack = [contentColumn];
+        while (stack.length > 0) {
+            const item = stack.pop();
+            if (item.highlighted === true && item.dirty !== undefined) {
+                return item;
+            }
+            for (const child of item.children) {
+                stack.push(child);
+            }
+        }
+        return null;
     }
 
     function loadDraft() {
@@ -710,6 +659,14 @@ Rectangle {
     }
 
     Timer {
+        id: highlightTimer
+
+        interval: 2400
+        repeat: false
+        onTriggered: pane.highlightedRow = ""
+    }
+
+    Timer {
         id: statusClearTimer
 
         interval: Motion.relocate
@@ -717,141 +674,16 @@ Rectangle {
         onTriggered: pane.statusMessage = ""
     }
 
-    Rectangle {
+    SettingsCategoryRail {
         id: categoryRail
 
-        objectName: "settingsCategoryRail"
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        width: pane.compactLayout ? 140 : 208
-        color: Theme.panelBackground
-
-        Rectangle {
-            anchors.right: parent.right
-            width: 1
-            height: parent.height
-            color: Theme.border
-        }
-
-        ColumnLayout {
-            anchors.fill: parent
-            anchors.margins: pane.compactLayout ? 8 : 10
-            spacing: 4
-
-            Text {
-                Layout.leftMargin: 4
-                Layout.bottomMargin: 8
-                text: qsTr("SETTINGS")
-                color: Theme.textSubtle
-                font.family: Theme.uiFont
-                font.pixelSize: 10
-                font.letterSpacing: 1.2
-                font.weight: Font.DemiBold
-            }
-
-            CategoryButton {
-                id: applicationCategory
-
-                Layout.fillWidth: true
-                title: qsTr("Application")
-                iconName: "settings"
-                actionObjectName: "settingsApplicationCategory"
-                selected: pane.currentCategory === "application"
-                onActivated: pane.selectCategory("application")
-            }
-
-            CategoryButton {
-                id: appearanceCategory
-
-                Layout.fillWidth: true
-                title: qsTr("Appearance")
-                iconName: "appearance"
-                actionObjectName: "settingsAppearanceCategory"
-                selected: pane.currentCategory === "appearance"
-                onActivated: pane.selectCategory("appearance")
-            }
-
-            CategoryButton {
-                id: terminalCategory
-
-                Layout.fillWidth: true
-                title: qsTr("Terminal")
-                iconName: "terminal"
-                actionObjectName: "settingsTerminalCategory"
-                selected: pane.currentCategory === "terminal"
-                onActivated: pane.selectCategory("terminal")
-            }
-
-            CategoryButton {
-                id: shortcutsCategory
-
-                Layout.fillWidth: true
-                title: qsTr("Shortcuts")
-                iconName: "shortcuts"
-                actionObjectName: "settingsShortcutsCategory"
-                selected: pane.currentCategory === "shortcuts"
-                onActivated: pane.selectCategory("shortcuts")
-            }
-
-            CategoryButton {
-                id: sftpCategory
-
-                Layout.fillWidth: true
-                title: qsTr("SFTP")
-                iconName: "folder"
-                actionObjectName: "settingsSftpCategory"
-                selected: pane.currentCategory === "sftp"
-                onActivated: pane.selectCategory("sftp")
-            }
-
-            CategoryButton {
-                id: aiCategory
-
-                Layout.fillWidth: true
-                title: qsTr("AI")
-                iconName: "activity"
-                actionObjectName: "settingsAiCategory"
-                selected: pane.currentCategory === "ai"
-                onActivated: pane.selectCategory("ai")
-            }
-
-            CategoryButton {
-                id: securityCategory
-
-                Layout.fillWidth: true
-                title: qsTr("Security")
-                iconName: "security"
-                actionObjectName: "settingsSecurityCategory"
-                selected: pane.currentCategory === "security"
-                onActivated: pane.selectCategory("security")
-            }
-
-            CategoryButton {
-                id: aboutCategory
-
-                Layout.fillWidth: true
-                title: qsTr("About")
-                iconName: "application"
-                actionObjectName: "settingsAboutCategory"
-                selected: pane.currentCategory === "about"
-                onActivated: pane.selectCategory("about")
-            }
-
-            Item {
-                Layout.fillHeight: true
-            }
-
-            Text {
-                Layout.fillWidth: true
-                Layout.leftMargin: 4
-                visible: !pane.compactLayout
-                text: qsTr("Stored locally")
-                color: Theme.textSubtle
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.textCompact
-            }
-        }
+        compact: pane.compactLayout
+        currentCategory: pane.currentCategory
+        onCategoryActivated: category => pane.selectCategory(category)
+        onRowRequested: (category, key) => pane.jumpToRow(category, key)
     }
 
     ScrollView {
@@ -1078,9 +910,11 @@ Rectangle {
                     columnSpacing: 18
                     rowSpacing: 12
 
-                    Label {
+                    SettingsRowLabel {
                         text: qsTr("Display language")
-                        color: Theme.text
+                        dirty: pane.languageDraft !== pane.defaults.language
+                        highlighted: pane.highlightedRow === "language"
+                        onReset: pane.languageDraft = pane.defaults.language
                     }
                     AppComboBox {
                         id: languageBox
@@ -1104,9 +938,11 @@ Rectangle {
                         font.pixelSize: Theme.textLabel
                     }
 
-                    Label {
+                    SettingsRowLabel {
                         text: qsTr("Interface font")
-                        color: Theme.text
+                        dirty: pane.uiFontDraft !== pane.defaults.uiFontFamily
+                        highlighted: pane.highlightedRow === "uiFontFamily"
+                        onReset: pane.uiFontDraft = pane.defaults.uiFontFamily
                     }
                     FontPicker {
                         objectName: "settingsUiFont"
@@ -1147,9 +983,27 @@ Rectangle {
                     columnSpacing: 18
                     rowSpacing: 12
 
-                    Label {
+                    SettingsRowLabel {
+                        Layout.columnSpan: parent.columns
+                        text: qsTr("Terminal theme")
+                        dirty: pane.controller.terminalThemeId !== pane.defaults.terminalTheme
+                        highlighted: pane.highlightedRow === "terminalTheme"
+                        onReset: pane.controller.saveTerminalTheme(pane.defaults.terminalTheme)
+                    }
+                    TerminalThemeStrip {
+                        objectName: "settingsTerminalTheme"
+                        Layout.fillWidth: true
+                        Layout.columnSpan: parent.columns
+                        implicitHeight: 72
+                        controller: pane.controller
+                        onActivated: themePicker.openWithCurrent()
+                    }
+
+                    SettingsRowLabel {
                         text: qsTr("Theme")
-                        color: Theme.text
+                        dirty: pane.themeToken() !== pane.defaults.theme
+                        highlighted: pane.highlightedRow === "theme"
+                        onReset: themeBox.currentIndex = pane.themeIndex(pane.defaults.theme)
                     }
                     AppComboBox {
                         id: themeBox
@@ -1161,9 +1015,11 @@ Rectangle {
                         onCurrentIndexChanged: pane.previewDraft()
                     }
 
-                    Label {
+                    SettingsRowLabel {
                         text: qsTr("Accent color")
-                        color: Theme.text
+                        dirty: pane.accentToken() !== pane.defaults.accent
+                        highlighted: pane.highlightedRow === "accent"
+                        onReset: accentBox.currentIndex = pane.accentIndex(pane.defaults.accent)
                     }
                     AppComboBox {
                         id: accentBox
@@ -1175,10 +1031,12 @@ Rectangle {
                         onCurrentIndexChanged: pane.previewDraft()
                     }
 
-                    Label {
+                    SettingsRowLabel {
                         visible: pane.customAccentSelected
                         text: qsTr("Custom accent")
-                        color: Theme.text
+                        dirty: customAccentField.text !== pane.defaults.customAccent
+                        highlighted: pane.highlightedRow === "customAccent"
+                        onReset: customAccentField.text = pane.defaults.customAccent
                     }
                     AppTextField {
                         id: customAccentField
@@ -1195,9 +1053,11 @@ Rectangle {
                         onTextChanged: pane.previewDraft()
                     }
 
-                    Label {
+                    SettingsRowLabel {
                         text: qsTr("Visual effects")
-                        color: Theme.text
+                        dirty: effectsBox.model[Math.max(0, effectsBox.currentIndex)] !== pane.defaults.effectsTier
+                        highlighted: pane.highlightedRow === "effectsTier"
+                        onReset: effectsBox.currentIndex = effectsBox.model.indexOf(pane.defaults.effectsTier)
                     }
                     AppComboBox {
                         id: effectsBox
@@ -1209,9 +1069,11 @@ Rectangle {
                         onCurrentIndexChanged: pane.previewDraft()
                     }
 
-                    Label {
+                    SettingsRowLabel {
                         text: qsTr("Windows backdrop")
-                        color: Theme.text
+                        dirty: pane.backdropToken() !== pane.defaults.backdrop
+                        highlighted: pane.highlightedRow === "backdrop"
+                        onReset: backdropBox.currentIndex = pane.backdropIndex(pane.defaults.backdrop)
                     }
                     AppComboBox {
                         id: backdropBox
@@ -1224,10 +1086,12 @@ Rectangle {
                         onCurrentIndexChanged: pane.previewDraft()
                     }
 
-                    Label {
+                    SettingsRowLabel {
                         visible: pane.adjustableBackdrop
                         text: qsTr("Window background opacity")
-                        color: Theme.text
+                        dirty: Math.abs(opacitySlider.value - pane.defaults.backdropOpacity) > 0.001
+                        highlighted: pane.highlightedRow === "backdropOpacity"
+                        onReset: opacitySlider.value = pane.defaults.backdropOpacity
                     }
                     RowLayout {
                         visible: pane.adjustableBackdrop
@@ -1253,17 +1117,6 @@ Rectangle {
                             font.pixelSize: Theme.textLabel
                         }
                     }
-
-                    Label {
-                        text: qsTr("Terminal theme")
-                        color: Theme.text
-                    }
-                    TerminalThemeStrip {
-                        objectName: "settingsTerminalTheme"
-                        Layout.fillWidth: true
-                        controller: pane.controller
-                        onActivated: themePicker.openWithCurrent()
-                    }
                 }
             }
 
@@ -1282,9 +1135,11 @@ Rectangle {
                     columnSpacing: 18
                     rowSpacing: 12
 
-                    Label {
+                    SettingsRowLabel {
                         text: qsTr("Font family")
-                        color: Theme.text
+                        dirty: pane.terminalFontDraft !== pane.defaults.terminalFontFamily
+                        highlighted: pane.highlightedRow === "terminalFontFamily"
+                        onReset: pane.terminalFontDraft = pane.defaults.terminalFontFamily
                     }
                     FontPicker {
                         objectName: "settingsFontFamily"
@@ -1297,9 +1152,11 @@ Rectangle {
                         onFamilyActivated: family => pane.terminalFontDraft = family
                     }
 
-                    Item {
+                    SettingsRowLabel {
                         visible: !pane.compactLayout
-                        implicitHeight: showAllFontsSwitch.implicitHeight
+                        dirty: showAllFontsSwitch.checked !== pane.defaults.showAllTerminalFonts
+                        highlighted: pane.highlightedRow === "showAllTerminalFonts"
+                        onReset: showAllFontsSwitch.checked = pane.defaults.showAllTerminalFonts
                     }
                     AppCheckBox {
                         id: showAllFontsSwitch
@@ -1326,9 +1183,11 @@ Rectangle {
                         font.pixelSize: Theme.textLabel
                     }
 
-                    Label {
+                    SettingsRowLabel {
                         text: qsTr("Font size")
-                        color: Theme.text
+                        dirty: fontSizeBox.value !== pane.defaults.terminalFontSize
+                        highlighted: pane.highlightedRow === "terminalFontSize"
+                        onReset: fontSizeBox.value = pane.defaults.terminalFontSize
                     }
                     AppSpinBox {
                         id: fontSizeBox
@@ -1340,9 +1199,11 @@ Rectangle {
                         accessibleName: qsTr("Terminal font size")
                     }
 
-                    Item {
+                    SettingsRowLabel {
                         visible: !pane.compactLayout
-                        implicitHeight: ligatureSwitch.implicitHeight
+                        dirty: ligatureSwitch.checked !== pane.defaults.terminalLigatures
+                        highlighted: pane.highlightedRow === "terminalLigatures"
+                        onReset: ligatureSwitch.checked = pane.defaults.terminalLigatures
                     }
                     AppSwitch {
                         id: ligatureSwitch
@@ -1364,9 +1225,11 @@ Rectangle {
                         font.pixelSize: Theme.textLabel
                     }
 
-                    Label {
+                    SettingsRowLabel {
                         text: qsTr("Terminal background opacity")
-                        color: Theme.text
+                        dirty: Math.abs(terminalOpacitySlider.value - pane.defaults.terminalBackgroundOpacity) > 0.001
+                        highlighted: pane.highlightedRow === "terminalBackgroundOpacity"
+                        onReset: terminalOpacitySlider.value = pane.defaults.terminalBackgroundOpacity
                     }
                     RowLayout {
                         Layout.fillWidth: true
@@ -1391,9 +1254,14 @@ Rectangle {
                         }
                     }
 
-                    Label {
+                    SettingsRowLabel {
                         text: qsTr("Default local shell")
-                        color: Theme.text
+                        dirty: pane.localShellDraft !== pane.defaults.localShell
+                        highlighted: pane.highlightedRow === "localShell"
+                        onReset: {
+                            pane.localShellDraft = pane.defaults.localShell;
+                            localShellBox.currentIndex = pane.localShellIndex(pane.defaults.localShell);
+                        }
                     }
                     RowLayout {
                         Layout.fillWidth: true
@@ -1428,9 +1296,11 @@ Rectangle {
                         }
                     }
 
-                    Label {
+                    SettingsRowLabel {
                         text: qsTr("Cursor")
-                        color: Theme.text
+                        dirty: pane.cursorToken() !== pane.defaults.cursor
+                        highlighted: pane.highlightedRow === "cursor"
+                        onReset: cursorBox.currentIndex = pane.cursorIndex(pane.defaults.cursor)
                     }
                     AppComboBox {
                         id: cursorBox
@@ -1441,9 +1311,11 @@ Rectangle {
                         accessibleName: qsTr("Terminal cursor style")
                     }
 
-                    Item {
+                    SettingsRowLabel {
                         visible: !pane.compactLayout
-                        implicitHeight: cursorBlinkSwitch.implicitHeight
+                        dirty: cursorBlinkSwitch.checked !== pane.defaults.cursorBlink
+                        highlighted: pane.highlightedRow === "cursorBlink"
+                        onReset: cursorBlinkSwitch.checked = pane.defaults.cursorBlink
                     }
                     AppSwitch {
                         id: cursorBlinkSwitch
@@ -1453,9 +1325,11 @@ Rectangle {
                         accessibleName: qsTr("Blink terminal cursor")
                     }
 
-                    Item {
+                    SettingsRowLabel {
                         visible: !pane.compactLayout
-                        implicitHeight: copyOnSelectSwitch.implicitHeight
+                        dirty: copyOnSelectSwitch.checked !== pane.defaults.copyOnSelect
+                        highlighted: pane.highlightedRow === "copyOnSelect"
+                        onReset: copyOnSelectSwitch.checked = pane.defaults.copyOnSelect
                     }
                     AppSwitch {
                         id: copyOnSelectSwitch
@@ -1465,9 +1339,11 @@ Rectangle {
                         accessibleName: qsTr("Copy terminal selection automatically")
                     }
 
-                    Item {
+                    SettingsRowLabel {
                         visible: !pane.compactLayout
-                        implicitHeight: keepSelectionAfterCopySwitch.implicitHeight
+                        dirty: keepSelectionAfterCopySwitch.checked !== pane.defaults.keepSelectionAfterCopy
+                        highlighted: pane.highlightedRow === "keepSelectionAfterCopy"
+                        onReset: keepSelectionAfterCopySwitch.checked = pane.defaults.keepSelectionAfterCopy
                     }
                     AppSwitch {
                         id: keepSelectionAfterCopySwitch
@@ -1477,9 +1353,11 @@ Rectangle {
                         accessibleName: qsTr("Keep terminal selection after copying")
                     }
 
-                    Item {
+                    SettingsRowLabel {
                         visible: !pane.compactLayout
-                        implicitHeight: multilinePasteSwitch.implicitHeight
+                        dirty: multilinePasteSwitch.checked !== pane.defaults.confirmMultilinePaste
+                        highlighted: pane.highlightedRow === "confirmMultilinePaste"
+                        onReset: multilinePasteSwitch.checked = pane.defaults.confirmMultilinePaste
                     }
                     AppSwitch {
                         id: multilinePasteSwitch
@@ -1489,9 +1367,11 @@ Rectangle {
                         accessibleName: qsTr("Confirm multiline terminal paste")
                     }
 
-                    Label {
+                    SettingsRowLabel {
                         text: qsTr("Right-click")
-                        color: Theme.text
+                        dirty: pane.rightClickToken() !== pane.defaults.terminalRightClick
+                        highlighted: pane.highlightedRow === "terminalRightClick"
+                        onReset: rightClickBox.currentIndex = pane.rightClickIndex(pane.defaults.terminalRightClick)
                     }
                     AppComboBox {
                         id: rightClickBox
@@ -1503,9 +1383,11 @@ Rectangle {
                         toolTipText: qsTr("Shift+right-click always opens the context menu.")
                     }
 
-                    Label {
+                    SettingsRowLabel {
                         text: qsTr("Middle-click")
-                        color: Theme.text
+                        dirty: pane.middleClickToken() !== pane.defaults.terminalMiddleClick
+                        highlighted: pane.highlightedRow === "terminalMiddleClick"
+                        onReset: middleClickBox.currentIndex = pane.middleClickIndex(pane.defaults.terminalMiddleClick)
                     }
                     AppComboBox {
                         id: middleClickBox
@@ -1516,9 +1398,11 @@ Rectangle {
                         accessibleName: qsTr("Terminal middle-click behavior")
                     }
 
-                    Label {
+                    SettingsRowLabel {
                         text: qsTr("Word separators")
-                        color: Theme.text
+                        dirty: wordDelimitersField.text !== pane.defaults.terminalWordDelimiters
+                        highlighted: pane.highlightedRow === "terminalWordDelimiters"
+                        onReset: wordDelimitersField.text = pane.defaults.terminalWordDelimiters
                     }
                     AppTextField {
                         id: wordDelimitersField
@@ -1529,9 +1413,11 @@ Rectangle {
                         toolTipText: qsTr("Double-click selection stops at these characters. Paths and URLs stay intact by default.")
                     }
 
-                    Label {
+                    SettingsRowLabel {
                         text: qsTr("Mouse wheel rows")
-                        color: Theme.text
+                        dirty: wheelRowsBox.value !== pane.defaults.terminalScrollRows
+                        highlighted: pane.highlightedRow === "terminalScrollRows"
+                        onReset: wheelRowsBox.value = pane.defaults.terminalScrollRows
                     }
                     AppSpinBox {
                         id: wheelRowsBox
@@ -1702,9 +1588,11 @@ Rectangle {
                     columnSpacing: 18
                     rowSpacing: 12
 
-                    Label {
+                    SettingsRowLabel {
                         text: qsTr("Directory listing")
-                        color: Theme.text
+                        dirty: sftpShowHiddenSwitch.checked !== pane.defaults.sftpShowHiddenFiles
+                        highlighted: pane.highlightedRow === "sftpShowHiddenFiles"
+                        onReset: sftpShowHiddenSwitch.checked = pane.defaults.sftpShowHiddenFiles
                     }
                     AppSwitch {
                         id: sftpShowHiddenSwitch
@@ -1715,9 +1603,11 @@ Rectangle {
                         accessibleName: text
                     }
 
-                    Label {
+                    SettingsRowLabel {
                         text: qsTr("Destructive actions")
-                        color: Theme.text
+                        dirty: sftpConfirmDeleteSwitch.checked !== pane.defaults.sftpConfirmDelete
+                        highlighted: pane.highlightedRow === "sftpConfirmDelete"
+                        onReset: sftpConfirmDeleteSwitch.checked = pane.defaults.sftpConfirmDelete
                     }
                     AppSwitch {
                         id: sftpConfirmDeleteSwitch

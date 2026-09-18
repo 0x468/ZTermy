@@ -1203,6 +1203,18 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS ReleaseIdentityCard.qml
 )
 set_source_files_properties(
+    src/ui/qml/SettingsCategoryRail.qml
+    PROPERTIES QT_RESOURCE_ALIAS SettingsCategoryRail.qml
+)
+set_source_files_properties(
+    src/ui/qml/SettingsCategoryButton.qml
+    PROPERTIES QT_RESOURCE_ALIAS SettingsCategoryButton.qml
+)
+set_source_files_properties(
+    src/ui/qml/SettingsRowLabel.qml
+    PROPERTIES QT_RESOURCE_ALIAS SettingsRowLabel.qml
+)
+set_source_files_properties(
     src/ui/qml/SectionCard.qml
     PROPERTIES QT_RESOURCE_ALIAS SectionCard.qml
 )
@@ -1412,6 +1424,9 @@ qt_add_qml_module(ztermy
         src/ui/qml/MotionExit.qml
         src/ui/qml/MotionReveal.qml
         src/ui/qml/SectionCard.qml
+        src/ui/qml/SettingsCategoryRail.qml
+        src/ui/qml/SettingsCategoryButton.qml
+        src/ui/qml/SettingsRowLabel.qml
         src/ui/qml/SettingsPane.qml
         src/ui/qml/SftpBrowser.qml
         src/ui/qml/SftpWorkspacePane.qml
