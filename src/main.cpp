@@ -68,14 +68,6 @@
 
 Q_LOGGING_CATEGORY(applicationLog, "ztermy.application")
 
-QT_BEGIN_NAMESPACE
-Q_GUI_EXPORT void qt_handleKeyEvent(QWindow *window, QEvent::Type type, int key, Qt::KeyboardModifiers modifiers,
-                                    const QString &text = {}, bool autorepeat = false, ushort count = 1);
-Q_GUI_EXPORT void qt_handleMouseEvent(QWindow *window, const QPointF &local, const QPointF &global,
-                                      Qt::MouseButtons state, Qt::MouseButton button, QEvent::Type type,
-                                      Qt::KeyboardModifiers modifiers, int timestamp);
-QT_END_NAMESPACE
-
 namespace
 {
 
@@ -102,30 +94,18 @@ constexpr DWORD kSystemBackdropTypeAttribute = 38;
     return requested.isEmpty() ? QStringLiteral("acrylic") : requested;
 }
 
+using ztermy::ui::focusItem;
 using ztermy::ui::namedFocusItem;
 using ztermy::ui::processWindowEventsFor;
+using ztermy::ui::processWindowEventsUntil;
 using ztermy::ui::quickItem;
+using ztermy::ui::sendKey;
 using ztermy::ui::sendMouseClick;
 using ztermy::ui::sendMouseMove;
+using ztermy::ui::sendText;
 using ztermy::ui::terminalViewportHasFocus;
 using ztermy::ui::terminalViewportItem;
 using ztermy::ui::visualQuickItem;
-
-template <typename Predicate>
-[[nodiscard]] bool processWindowEventsUntil(Predicate predicate, const std::chrono::milliseconds timeout)
-{
-    QElapsedTimer elapsed;
-    elapsed.start();
-    while (elapsed.elapsed() < timeout.count())
-    {
-        if (predicate())
-        {
-            return true;
-        }
-        processWindowEventsFor(std::chrono::milliseconds{25});
-    }
-    return predicate();
-}
 
 [[nodiscard]] std::unique_ptr<QMimeData> cloneMimeData(const QMimeData *source)
 {
@@ -1375,25 +1355,6 @@ struct ResizeHitRuntimeCase
            && longApprovalBounded && clipboardPastePassed && providerFailureRecoveryPassed && restoredDark;
 }
 
-void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::KeyboardModifiers modifiers = {})
-{
-    qt_handleKeyEvent(&window, QEvent::KeyPress, key, modifiers);
-    QCoreApplication::processEvents();
-    qt_handleKeyEvent(&window, QEvent::KeyRelease, key, modifiers);
-    processWindowEventsFor(std::chrono::milliseconds{40});
-}
-
-void sendText(ztermy::NativeWindow &window, const QStringView text)
-{
-    for (const QChar character : text)
-    {
-        qt_handleKeyEvent(&window, QEvent::KeyPress, Qt::Key_unknown, {}, QString{character});
-        QCoreApplication::processEvents();
-        qt_handleKeyEvent(&window, QEvent::KeyRelease, Qt::Key_unknown, {}, QString{character});
-    }
-    processWindowEventsFor(std::chrono::milliseconds{40});
-}
-
 [[nodiscard]] bool runTitleNavigationMouseSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller)
 {
     // Exercise hit testing, not signals or keyboard activation, in an isolated data directory.
@@ -1462,25 +1423,6 @@ void sendText(ztermy::NativeWindow &window, const QStringView text)
         root->setProperty("workspaceSection", QStringLiteral("hosts"));
     }
     return passed && controller.terminalTabs().isEmpty();
-}
-
-[[nodiscard]] bool focusItem(ztermy::NativeWindow &window, QQuickItem *item, const QString &expectedName)
-{
-    if (item == nullptr || !item->isVisible() || !item->isEnabled())
-    {
-        qCWarning(applicationLog) << "UI keyboard smoke focus target unavailable" << expectedName;
-        return false;
-    }
-    item->forceActiveFocus(Qt::TabFocusReason);
-    processWindowEventsFor(std::chrono::milliseconds{40});
-    const QString actualName = namedFocusItem(window);
-    if (actualName != expectedName)
-    {
-        qCWarning(applicationLog) << "UI keyboard smoke focus mismatch"
-                                  << "expected=" << expectedName << "actual=" << actualName;
-        return false;
-    }
-    return true;
 }
 
 [[nodiscard]] bool verifyKeyboardActionFocusVisibility(QQuickItem *rootObject)
@@ -1740,8 +1682,8 @@ void sendText(ztermy::NativeWindow &window, const QStringView text)
         return false;
     }
     constexpr std::array appearanceOrder{
-        "settingsLanguage", "settingsUiFont", "settingsTheme",   "settingsAccent", "settingsBackdrop",
-        "settingsOpacity",  "settingsReset",  "settingsDiscard", "settingsApply",
+        "settingsLanguage", "settingsUiFont",  "settingsTheme", "settingsAccent",  "settingsEffectsTier",
+        "settingsBackdrop", "settingsOpacity", "settingsReset", "settingsDiscard", "settingsApply",
     };
     if (!verifyOrder(appearanceOrder))
     {
@@ -1981,6 +1923,57 @@ void sendText(ztermy::NativeWindow &window, const QStringView text)
                                       << "index=" << index << "expected=" << expectedName << "actual=" << actualName;
             return false;
         }
+    }
+    return true;
+}
+
+// Settings search: typing filters the rail, Enter jumps to the first match and
+// highlights its row; the per-row reset restores only that row's default.
+[[nodiscard]] bool verifySettingsSearchAndRowReset(ztermy::NativeWindow &window, QQuickItem *rootObject)
+{
+    QQuickItem *rail = quickItem(rootObject, "settingsCategoryRail");
+    QQuickItem *fontSize = quickItem(rootObject, "settingsFontSize");
+    auto *settingsPane = rootObject->findChild<QObject *>(QStringLiteral("settingsPane"));
+    if (rail == nullptr || fontSize == nullptr || settingsPane == nullptr
+        || !focusItem(window, quickItem(rootObject, "settingsSearch"), QStringLiteral("settingsSearch")))
+    {
+        return false;
+    }
+    sendText(window, u"font size");
+    const qsizetype matchCount = rail->property("matches").toList().size();
+    sendKey(window, Qt::Key_Return);
+    processWindowEventsFor(std::chrono::milliseconds{200});
+    QQuickItem *reset = nullptr;
+    for (QQuickItem *row : rootObject->findChildren<QQuickItem *>())
+    {
+        if (!row->property("highlighted").toBool() || !row->property("dirty").toBool())
+        {
+            continue;
+        }
+        for (QQuickItem *candidate : row->findChildren<QQuickItem *>())
+        {
+            if (candidate->property("label").isValid() && candidate->isVisible())
+            {
+                reset = candidate;
+                break;
+            }
+        }
+        break;
+    }
+    const QString highlightedRow = settingsPane->property("highlightedRow").toString();
+    const bool searchCleared = !rail->property("searching").toBool();
+    if (reset != nullptr)
+    {
+        sendMouseClick(window, *reset, QPointF{reset->width() / 2, reset->height() / 2});
+    }
+    const int fontSizeAfterReset = fontSize->property("value").toInt();
+    if (matchCount != 1 || highlightedRow != QStringLiteral("terminalFontSize") || !searchCleared || reset == nullptr
+        || fontSizeAfterReset != 14)
+    {
+        qCWarning(applicationLog) << "Settings search or row reset contract failed" << "matches=" << matchCount
+                                  << "highlightedRow=" << highlightedRow << "searchCleared=" << searchCleared
+                                  << "resetVisible=" << (reset != nullptr) << "fontSize=" << fontSizeAfterReset;
+        return false;
     }
     return true;
 }
@@ -2237,6 +2230,13 @@ void sendText(ztermy::NativeWindow &window, const QStringView text)
     sendKey(window, Qt::Key_Space);
 
     if (!focusItem(window, fontSize, QStringLiteral("settingsFontSize")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Up);
+    // The row reset puts the font size back to 14; bump it again so Apply below sees 15.
+    if (!verifySettingsSearchAndRowReset(window, rootObject)
+        || !focusItem(window, fontSize, QStringLiteral("settingsFontSize")))
     {
         return false;
     }
@@ -3081,13 +3081,17 @@ void sendText(ztermy::NativeWindow &window, const QStringView text)
         }
     }
     window.resize(600, 800);
-    processWindowEventsFor(std::chrono::milliseconds{350});
     QQuickItem *titleTerminalTabs = quickItem(rootObject, "titleTerminalTabs");
     const QVariantList overflowTabs = controller.terminalTabs();
-    const bool activeOverflowTabVisible =
-        titleTerminalTabs != nullptr
-        && titleTerminalTabs->property("currentIndex").toInt() == controller.terminalTabs().size() - 1
-        && titleTerminalTabs->property("contentX").toReal() > 0.0;
+    // The tab strip settles through queued callLater hops; wait for the last
+    // tab to be current and scrolled in, then let the remaining hops drain.
+    const auto overflowSettled = [&] {
+        return titleTerminalTabs != nullptr
+               && titleTerminalTabs->property("currentIndex").toInt() == overflowTabs.size() - 1
+               && titleTerminalTabs->property("contentX").toReal() > 0.0;
+    };
+    const bool activeOverflowTabVisible = processWindowEventsUntil(overflowSettled, std::chrono::seconds{3});
+    processWindowEventsFor(std::chrono::milliseconds{350});
     const qreal beforeWheel = titleTerminalTabs ? titleTerminalTabs->property("contentX").toReal() : 0;
     const QPointF wheelPosition =
         titleTerminalTabs ? titleTerminalTabs->mapToScene({titleTerminalTabs->width() / 2, 18}) : QPointF{};
