@@ -2,7 +2,7 @@
 
 Status: chapters 1–6 landed on branch `ui/v2-design-system`
 (2026-09-18 → 2026-09-19); delivery verification is recorded in the progress
-log. Not merged.
+log and in [testing/UI_V2_DELIVERY.md](testing/UI_V2_DELIVERY.md). Not merged.
 
 This branch may break visual and settings compatibility. The terminal
 performance boundary in [UI_DESIGN_SYSTEM.md](UI_DESIGN_SYSTEM.md) still
