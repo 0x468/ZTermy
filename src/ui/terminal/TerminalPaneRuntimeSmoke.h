@@ -43,23 +43,29 @@ namespace ztermy::ui
     }
     return fallback;
 }
-// Synthesizes one mouse event in window scene coordinates and lets the scene react.
+// Synthesizes one mouse event in window scene coordinates; delivery is synchronous.
+inline void synthesizeMouse(QQuickWindow &window, const QPointF &point, const Qt::MouseButtons buttons,
+                            const Qt::MouseButton button, const QEvent::Type type)
+{
+    qt_handleMouseEvent(&window, point, window.mapToGlobal(point.toPoint()), buttons, button, type, Qt::NoModifier,
+                        static_cast<int>(GetTickCount()));
+}
 inline void sendMouse(QQuickWindow &window, const QPointF &point, const Qt::MouseButtons buttons,
                       const Qt::MouseButton button, const QEvent::Type type,
                       const std::chrono::milliseconds settle = std::chrono::milliseconds{30})
 {
-    qt_handleMouseEvent(&window, point, window.mapToGlobal(point.toPoint()), buttons, button, type, Qt::NoModifier,
-                        static_cast<int>(GetTickCount()));
+    synthesizeMouse(window, point, buttons, button, type);
     processWindowEventsFor(settle);
 }
 
-// A real pointer hovers before it presses. The pane drag capture layer in
-// Main.qml only enables itself while a header drag area is hovered, so a
-// synthetic press without the preceding move never reaches it.
+// A real pointer hovers before it presses (Main.qml's drag capture layer only arms
+// while a header is hovered). Press and release go back to back: a loop spin between
+// them can deliver a native WM_MOUSELEAVE that clears MouseArea's hover, and a
+// release without hover is not a click.
 inline void clickMouse(QQuickWindow &window, const QPointF &point)
 {
     sendMouse(window, point, Qt::NoButton, Qt::NoButton, QEvent::MouseMove);
-    sendMouse(window, point, Qt::LeftButton, Qt::LeftButton, QEvent::MouseButtonPress);
+    synthesizeMouse(window, point, Qt::LeftButton, Qt::LeftButton, QEvent::MouseButtonPress);
     sendMouse(window, point, Qt::NoButton, Qt::LeftButton, QEvent::MouseButtonRelease);
 }
 
