@@ -1,6 +1,11 @@
 import QtQuick
 import QtQuick.Controls
 
+// Window caption command (minimize, maximize/restore, close). The glyphs are
+// AppIcon strokes so they follow the icon library and the theme text colour;
+// the surface keeps the Win32 hit-testing contract: the maximize button
+// leaves its pointer input to the native title bar (Snap Layouts) unless
+// nativeMaximizeHandling is off, and surfaceColor exposes the hover fill.
 Control {
     id: control
 
@@ -12,8 +17,9 @@ Control {
     property string accessibleName: ""
     readonly property bool effectiveHovered: externallyHovered || control.hovered || mouseArea.containsMouse
     readonly property bool effectivePressed: externallyPressed || mouseArea.pressed
+    readonly property bool closeHighlighted: kind === "close" && (effectiveHovered || visualFocus)
     readonly property color surfaceColor: {
-        if (control.kind === "close" && (control.effectiveHovered || control.visualFocus)) {
+        if (control.closeHighlighted) {
             return Theme.closeHover;
         }
         if (control.effectivePressed) {
@@ -24,6 +30,7 @@ Control {
         }
         return "transparent";
     }
+    readonly property string glyphName: kind === "minimize" ? "window-minimize" : kind === "close" ? "window-close" : chrome.maximized ? "window-restore" : "window-maximize"
     signal activated
 
     activeFocusOnTab: true
@@ -32,8 +39,6 @@ Control {
     Accessible.role: Accessible.Button
     Accessible.name: accessibleName
     Accessible.onPressAction: activated()
-    onActiveFocusChanged: icon.requestPaint()
-    onVisualFocusChanged: icon.requestPaint()
 
     Rectangle {
         anchors.fill: parent
@@ -54,52 +59,15 @@ Control {
         radius: Theme.radiusSmall
     }
 
-    Canvas {
-        id: icon
+    AppIcon {
         anchors.centerIn: parent
-        width: 14
-        height: 14
+        width: 20
+        height: 20
+        name: control.glyphName
+        color: control.closeHighlighted ? Theme.dangerSurfaceText : Theme.text
 
-        onPaint: {
-            const context = getContext("2d");
-            context.reset();
-            context.strokeStyle = control.kind === "close" && (control.effectiveHovered || control.visualFocus) ? Theme.dangerSurfaceText : Theme.text;
-            context.lineWidth = 1;
-            context.lineCap = "square";
-
-            if (control.kind === "minimize") {
-                context.moveTo(2, 7.5);
-                context.lineTo(12, 7.5);
-            } else if (control.kind === "maximize") {
-                if (control.chrome.maximized) {
-                    context.strokeRect(4.5, 2.5, 7, 7);
-                    context.moveTo(2.5, 5);
-                    context.lineTo(2.5, 11.5);
-                    context.lineTo(9, 11.5);
-                } else {
-                    context.strokeRect(2.5, 2.5, 9, 9);
-                }
-            } else {
-                context.moveTo(3, 3);
-                context.lineTo(11, 11);
-                context.moveTo(11, 3);
-                context.lineTo(3, 11);
-            }
-            context.stroke();
-        }
-
-        Connections {
-            target: control.chrome
-            function onMaximizedChanged() {
-                icon.requestPaint();
-            }
-        }
-
-        Connections {
-            target: Theme
-            function onTextChanged() {
-                icon.requestPaint();
-            }
+        Behavior on color {
+            MotionColor {}
         }
     }
 
@@ -108,7 +76,6 @@ Control {
         anchors.fill: parent
         enabled: control.kind !== "maximize" || !control.nativeMaximizeHandling
         hoverEnabled: true
-        onContainsMouseChanged: icon.requestPaint()
         onClicked: control.activated()
     }
 

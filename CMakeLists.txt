@@ -1079,6 +1079,10 @@ set(ZTERMY_INTERFACE_ICON_FILES
     resources/icons/warning.svg
     resources/icons/activity.svg
     resources/icons/ai.svg
+    resources/icons/window-close.svg
+    resources/icons/window-maximize.svg
+    resources/icons/window-minimize.svg
+    resources/icons/window-restore.svg
 )
 foreach(icon_file IN LISTS ZTERMY_INTERFACE_ICON_FILES)
     get_filename_component(icon_filename "${icon_file}" NAME)
