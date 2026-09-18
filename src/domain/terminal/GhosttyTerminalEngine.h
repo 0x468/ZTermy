@@ -17,6 +17,7 @@ public:
 
     [[nodiscard]] std::error_code feed(std::span<const std::byte> bytes) override;
     [[nodiscard]] std::error_code resize(TerminalGeometry geometry) override;
+    [[nodiscard]] std::error_code setColorScheme(const TerminalColorScheme &scheme) override;
     [[nodiscard]] std::expected<TerminalSnapshot, std::error_code> snapshot() override;
     [[nodiscard]] std::error_code setSelection(std::optional<TerminalSelection> selection) override;
     [[nodiscard]] std::expected<bool, std::error_code>

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/config/TerminalColorScheme.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -22,15 +24,6 @@ struct TerminalGeometry
     std::uint32_t cellHeightPixels = 0;
 
     [[nodiscard]] bool valid() const noexcept { return columns > 0 && rows > 0; }
-};
-
-struct TerminalColor
-{
-    std::uint8_t red = 0;
-    std::uint8_t green = 0;
-    std::uint8_t blue = 0;
-
-    friend bool operator==(const TerminalColor &, const TerminalColor &) = default;
 };
 
 struct TerminalCell
@@ -494,6 +487,9 @@ public:
 
     [[nodiscard]] virtual std::error_code feed(std::span<const std::byte> bytes) = 0;
     [[nodiscard]] virtual std::error_code resize(TerminalGeometry geometry) = 0;
+    // Installs the theme's default colors and ANSI palette; the next snapshot
+    // reports the new defaults and re-colors cells that use them.
+    [[nodiscard]] virtual std::error_code setColorScheme(const TerminalColorScheme &scheme) = 0;
     [[nodiscard]] virtual std::expected<TerminalSnapshot, std::error_code> snapshot() = 0;
     [[nodiscard]] virtual std::error_code setSelection(std::optional<TerminalSelection> selection) = 0;
     // Returns whether the gesture changed visible terminal state. This lets

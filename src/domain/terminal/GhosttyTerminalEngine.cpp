@@ -291,94 +291,34 @@ template <typename Encoder>
                                            + (static_cast<int>(button) - static_cast<int>(TerminalMouseButton::left)));
 }
 
-class UniqueTerminal final
+// Owns a ghostty handle until the engine Impl takes it over.
+template <typename Handle, void (*Free)(Handle)>
+class UniqueHandle final
 {
 public:
-    explicit UniqueTerminal(const GhosttyTerminal handle) noexcept : m_handle(handle) {}
-
-    ~UniqueTerminal()
+    explicit UniqueHandle(const Handle handle) noexcept : m_handle(handle) {}
+    ~UniqueHandle()
     {
         if (m_handle != nullptr)
         {
-            ghostty_terminal_free(m_handle);
+            Free(m_handle);
         }
     }
 
-    UniqueTerminal(const UniqueTerminal &) = delete;
-    UniqueTerminal &operator=(const UniqueTerminal &) = delete;
+    UniqueHandle(const UniqueHandle &) = delete;
+    UniqueHandle &operator=(const UniqueHandle &) = delete;
 
-    [[nodiscard]] GhosttyTerminal get() const noexcept { return m_handle; }
+    [[nodiscard]] Handle get() const noexcept { return m_handle; }
     void release() noexcept { m_handle = nullptr; }
 
 private:
-    GhosttyTerminal m_handle;
+    Handle m_handle;
 };
 
-class UniqueRenderState final
-{
-public:
-    explicit UniqueRenderState(const GhosttyRenderState handle) noexcept : m_handle(handle) {}
-    ~UniqueRenderState()
-    {
-        if (m_handle != nullptr)
-        {
-            ghostty_render_state_free(m_handle);
-        }
-    }
-
-    UniqueRenderState(const UniqueRenderState &) = delete;
-    UniqueRenderState &operator=(const UniqueRenderState &) = delete;
-
-    [[nodiscard]] GhosttyRenderState get() const noexcept { return m_handle; }
-    void release() noexcept { m_handle = nullptr; }
-
-private:
-    GhosttyRenderState m_handle;
-};
-
-class UniqueRowIterator final
-{
-public:
-    explicit UniqueRowIterator(const GhosttyRenderStateRowIterator handle) noexcept : m_handle(handle) {}
-    ~UniqueRowIterator()
-    {
-        if (m_handle != nullptr)
-        {
-            ghostty_render_state_row_iterator_free(m_handle);
-        }
-    }
-
-    UniqueRowIterator(const UniqueRowIterator &) = delete;
-    UniqueRowIterator &operator=(const UniqueRowIterator &) = delete;
-
-    [[nodiscard]] GhosttyRenderStateRowIterator get() const noexcept { return m_handle; }
-    void release() noexcept { m_handle = nullptr; }
-
-private:
-    GhosttyRenderStateRowIterator m_handle;
-};
-
-class UniqueRowCells final
-{
-public:
-    explicit UniqueRowCells(const GhosttyRenderStateRowCells handle) noexcept : m_handle(handle) {}
-    ~UniqueRowCells()
-    {
-        if (m_handle != nullptr)
-        {
-            ghostty_render_state_row_cells_free(m_handle);
-        }
-    }
-
-    UniqueRowCells(const UniqueRowCells &) = delete;
-    UniqueRowCells &operator=(const UniqueRowCells &) = delete;
-
-    [[nodiscard]] GhosttyRenderStateRowCells get() const noexcept { return m_handle; }
-    void release() noexcept { m_handle = nullptr; }
-
-private:
-    GhosttyRenderStateRowCells m_handle;
-};
+using UniqueTerminal = UniqueHandle<GhosttyTerminal, ghostty_terminal_free>;
+using UniqueRenderState = UniqueHandle<GhosttyRenderState, ghostty_render_state_free>;
+using UniqueRowIterator = UniqueHandle<GhosttyRenderStateRowIterator, ghostty_render_state_row_iterator_free>;
+using UniqueRowCells = UniqueHandle<GhosttyRenderStateRowCells, ghostty_render_state_row_cells_free>;
 
 class UniqueFormatter final
 {
@@ -428,6 +368,11 @@ private:
 [[nodiscard]] ztermy::terminal::TerminalColor terminalColor(const GhosttyColorRgb color) noexcept
 {
     return {.red = color.r, .green = color.g, .blue = color.b};
+}
+
+[[nodiscard]] GhosttyColorRgb ghosttyColor(const ztermy::terminal::TerminalColor color) noexcept
+{
+    return {.r = color.red, .g = color.green, .b = color.blue};
 }
 
 void appendUtf8(std::string &destination, const std::uint32_t codepoint)
@@ -783,6 +728,34 @@ std::error_code GhosttyTerminalEngine::resize(const TerminalGeometry geometry)
     const GhosttyResult result = ghostty_terminal_resize(m_impl->terminal, geometry.columns, geometry.rows,
                                                          geometry.cellWidthPixels, geometry.cellHeightPixels);
     return result == GHOSTTY_SUCCESS ? std::error_code{} : ghosttyError(result);
+}
+
+std::error_code GhosttyTerminalEngine::setColorScheme(const TerminalColorScheme &scheme)
+{
+    std::array<GhosttyColorRgb, 256> palette{};
+    ghostty_color_palette_default(palette.data());
+    for (std::size_t index = 0; index < scheme.ansi.size(); ++index)
+    {
+        palette[index] = ghosttyColor(scheme.ansi[index]);
+    }
+    const GhosttyColorRgb foreground = ghosttyColor(scheme.foreground);
+    const GhosttyColorRgb background = ghosttyColor(scheme.background);
+    const GhosttyColorRgb cursor = ghosttyColor(scheme.cursor);
+    const std::array<std::pair<GhosttyTerminalOption, const void *>, 4> options{{
+        {GHOSTTY_TERMINAL_OPT_COLOR_PALETTE, palette.data()},
+        {GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND, &foreground},
+        {GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND, &background},
+        {GHOSTTY_TERMINAL_OPT_COLOR_CURSOR, &cursor},
+    }};
+    for (const auto &[option, value] : options)
+    {
+        if (const GhosttyResult result = ghostty_terminal_set(m_impl->terminal, option, value);
+            result != GHOSTTY_SUCCESS)
+        {
+            return ghosttyError(result);
+        }
+    }
+    return {};
 }
 
 std::error_code GhosttyTerminalEngine::setSelection(const std::optional<TerminalSelection> selection)

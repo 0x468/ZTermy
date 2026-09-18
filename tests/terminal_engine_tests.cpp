@@ -21,6 +21,7 @@ private slots:
     void parsesSplitVtSequences();
     void preservesContentAcrossResize();
     void exposesImmutableStyledCells();
+    void appliesColorSchemeToDefaultsAndPalette();
     void exposesWideCellAndCursorWidth();
     void preservesPrimaryScreenAcrossAlternateScreen();
     void normalizesWideCellSelection();
@@ -227,6 +228,32 @@ void TerminalEngineTests::exposesImmutableStyledCells()
     QVERIFY(snapshot->cursor.visible);
     QCOMPARE(snapshot->cursor.column, 2);
     QCOMPARE(snapshot->cursor.row, 0);
+}
+
+void TerminalEngineTests::appliesColorSchemeToDefaultsAndPalette()
+{
+    using ztermy::terminal::TerminalColor;
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 12, .rows = 2});
+    QVERIFY(result.has_value());
+    auto &engine = **result;
+
+    constexpr std::string_view content = "[31mA[0mB";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(content))));
+    ztermy::terminal::TerminalColorScheme scheme;
+    scheme.foreground = {.red = 1, .green = 2, .blue = 3};
+    scheme.background = {.red = 4, .green = 5, .blue = 6};
+    scheme.cursor = {.red = 7, .green = 8, .blue = 9};
+    scheme.ansi[1] = {.red = 200, .green = 10, .blue = 20};
+    QVERIFY(!engine.setColorScheme(scheme));
+
+    const auto snapshot = engine.snapshot();
+    QVERIFY(snapshot.has_value());
+    QCOMPARE(snapshot->defaultForeground, scheme.foreground);
+    QCOMPARE(snapshot->defaultBackground, scheme.background);
+    QCOMPARE(snapshot->cursor.color, scheme.cursor);
+    QCOMPARE(snapshot->cell(0, 0).foreground, scheme.ansi[1]);
+    QCOMPARE(snapshot->cell(1, 0).foreground, scheme.foreground);
+    QCOMPARE(snapshot->cell(1, 0).background, scheme.background);
 }
 
 void TerminalEngineTests::exposesWideCellAndCursorWidth()
