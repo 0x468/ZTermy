@@ -22,6 +22,7 @@
 #include <deque>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <system_error>
 #include <thread>
 #include <variant>
@@ -52,6 +53,7 @@ public:
     void requestStop();
     [[nodiscard]] bool stopFinished() const noexcept { return m_stopFinished.load(); }
     void setOutputSink(const std::shared_ptr<terminal::TerminalOutputSink> &sink);
+    void setColorScheme(const terminal::TerminalColorScheme &scheme);
     [[nodiscard]] diagnostics::LatencySummary inputQueueLatencySummary() const noexcept;
 
 public slots:
@@ -165,6 +167,10 @@ private:
     struct ClearSearchCommand final
     {
     };
+    struct ColorSchemeCommand final
+    {
+        terminal::TerminalColorScheme scheme;
+    };
     struct EncodingCommand final
     {
         terminal::TerminalEncoding encoding = terminal::TerminalEncoding::Utf8;
@@ -186,10 +192,11 @@ private:
     using Command =
         std::variant<InputCommand, PasteCommand, KeyCommand, MouseCommand, FocusCommand, terminal::TerminalGeometry,
                      ScrollCommand, SelectionCommand, SelectionGestureCommand, CopyModeCommand, SelectAllCommand,
-                     CopyCommand, SelectedTextCommand, SearchCommand, ClearSearchCommand, EncodingCommand,
-                     TelemetryVisibilityCommand, TelemetryRefreshCommand, SnapshotRequestCommand>;
+                     CopyCommand, SelectedTextCommand, SearchCommand, ClearSearchCommand, ColorSchemeCommand,
+                     EncodingCommand, TelemetryVisibilityCommand, TelemetryRefreshCommand, SnapshotRequestCommand>;
 
     void queueByteCommand(Command command, std::size_t byteCount);
+    void queueCommand(Command command);
     void run(SshConnectionRequest &request, terminal::TerminalGeometry geometry, const std::stop_token &stopToken);
     void publishSnapshot();
     void publishSnapshotIfDirty();
@@ -215,6 +222,7 @@ private:
 
     std::unique_ptr<terminal::GhosttyTerminalEngine> m_engine;
     std::shared_ptr<terminal::TerminalOutputSink> m_outputSink;
+    std::optional<terminal::TerminalColorScheme> m_colorScheme;
     std::jthread m_worker;
     std::jthread m_stopThread;
     std::atomic_bool m_stopFinished = true;

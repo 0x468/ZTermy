@@ -59,6 +59,7 @@ public:
     virtual void setOutputSink(const std::shared_ptr<TerminalOutputSink> &) {}
     virtual void setShellIntegrationNonce(const std::string &) {}
     virtual void setLaunchSpec(const LocalTerminalLaunchSpec &) {}
+    virtual void setColorScheme(const ztermy::terminal::TerminalColorScheme &) {}
 
 public slots:
     virtual void queueInput(const QByteArray &bytes) = 0;
@@ -108,6 +109,7 @@ public:
     void setOutputSink(const std::shared_ptr<TerminalOutputSink> &sink) override;
     void setShellIntegrationNonce(const std::string &nonce) override;
     void setLaunchSpec(const LocalTerminalLaunchSpec &spec) override;
+    void setColorScheme(const ztermy::terminal::TerminalColorScheme &scheme) override;
     [[nodiscard]] diagnostics::LatencySummary inputQueueLatencySummary() const noexcept;
     [[nodiscard]] diagnostics::LatencySummary takeInputQueueLatencySummary() noexcept;
     struct SnapshotCounters
@@ -204,6 +206,10 @@ private:
     struct ClearSearchCommand
     {
     };
+    struct ColorSchemeCommand
+    {
+        TerminalColorScheme scheme;
+    };
     // Queued by the delivery timer when output arrived while a snapshot was
     // still waiting for delivery, so the next frame is built off the timer
     // cadence instead of once per PTY read.
@@ -211,12 +217,13 @@ private:
     {
     };
 
-    using Command =
-        std::variant<InputCommand, PasteCommand, KeyCommand, MouseCommand, FocusCommand, TerminalGeometry,
-                     ScrollCommand, SelectionCommand, SelectionGestureCommand, CopyModeCommand, SelectAllCommand,
-                     CopyCommand, SelectedTextCommand, SearchCommand, ClearSearchCommand, SnapshotRequestCommand>;
+    using Command = std::variant<InputCommand, PasteCommand, KeyCommand, MouseCommand, FocusCommand, TerminalGeometry,
+                                 ScrollCommand, SelectionCommand, SelectionGestureCommand, CopyModeCommand,
+                                 SelectAllCommand, CopyCommand, SelectedTextCommand, SearchCommand, ClearSearchCommand,
+                                 ColorSchemeCommand, SnapshotRequestCommand>;
 
     void queueByteCommand(Command command, std::size_t byteCount);
+    void queueCommand(Command command);
     void readLoop(const std::stop_token &stopToken);
     void writeLoop(const std::stop_token &stopToken);
     void monitorProcessExit(const std::stop_token &stopToken);
@@ -237,6 +244,7 @@ private:
     std::shared_ptr<TerminalOutputSink> m_outputSink;
     std::string m_shellIntegrationNonce;
     LocalTerminalLaunchSpec m_launchSpec;
+    std::optional<TerminalColorScheme> m_colorScheme;
     std::jthread m_readThread;
     std::jthread m_writeThread;
     std::jthread m_exitThread;

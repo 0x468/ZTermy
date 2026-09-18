@@ -118,6 +118,13 @@ std::error_code LocalTerminalSession::start(const TerminalGeometry geometry)
     }
 
     m_engine = std::move(*engineResult);
+    if (m_colorScheme)
+    {
+        if (const std::error_code error = m_engine->setColorScheme(*m_colorScheme))
+        {
+            qCWarning(terminalSessionLog) << "Terminal color scheme was not applied:" << error.message();
+        }
+    }
     m_process = std::move(process);
     resetMetrics();
     m_running.store(true);
@@ -465,84 +472,59 @@ void LocalTerminalSession::requestSelectionGesture(const TerminalSelectionGestur
 
 void LocalTerminalSession::requestCopyModeAction(const TerminalCopyModeAction &action)
 {
+    queueCommand(CopyModeCommand{.action = action});
+}
+
+void LocalTerminalSession::setColorScheme(const ztermy::terminal::TerminalColorScheme &scheme)
+{
+    if (m_colorScheme == scheme)
+    {
+        return;
+    }
+    m_colorScheme = scheme;
+    queueCommand(ColorSchemeCommand{.scheme = scheme});
+}
+
+void LocalTerminalSession::queueCommand(Command command)
+{
     if (!m_running.load())
     {
         return;
     }
     {
         std::scoped_lock lock(m_commandMutex);
-        m_commands.emplace_back(CopyModeCommand{.action = action});
+        m_commands.emplace_back(std::move(command));
     }
     m_commandAvailable.notify_one();
 }
 
 void LocalTerminalSession::selectAll()
 {
-    if (!m_running.load())
-    {
-        return;
-    }
-    {
-        std::scoped_lock lock(m_commandMutex);
-        m_commands.emplace_back(SelectAllCommand{});
-    }
-    m_commandAvailable.notify_one();
+    queueCommand(SelectAllCommand{});
 }
 
 void LocalTerminalSession::clearSelection()
 {
-    if (!m_running.load())
-    {
-        return;
-    }
-    {
-        std::scoped_lock lock(m_commandMutex);
-        m_commands.emplace_back(SelectionCommand{});
-    }
-    m_commandAvailable.notify_one();
+    queueCommand(SelectionCommand{});
 }
 
 void LocalTerminalSession::copySelection()
 {
-    if (!m_running.load())
-    {
-        return;
-    }
-    {
-        std::scoped_lock lock(m_commandMutex);
-        m_commands.emplace_back(CopyCommand{});
-    }
-    m_commandAvailable.notify_one();
+    queueCommand(CopyCommand{});
 }
 
 void LocalTerminalSession::requestSelectedText()
 {
-    if (!m_running.load())
-    {
-        return;
-    }
-    {
-        std::scoped_lock lock(m_commandMutex);
-        m_commands.emplace_back(SelectedTextCommand{});
-    }
-    m_commandAvailable.notify_one();
+    queueCommand(SelectedTextCommand{});
 }
 
 void LocalTerminalSession::search(const QString &query, const bool backwards, const bool caseSensitive)
 {
-    if (!m_running.load())
-    {
-        return;
-    }
-    {
-        std::scoped_lock lock(m_commandMutex);
-        m_commands.emplace_back(SearchCommand{
-            .query = query.toUtf8(),
-            .direction = backwards ? TerminalSearchDirection::backward : TerminalSearchDirection::forward,
-            .caseSensitive = caseSensitive,
-        });
-    }
-    m_commandAvailable.notify_one();
+    queueCommand(SearchCommand{
+        .query = query.toUtf8(),
+        .direction = backwards ? TerminalSearchDirection::backward : TerminalSearchDirection::forward,
+        .caseSensitive = caseSensitive,
+    });
 }
 
 std::expected<ztermy::terminal::TerminalScrollbackPage, std::error_code>
@@ -559,15 +541,7 @@ LocalTerminalSession::scrollbackPage(const ztermy::terminal::TerminalScrollbackR
 
 void LocalTerminalSession::clearSearch()
 {
-    if (!m_running.load())
-    {
-        return;
-    }
-    {
-        std::scoped_lock lock(m_commandMutex);
-        m_commands.emplace_back(ClearSearchCommand{});
-    }
-    m_commandAvailable.notify_one();
+    queueCommand(ClearSearchCommand{});
 }
 
 void LocalTerminalSession::readLoop(const std::stop_token &stopToken)
@@ -899,6 +873,22 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
                 continue;
             }
             emit searchResultReady(QString::fromUtf8(search->query), result->current, result->total, result->wrapped);
+            publishSnapshot();
+            continue;
+        }
+
+        if (const auto *colorScheme = std::get_if<ColorSchemeCommand>(&command))
+        {
+            std::error_code error;
+            {
+                std::scoped_lock lock(m_engineMutex);
+                error = m_engine->setColorScheme(colorScheme->scheme);
+            }
+            if (error)
+            {
+                postStatus(tr("Terminal color scheme failed: %1").arg(QString::fromStdString(error.message())));
+                continue;
+            }
             publishSnapshot();
             continue;
         }

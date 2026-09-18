@@ -250,6 +250,13 @@ std::error_code SshTerminalSession::start(SshConnectionRequest request, const te
     }
 
     m_engine = std::move(*engine);
+    if (m_colorScheme)
+    {
+        if (const std::error_code error = m_engine->setColorScheme(*m_colorScheme))
+        {
+            qCWarning(sshSessionLog) << "SSH terminal color scheme was not applied:" << error.message();
+        }
+    }
     resetMetrics();
     if (!m_commandWakeEvent.reset())
     {
@@ -579,75 +586,58 @@ void SshTerminalSession::requestSelectionGesture(const terminal::TerminalSelecti
 
 void SshTerminalSession::requestCopyModeAction(const terminal::TerminalCopyModeAction &action)
 {
+    queueCommand(CopyModeCommand{.action = action});
+}
+
+void SshTerminalSession::setColorScheme(const terminal::TerminalColorScheme &scheme)
+{
+    if (m_colorScheme == scheme)
+    {
+        return;
+    }
+    m_colorScheme = scheme;
+    queueCommand(ColorSchemeCommand{.scheme = scheme});
+}
+
+void SshTerminalSession::queueCommand(Command command)
+{
     if (!m_running.load())
     {
         return;
     }
-    {
-        std::scoped_lock lock(m_commandMutex);
-        m_commands.emplace_back(CopyModeCommand{.action = action});
-    }
+    std::scoped_lock lock(m_commandMutex);
+    m_commands.emplace_back(std::move(command));
     signalCommandWake();
 }
 
 void SshTerminalSession::selectAll()
 {
-    if (!m_running.load())
-    {
-        return;
-    }
-    std::scoped_lock lock(m_commandMutex);
-    m_commands.emplace_back(SelectAllCommand{});
-    signalCommandWake();
+    queueCommand(SelectAllCommand{});
 }
 
 void SshTerminalSession::clearSelection()
 {
-    if (!m_running.load())
-    {
-        return;
-    }
-    std::scoped_lock lock(m_commandMutex);
-    m_commands.emplace_back(SelectionCommand{});
-    signalCommandWake();
+    queueCommand(SelectionCommand{});
 }
 
 void SshTerminalSession::copySelection()
 {
-    if (!m_running.load())
-    {
-        return;
-    }
-    std::scoped_lock lock(m_commandMutex);
-    m_commands.emplace_back(CopyCommand{});
-    signalCommandWake();
+    queueCommand(CopyCommand{});
 }
 
 void SshTerminalSession::requestSelectedText()
 {
-    if (!m_running.load())
-    {
-        return;
-    }
-    std::scoped_lock lock(m_commandMutex);
-    m_commands.emplace_back(SelectedTextCommand{});
-    signalCommandWake();
+    queueCommand(SelectedTextCommand{});
 }
 
 void SshTerminalSession::search(const QString &query, const bool backwards, const bool caseSensitive)
 {
-    if (!m_running.load())
-    {
-        return;
-    }
-    std::scoped_lock lock(m_commandMutex);
-    m_commands.emplace_back(SearchCommand{
+    queueCommand(SearchCommand{
         .query = query.toUtf8(),
         .direction =
             backwards ? terminal::TerminalSearchDirection::backward : terminal::TerminalSearchDirection::forward,
         .caseSensitive = caseSensitive,
     });
-    signalCommandWake();
 }
 
 std::expected<ztermy::terminal::TerminalScrollbackPage, std::error_code>
@@ -662,13 +652,7 @@ SshTerminalSession::scrollbackPage(const ztermy::terminal::TerminalScrollbackReq
 
 void SshTerminalSession::clearSearch()
 {
-    if (!m_running.load())
-    {
-        return;
-    }
-    std::scoped_lock lock(m_commandMutex);
-    m_commands.emplace_back(ClearSearchCommand{});
-    signalCommandWake();
+    queueCommand(ClearSearchCommand{});
 }
 
 void SshTerminalSession::setEncoding(const QString &encoding)
@@ -1168,6 +1152,17 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                 const QString query = QString::fromUtf8(search->query);
                 const terminal::TerminalSearchResult searchResult = *result;
                 postSearchResult(query, searchResult.current, searchResult.total, searchResult.wrapped);
+                publishSnapshot();
+                continue;
+            }
+
+            if (const auto *colorScheme = std::get_if<ColorSchemeCommand>(&command))
+            {
+                if (const std::error_code error = m_engine->setColorScheme(colorScheme->scheme))
+                {
+                    postStatus(tr("SSH terminal color scheme failed: %1").arg(QString::fromStdString(error.message())));
+                    continue;
+                }
                 publishSnapshot();
                 continue;
             }
