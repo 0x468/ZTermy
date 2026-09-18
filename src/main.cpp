@@ -99,10 +99,12 @@ using ztermy::ui::namedFocusItem;
 using ztermy::ui::processWindowEventsFor;
 using ztermy::ui::processWindowEventsUntil;
 using ztermy::ui::quickItem;
+using ztermy::ui::sampleSurfaceAlphas;
 using ztermy::ui::sendKey;
 using ztermy::ui::sendMouseClick;
 using ztermy::ui::sendMouseMove;
 using ztermy::ui::sendText;
+using ztermy::ui::SurfaceAlphas;
 using ztermy::ui::terminalViewportHasFocus;
 using ztermy::ui::terminalViewportItem;
 using ztermy::ui::visualQuickItem;
@@ -384,47 +386,6 @@ struct ResizeHitRuntimeCase
     return windowRemainsOpaque && darkModeMatches && cornerPreferenceMatches && backdropMatches;
 }
 
-// ADR 0120: the native material shows through the chrome and the terminal
-// workspace only; content pages, panels and controls stay opaque under every
-// backdrop, so lowering the backdrop opacity can never wash out a page.
-struct SurfaceAlphas
-{
-    int root = -1;
-    int chrome = -1;
-    int workspace = -1;
-    int content = -1;
-    int panel = -1;
-    int elevated = -1;
-    int control = -1;
-    int field = -1;
-
-    [[nodiscard]] bool contentOpaque() const
-    {
-        return content == 255 && panel == 255 && elevated == 255 && control == 255 && field == 255;
-    }
-
-    [[nodiscard]] bool materialTint(const int chromeAlpha, const int workspaceAlpha) const
-    {
-        return root == 0 && chrome == chromeAlpha && workspace == workspaceAlpha && contentOpaque();
-    }
-};
-
-[[nodiscard]] SurfaceAlphas sampleSurfaceAlphas(const ztermy::NativeWindow &window, const char *state)
-{
-    const QQuickItem *rootObject = window.rootObject();
-    const auto alpha = [rootObject](const char *propertyName) {
-        return rootObject == nullptr ? -1 : rootObject->property(propertyName).value<QColor>().alpha();
-    };
-    const SurfaceAlphas alphas{alpha("backgroundColor"), alpha("chromeColor"), alpha("workspaceColor"),
-                               alpha("contentColor"),    alpha("panelColor"),  alpha("elevatedColor"),
-                               alpha("controlColor"),    alpha("fieldColor")};
-    qCInfo(applicationLog) << "Window appearance surface alphas" << state << "root=" << alphas.root
-                           << "chrome=" << alphas.chrome << "workspace=" << alphas.workspace
-                           << "content=" << alphas.content << "panel=" << alphas.panel << "elevated=" << alphas.elevated
-                           << "control=" << alphas.control << "field=" << alphas.field;
-    return alphas;
-}
-
 [[nodiscard]] bool runWindowAppearanceRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller)
 {
     window.resize(QSize{1120, 800});
@@ -440,7 +401,7 @@ struct SurfaceAlphas
     constexpr int micaAltBackdrop = 4;
     // Alpha exactly as QML's Qt.rgba stores a slider value.
     const auto alphaOf = [](const qreal alpha) {
-        return QColor::fromRgbF(0.0, 0.0, 0.0, alpha).alpha();
+        return QColor::fromRgbF(0.0F, 0.0F, 0.0F, static_cast<float>(alpha)).alpha();
     };
     const auto saveAppearance = [&controller](const QString &theme, const qreal backdropOpacity,
                                               const QString &backdrop) {

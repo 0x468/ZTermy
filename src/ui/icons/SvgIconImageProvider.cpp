@@ -18,7 +18,7 @@ constexpr int defaultIconSize = 20;
 constexpr int maximumIconSize = 512;
 // Cache budget in bytes; a 40x40 icon costs 6.4 KB, so this holds hundreds
 // of distinct icon/color/size combinations.
-constexpr qsizetype iconCacheBudgetBytes = 4 * 1024 * 1024;
+constexpr qsizetype iconCacheBudgetBytes = qsizetype{4} * 1024 * 1024;
 
 [[nodiscard]] bool isValidIconName(const QStringView name)
 {

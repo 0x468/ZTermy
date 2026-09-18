@@ -1924,7 +1924,7 @@ void AppControllerTests::persistsConnectionHistorySwitchWithoutStoppingSessions(
         QVERIFY(reopened.terminalThemes().size() >= 4);
         QVERIFY(!reopened.saveTerminalTheme(QStringLiteral("no-such-theme")));
         const int schemesBefore = state->colorSchemes;
-        const int tabCount = reopened.terminalTabs().size();
+        const auto tabCount = static_cast<int>(reopened.terminalTabs().size());
         QVERIFY(tabCount >= 1);
         QVERIFY(reopened.saveTerminalTheme(QStringLiteral("nord")));
         QCOMPARE(reopened.terminalThemeId(), QStringLiteral("nord"));

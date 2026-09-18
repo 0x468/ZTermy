@@ -67,8 +67,9 @@ void TerminalThemeCatalogTests::providesBuiltInThemesAndFallbacks()
     }
     const auto dark = catalog.find(QString::fromLatin1(TerminalThemeCatalog::defaultDarkThemeId));
     QVERIFY(dark.has_value());
-    QCOMPARE(dark->scheme.background, (TerminalColor{.red = 0x0B, .green = 0x10, .blue = 0x17}));
-    QCOMPARE(catalog.resolve(QStringLiteral("unknown"), true).id, dark->id);
+    const auto darkTheme = dark.value_or(ztermy::config::TerminalTheme{});
+    QCOMPARE(darkTheme.scheme.background, (TerminalColor{.red = 0x0B, .green = 0x10, .blue = 0x17}));
+    QCOMPARE(catalog.resolve(QStringLiteral("unknown"), true).id, darkTheme.id);
     QCOMPARE(catalog.resolve(QStringLiteral("unknown"), false).id,
              QString::fromLatin1(TerminalThemeCatalog::defaultLightThemeId));
     QCOMPARE(catalog.resolve(QStringLiteral("nord"), false).name, QStringLiteral("Nord"));
@@ -172,8 +173,9 @@ void TerminalThemeCatalogTests::storesAndRemovesCustomThemes()
     QCOMPARE(catalog.themes().size(), builtInCount + 1);
     const auto stored = catalog.find(QStringLiteral("nord-2"));
     QVERIFY(stored.has_value());
-    QVERIFY(!stored->builtIn);
-    QCOMPARE(stored->name, QStringLiteral("Nord Copy"));
+    const auto storedTheme = stored.value_or(ztermy::config::TerminalTheme{});
+    QVERIFY(!storedTheme.builtIn);
+    QCOMPARE(storedTheme.name, QStringLiteral("Nord Copy"));
     QVERIFY(QFile::exists(QDir(themesDirectory).filePath(QStringLiteral("nord-2.json"))));
 
     const auto again = catalog.importFile(sourcePath);

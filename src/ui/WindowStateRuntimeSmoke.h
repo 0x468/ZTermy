@@ -3,9 +3,11 @@
 #include "core/windowing/WindowPresenter.h"
 #include "platform/windows/NativeWindow.h"
 
+#include <QColor>
 #include <QDebug>
 #include <QElapsedTimer>
 #include <QEventLoop>
+#include <QQuickItem>
 #include <QTimer>
 #include <QWindow>
 
@@ -115,5 +117,50 @@ template <typename Predicate>
     qInfo() << "Window state smoke: toggle restores normal geometry:" << restored;
 
     return maximized && minimizedKeepsMaximize && presentedMaximized && restored;
+}
+
+// ADR 0120: the native material shows through the chrome and the terminal
+// workspace only; content pages, panels and controls stay opaque under every
+// backdrop, so lowering the backdrop opacity can never wash out a page.
+struct SurfaceAlphas
+{
+    int root = -1;
+    int chrome = -1;
+    int workspace = -1;
+    int content = -1;
+    int panel = -1;
+    int elevated = -1;
+    int control = -1;
+    int field = -1;
+
+    [[nodiscard]] bool contentOpaque() const
+    {
+        return content == 255 && panel == 255 && elevated == 255 && control == 255 && field == 255;
+    }
+
+    [[nodiscard]] bool materialTint(const int chromeAlpha, const int workspaceAlpha) const
+    {
+        return root == 0 && chrome == chromeAlpha && workspace == workspaceAlpha && contentOpaque();
+    }
+};
+
+[[nodiscard]] inline SurfaceAlphas sampleSurfaceAlphas(const NativeWindow &window, const char *state)
+{
+    const QQuickItem *rootObject = window.rootObject();
+    const auto alpha = [rootObject](const char *propertyName) {
+        return rootObject == nullptr ? -1 : rootObject->property(propertyName).value<QColor>().alpha();
+    };
+    const SurfaceAlphas alphas{.root = alpha("backgroundColor"),
+                               .chrome = alpha("chromeColor"),
+                               .workspace = alpha("workspaceColor"),
+                               .content = alpha("contentColor"),
+                               .panel = alpha("panelColor"),
+                               .elevated = alpha("elevatedColor"),
+                               .control = alpha("controlColor"),
+                               .field = alpha("fieldColor")};
+    qInfo() << "Window appearance surface alphas" << state << "root=" << alphas.root << "chrome=" << alphas.chrome
+            << "workspace=" << alphas.workspace << "content=" << alphas.content << "panel=" << alphas.panel
+            << "elevated=" << alphas.elevated << "control=" << alphas.control << "field=" << alphas.field;
+    return alphas;
 }
 } // namespace ztermy::ui
