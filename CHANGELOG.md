@@ -6,6 +6,48 @@ The project has not published a release.
 
 ## Unreleased
 
+### UI V2 design system — 2026-09-19 (branch `ui/v2-design-system`)
+
+- Limit the window material to the title bar and terminal workspace. Mica or
+  Acrylic used to show through every page with a per-surface alpha ladder;
+  content pages, popups, menus, toasts and dialogs are now opaque and get
+  their hierarchy from `AppSurface` elevation (radius, fill, hairline and a
+  shadow that only the elevated tiers draw). A persisted effects tier
+  (`full`, `reduced`, `off`; settings schema 34) gates material, shadows and
+  motion in one place and follows the Windows "reduce animation" preference.
+  ADR 0120.
+- Add the `Motion` singleton and role-based transitions (feedback, colour,
+  relocate, enter, exit, reveal) so pages, tabs, panes, menus and toasts share
+  one timing vocabulary instead of ad-hoc animations; the tier scales or
+  disables them.
+- Split `Theme` into a terminal palette and a chrome skin. Built-in themes
+  (ztermy dark/light, Nord, Dracula and more) plus JSON custom themes with
+  Windows Terminal and Ghostty import, a picker dialog with hover preview,
+  `TerminalEngine::setColorScheme` and a queued colour-scheme command so
+  running sessions restyle without restarting (settings schema 35). ADR 0121.
+- Rebuild the settings page around a grouped category rail with search,
+  per-row reset against `applicationSettingsDefaults()` and an appearance
+  page led by the theme strip. ADR 0122.
+- Move the title bar, caption buttons, pane headers, drag previews and drop
+  indicators onto the shared library (`TitleTab`, `TitleChromeAction`,
+  `CaptionButton` icons, `SessionStatusDot`, `TerminalPaneHeader`,
+  `DragPreview`, `DropTargetIndicator`); the dead QML `DropArea` drag path
+  is gone and the window-appearance smoke asserts the ADR 0120 surface
+  contract. ADR 0123.
+- Fix `saveApplicationSettings` dropping the effects tier and the terminal
+  theme: it rebuilt the settings struct from its parameters, so every
+  Settings Apply reset the terminal theme to `ztermy-dark`. It now starts
+  from the stored settings. `app-controller` gains a regression test.
+- Fix a flaky terminal render smoke: the synthetic click helper spun the
+  event loop between press and release, so a native `WM_MOUSELEAVE` posted
+  while a detached window changed state cleared the MouseArea hover and the
+  release was not a click. Press and release are now delivered back to back.
+- Terminal benchmark against same-day `main` (Release, acrylic, 24 runs each):
+  paint P50/max and heartbeat gap unchanged, completion median 1580 → 1678 ms
+  (one 100 ms marker-search tick in about a quarter more runs; tier `off`
+  measures 1582 ms on the same build), uploaded 405.5 → 425.3 MB. Details in
+  `docs/UI_V2_PLAN.md`.
+
 ### Performance pass — 2026-09-18
 
 - Build terminal snapshots on the delivery cadence instead of per read. Every

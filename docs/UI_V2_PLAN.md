@@ -1,6 +1,8 @@
 # UI/UX V2 plan — unified style library
 
-Status: in progress on branch `ui/v2-design-system` (started 2026-09-18)
+Status: chapters 1–6 landed on branch `ui/v2-design-system`
+(2026-09-18 → 2026-09-19); delivery verification is recorded in the progress
+log. Not merged.
 
 This branch may break visual and settings compatibility. The terminal
 performance boundary in [UI_DESIGN_SYSTEM.md](UI_DESIGN_SYSTEM.md) still
@@ -54,6 +56,11 @@ runtime smokes passing; a before/after screenshot pair per chapter goes under
 - Effects tier `full` must keep the terminal benchmark within the numbers
   recorded in `CHANGELOG.md` (Performance pass — 2026-09-18).
 - Each chapter records the ctest suites and runtime smokes run.
+- Delivery benchmark (2026-09-19): same-day `main` (713ee66) and the branch,
+  both Release, acrylic, 1120×800, DPR 1, 24 warm runs each in four batches
+  (three interleaved, one serial per tree) plus a seeded effects-tier A/B.
+  Raw runs and the median script live under `build/perf-evidence/ui-v2/`
+  (not committed); the numbers are in the 2026-09-19 progress entry.
 
 ## Progress log
 
@@ -145,3 +152,36 @@ runtime smokes passing; a before/after screenshot pair per chapter goes under
   `--pane-scrollbar-smoke`, `--lifecycle-runtime-smoke` and
   `--window-appearance-smoke` exit 0; code health gate PASS (baseline
   ratcheted); captures in `docs/design/ui-v2/ch6/`. ADR 0123.
+- 2026-09-19: Delivery verification. `saveApplicationSettings` rebuilt the
+  settings struct from its parameters and never copied `effectsTier` or
+  `terminalTheme`, so every Settings Apply reset the terminal theme (and the
+  smoke/benchmark theme seed reset the tier); it now starts from the stored
+  settings and overwrites only the fields the page edits, with an
+  `app-controller` regression. The terminal render smoke then failed on
+  Release in about one run in ten: `clickMouse` spun the event loop between
+  the synthetic press and release, and when the detached window had just been
+  presented from minimized Windows posted `WM_MOUSELEAVE` in that gap, Qt
+  cleared the MouseArea hover and the release no longer counted as a click,
+  so the caption restore never ran (`qt.qpa.events` shows "Leaving window"
+  between the two events in every failing run; product code was not
+  involved). Press and release are now delivered back to back; 12/12 Release
+  runs pass. Full Debug and Release ctest 129/129,
+  `ztermy_dynamic_deploy_smoke` passed, the six runtime smokes exit 0 on the
+  rebuilt Release binary, code health gate PASS (AppController.cpp ratcheted
+  to 17199). Benchmark medians
+  vs same-day `main` 713ee66 (24 runs each): completion 1580 → 1678 ms,
+  heartbeat gap 18.5 → 18 ms, paint P50 2 → 2 ms, paint P95 2 → 2 ms (the
+  4 ms bucket appears in 11/24 branch runs vs 4/24), paint max 7.15 → 7.22 ms,
+  uploaded 405.5 → 425.3 MB, snapshot updates 145 → 151.5, frame swaps
+  301 → 302. Completion is quantised by the 100 ms marker search: main lands
+  in the 1570–1595 ms tick in 16/24 runs, the branch in 10/24, so the median
+  shift is one search tick, not a slower terminal path (P50/max unchanged).
+  Tier `off` on the same build measures 1582 ms against 1684 ms for `full`
+  (5 seeded runs each, 406.6 vs 429.5 MB uploaded, 279 vs 300 frame swaps),
+  so the residual cost sits in the tier-gated chrome (material, shadows,
+  motion). Today's `main` does not reproduce the CHANGELOG 2026-09-18 numbers
+  either (1471 ms / 366.5 MB there vs 1580 ms / 405.5 MB now), so the
+  Evidence rule is read against same-day `main`. Follow-up before merge:
+  profile the `full` chrome during the burst (title-bar colour behaviours,
+  page reveal) and decide whether `reduced` should be the default on
+  battery.
