@@ -27,6 +27,7 @@
 #include "application/workbench/LocalFileBrowserController.h"
 #include "core/config/ApplicationPaths.h"
 #include "core/config/ApplicationSettings.h"
+#include "core/config/TerminalThemeCatalog.h"
 #include "domain/ai/AiCommandTracker.h"
 #include "domain/ai/AiContextBroker.h"
 #include "domain/ai/AiTerminalFrameTracker.h"
@@ -63,6 +64,7 @@
 #include <QStringList>
 #include <QThreadPool>
 #include <QTimer>
+#include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
 
@@ -162,6 +164,9 @@ class AppController final : public QObject
     Q_PROPERTY(qreal backdropOpacity READ backdropOpacity NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString backdropPreference READ backdropPreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString effectsTier READ effectsTier NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QString terminalThemeId READ terminalThemeId NOTIFY terminalThemeChanged)
+    Q_PROPERTY(QVariantMap terminalThemeColors READ terminalThemeColors NOTIFY terminalThemeChanged)
+    Q_PROPERTY(QVariantList terminalThemes READ terminalThemes NOTIFY terminalThemesChanged)
     Q_PROPERTY(QString accentPreference READ accentPreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString customAccent READ customAccent NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString uiFontFamily READ uiFontFamily NOTIFY applicationSettingsChanged)
@@ -427,6 +432,17 @@ public:
     Q_INVOKABLE bool setConnectionHistoryEnabled(bool enabled);
     [[nodiscard]] QString effectsTier() const;
     Q_INVOKABLE bool saveEffectsTier(const QString &tier);
+    // Terminal theme library (ADR 0121). The active theme is the preview when
+    // one is running, otherwise the persisted id resolved against the catalog.
+    [[nodiscard]] QString terminalThemeId() const;
+    [[nodiscard]] QVariantMap terminalThemeColors() const;
+    [[nodiscard]] QVariantList terminalThemes() const;
+    Q_INVOKABLE QVariantMap terminalThemeColorsFor(const QString &id) const;
+    Q_INVOKABLE bool saveTerminalTheme(const QString &id);
+    Q_INVOKABLE void previewTerminalTheme(const QString &id);
+    Q_INVOKABLE void endTerminalThemePreview();
+    Q_INVOKABLE QVariantMap importTerminalThemeFile(const QUrl &file);
+    Q_INVOKABLE bool removeTerminalTheme(const QString &id);
     [[nodiscard]] QObject *localFiles() const noexcept;
 
     Q_INVOKABLE QString startLocalTerminal();
@@ -737,6 +753,8 @@ signals:
     void terminalSearchChanged();
     void remoteTelemetryChanged();
     void applicationSettingsChanged();
+    void terminalThemeChanged();
+    void terminalThemesChanged();
     void credentialVaultChanged();
     void aiConversationChanged();
     void aiPermissionRulesChanged();
@@ -921,6 +939,9 @@ private:
     void setAiQuickMessageError(QString message);
     [[nodiscard]] QString aiUserSkillWarningText(ai::AiUserSkillWarning warning) const;
     [[nodiscard]] bool persistApplicationSettings(const config::ApplicationSettings &settings);
+    [[nodiscard]] config::TerminalTheme activeTerminalTheme() const;
+    void applyTerminalTheme(TerminalTab &tab) const;
+    void applyTerminalThemeToSessions();
     [[nodiscard]] bool saveHostProfileInternal(const QString &id, const QString &name, const QString &host, int port,
                                                const QString &username, const QString &authentication,
                                                const QString &privateKeyPath, bool privateKeyPassphraseRequired,
@@ -1002,6 +1023,8 @@ private:
     forwarding::PortForwardingRuleStore m_portForwardingStore;
     config::ApplicationSettingsStore m_settingsStore;
     config::ApplicationSettings m_settings;
+    config::TerminalThemeCatalog m_terminalThemes;
+    QString m_previewTerminalThemeId;
     QString m_startupRecoveryNotice;
     QString m_workspaceOperationMessage;
     actions::ActionRegistry m_actionRegistry;

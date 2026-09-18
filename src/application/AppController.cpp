@@ -291,6 +291,11 @@ private:
     return QFileInfo(settingsPath).dir().filePath(QStringLiteral("notes"));
 }
 
+[[nodiscard]] QString siblingThemesDirectory(const QString &settingsPath)
+{
+    return QFileInfo(settingsPath).dir().filePath(QStringLiteral("themes"));
+}
+
 [[nodiscard]] QString siblingWorkspaceStateFile(const QString &settingsPath)
 {
     return QFileInfo(settingsPath).dir().filePath(QStringLiteral("workspace_state.json"));
@@ -2499,6 +2504,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
       m_portForwardingStore(siblingPortForwardingFile(m_profileStore.filePath())),
       m_settingsStore(settingsPath.isEmpty() ? siblingSettingsFile(m_profileStore.filePath())
                                              : std::move(settingsPath)),
+      m_terminalThemes(siblingThemesDirectory(m_settingsStore.filePath())),
       m_scriptStore(siblingScriptsFile(m_settingsStore.filePath())),
       m_legacyQuickCommandPath(siblingQuickCommandsFile(m_settingsStore.filePath())),
       m_noteStore(siblingNotesDirectory(m_settingsStore.filePath())),
@@ -2541,6 +2547,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
       m_portForwardingStore(siblingPortForwardingFile(m_profileStore.filePath())),
       m_settingsStore(settingsPath.isEmpty() ? siblingSettingsFile(m_profileStore.filePath())
                                              : std::move(settingsPath)),
+      m_terminalThemes(siblingThemesDirectory(m_settingsStore.filePath())),
       m_scriptStore(siblingScriptsFile(m_settingsStore.filePath())),
       m_legacyQuickCommandPath(siblingQuickCommandsFile(m_settingsStore.filePath())),
       m_noteStore(siblingNotesDirectory(m_settingsStore.filePath())),
@@ -4766,6 +4773,7 @@ QString AppController::startLocalTerminalAt(const QString &workingDirectory, con
     tab->kind = TerminalTabKind::Local;
     tab->localShellId = shell->id;
     tab->local = m_localSessionFactory();
+    applyTerminalTheme(*tab);
     timing.mark("session-created");
     if (!tab->local)
     {
@@ -5302,6 +5310,7 @@ bool AppController::splitActiveTerminal(const QString &orientation, const bool d
         tab->keywordHighlightEnabled = source->keywordHighlightEnabled;
         applyWorkspaceState(*tab);
         tab->ssh = std::make_unique<ssh::SshTerminalSession>();
+        applyTerminalTheme(*tab);
         restoreKind = tab->sourceProfileId.isEmpty() ? workbench::TerminalRestoreKind::Transient
                                                      : workbench::TerminalRestoreKind::SshProfile;
     }
@@ -5318,6 +5327,7 @@ bool AppController::splitActiveTerminal(const QString &orientation, const bool d
         tab->localShellId = shell->id;
         tab->status = tr("Starting local terminal...");
         tab->local = m_localSessionFactory();
+        applyTerminalTheme(*tab);
         if (!tab->local)
         {
             return false;
@@ -7788,6 +7798,7 @@ bool AppController::startSshConnection(ssh::SshConnectionRequest request, QStrin
     applyWorkspaceState(*tab);
     tab->sshPhase = ssh::SshConnectionPhase::Resolving;
     tab->ssh = std::make_unique<ssh::SshTerminalSession>();
+    applyTerminalTheme(*tab);
     timing.mark("session-created");
     const QString tabId = tab->id;
     initializeSessionLog(*tab);
@@ -16940,6 +16951,7 @@ void AppController::restoreTerminalWorkspaces()
                 ++m_nextLocalTabNumber;
                 tab->status = tr("Restoring local terminal...");
                 tab->local = m_localSessionFactory();
+                applyTerminalTheme(*tab);
                 if (!tab->local)
                 {
                     continue;
@@ -17002,6 +17014,7 @@ void AppController::restoreTerminalWorkspaces()
             }
             applyWorkspaceState(*tab);
             tab->ssh = std::make_unique<ssh::SshTerminalSession>();
+            applyTerminalTheme(*tab);
             initializeSessionLog(*tab);
             initializeTerminalOutputSink(*tab);
             connectSshTabSignals(*tab);
@@ -17095,6 +17108,8 @@ bool AppController::persistApplicationSettings(const config::ApplicationSettings
         return true;
     }
     const bool aiDebugTraceChanged = m_settings.aiDebugTraceEnabled != settings.aiDebugTraceEnabled;
+    const bool terminalThemeChanged =
+        m_settings.terminalTheme != settings.terminalTheme || m_settings.theme != settings.theme;
     const bool aiProxyChanged = m_settings.aiProxy != settings.aiProxy || m_settings.aiProxyUrl != settings.aiProxyUrl
                                 || m_settings.aiProxyUsername != settings.aiProxyUsername;
     m_settings = settings;
@@ -17114,6 +17129,10 @@ bool AppController::persistApplicationSettings(const config::ApplicationSettings
         {
             tab->sftpModel->setShowHidden(m_settings.sftpShowHiddenFiles);
         }
+    }
+    if (terminalThemeChanged && m_previewTerminalThemeId.isEmpty())
+    {
+        applyTerminalThemeToSessions();
     }
     emit applicationSettingsChanged();
     return true;

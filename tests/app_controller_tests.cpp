@@ -62,6 +62,7 @@ struct FakeLocalSessionState final
     bool searchBackwards = false;
     bool searchCaseSensitive = false;
     std::error_code startError;
+    int colorSchemes = 0;
 };
 
 class FakeLocalTerminalSession final : public ztermy::terminal::LocalTerminalSessionBackend
@@ -118,6 +119,7 @@ public:
     void selectAll() override {}
     void clearSelection() override {}
     void copySelection() override {}
+    void setColorScheme(const ztermy::terminal::TerminalColorScheme &) override { ++m_state->colorSchemes; }
     void requestSelectedText() override
     {
         ++m_state->selectedTextRequests;
@@ -1911,6 +1913,24 @@ void AppControllerTests::persistsConnectionHistorySwitchWithoutStoppingSessions(
         QCOMPARE(reopened.effectsTier(), QStringLiteral("reduced"));
         QVERIFY(reopened.resetApplicationSettings());
         QCOMPARE(reopened.effectsTier(), QStringLiteral("full"));
+        QCOMPARE(reopened.terminalThemeId(), QStringLiteral("ztermy-dark"));
+        QVERIFY(reopened.terminalThemes().size() >= 4);
+        QVERIFY(!reopened.saveTerminalTheme(QStringLiteral("no-such-theme")));
+        const int schemesBefore = state->colorSchemes;
+        const int tabCount = reopened.terminalTabs().size();
+        QVERIFY(tabCount >= 1);
+        QVERIFY(reopened.saveTerminalTheme(QStringLiteral("nord")));
+        QCOMPARE(reopened.terminalThemeId(), QStringLiteral("nord"));
+        QCOMPARE(reopened.terminalThemeColors().value(QStringLiteral("background")).toString(),
+                 QStringLiteral("#2E3440"));
+        QCOMPARE(state->colorSchemes, schemesBefore + tabCount);
+        reopened.previewTerminalTheme(QStringLiteral("dracula"));
+        QCOMPARE(reopened.terminalThemeId(), QStringLiteral("dracula"));
+        reopened.endTerminalThemePreview();
+        QCOMPARE(reopened.terminalThemeId(), QStringLiteral("nord"));
+        QCOMPARE(state->colorSchemes, schemesBefore + (3 * tabCount));
+        QVERIFY(reopened.resetApplicationSettings());
+        QCOMPARE(reopened.terminalThemeId(), QStringLiteral("ztermy-dark"));
         QFile futureSettings(settings);
         QVERIFY(futureSettings.open(QIODevice::WriteOnly | QIODevice::Truncate));
         QVERIFY(futureSettings.write("{\"version\":9999}") > 0);
