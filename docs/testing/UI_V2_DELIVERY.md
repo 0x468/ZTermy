@@ -9,13 +9,13 @@
 | 字段 | 值 |
 | --- | --- |
 | 日期 | 2026-09-19 |
-| 分支 / HEAD | `ui/v2-design-system` @ `ac46565`，领先 `main`（`713ee66`）39 个提交 |
-| 二进制源提交 | `ccb7c68`（`ac46565` 仅改文档） |
+| 分支 / HEAD | `ui/v2-design-system` @ `b886686`，领先 `main`（`713ee66`）44 个提交 |
+| 二进制源提交 | `e787dcc`（`b886686` 仅改文档） |
 | 版本 | `0.4.6` |
 | 平台 | Windows 11 25H2 x64，MSVC 14.44，Qt 6.8.3 msvc2022_64 动态链接，D3D11 |
-| 二进制 | `build/msvc-dynamic-release/ztermy.exe`，12,852,736 字节，2026-09-19 12:43:20 |
-| SHA-256 | `f9bd4c1ef40c240f74284f3f713fc974b82baaf2be1f594ed209b15b66e368da` |
-| 部署包 | `build/msvc-dynamic-release/package/dynamic/`，132 个文件，111.5 MB；其中 `ztermy.exe` 与上者逐字节一致 |
+| 二进制 | `build/msvc-dynamic-release/ztermy.exe`，12,888,064 字节，2026-09-19 16:33:05 |
+| SHA-256 | `d0394fb229e951a728c64db2161dd8e1e6c47d8cf2ec4dd16ecb11715d3ae412` |
+| 部署包 | `build/msvc-dynamic-release/package/dynamic/`，132 个文件，112 MB；其中 `ztermy.exe` 与上者逐字节一致 |
 
 `build/` 不入库；以上哈希与源提交共同标识交付物。
 
@@ -92,6 +92,8 @@ completion 被 100 ms 标记搜索量化：`main` 有 16/24 次落在 1570–159
 | 高亮分割线分不清左右/上下，应是活动窗格自己的边框 | 强调色画在 `AppSplitView` 分割线上，两侧窗格共用一条线 | 新增 `PaneFocusEdges`：活动窗格只在与兄弟窗格相邻的边画 2 px 强调线；`TerminalSplitNode.innerEdges` 位掩码沿分割树递归下发（左/上子节点得右/下边，右/下子节点得左/上边），靠窗口的外边永不高亮；单窗格与分离窗口不画 | `review-2/` 截图；`--pane-scrollbar-smoke` |
 | 分割线太占空间 | handle 固定 6 px | handle 视觉 1 px 发丝线，`containmentMask` 保持 7 px 命中区，悬停/拖拽/双击复位/光标不变 | `--resize-interactions-smoke` 断言 handle 上的 `SplitHCursor`/`SplitVCursor` 与拖拽吸附 |
 | 非焦点窗格不应闪烁光标 | 每个 `TerminalItem` 的闪烁定时器与焦点无关 | 定时器只在 `hasActiveFocus()` 时翻转相位；失焦/得焦时把相位复位为“显示”并重启定时器 | ctest `terminal-item::blinksOnlyWhileFocused` |
+
+本轮复验（提交 `781bc92`..`e787dcc`）：Release 与 Debug 全量 CTest 各 129/129（`build/_ctest_release_r8.txt`、`build/_ctest_debug_r8.txt`），`ztermy_format_check`、`ztermy_qml_quality_check`（`build/_gates_r8.log`）、全量 clang-tidy 退出 0、代码健康门禁 PASS，隔离动态部署 smoke 通过（`build/_deploy_smoke_r8.log`）；八个真实窗口 smoke 退出 0（`build/_smoke8/`）。`--ui-keyboard-smoke` 在与 ctest 并行时失败 2/3（历史工作台打开的 1 秒超时断言，既有时序敏感项，代码路径未改动），单独串行 6/6 通过。上表二进制身份已按本轮更新。
 
 ## 所有者人工验收（未执行）
 

@@ -241,3 +241,17 @@ runtime smokes passing; a before/after screenshot pair per chapter goes under
   terminal-render, lifecycle, window-appearance, pane-scrollbar) exit 0
   (resize 12/12 after the pointer fix); captures in
   `docs/design/ui-v2/review-1/`. Not merged.
+- 2026-09-19: Owner review round 2 (three findings, commits 781bc92..e787dcc).
+  (1) The divider accent could not say which side was active; the active
+  leaf now paints a 2 px accent only on the edges it shares with a sibling
+  (`PaneFocusEdges`, bitmask `TerminalSplitNode.innerEdges` propagated down
+  the split tree), so with A over B beside C, selecting B marks B's top and
+  right edges and the window edge stays clean. (2) The divider is a 1 px
+  hairline; `containmentMask` keeps a 7 px pointer target so the resize
+  smoke's cursor, drag and reset assertions hold unchanged. (3) Only the
+  focused `TerminalItem` blinks: the timer skips the phase flip without
+  active focus and focus changes reset the phase to shown
+  (`terminal-item` `blinksOnlyWhileFocused`). Evidence: Release and Debug
+  ctest 129/129, format, qml quality, full clang-tidy, code health gate
+  PASS, deploy smoke, eight runtime smokes exit 0; capture in
+  `docs/design/ui-v2/review-2/`. Not merged.
