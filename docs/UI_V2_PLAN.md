@@ -206,3 +206,38 @@ runtime smokes passing; a before/after screenshot pair per chapter goes under
   `ztermy_qml_quality_check`, full clang-tidy, Debug and Release ctest
   129/129, `ztermy_dynamic_deploy_smoke`, the six runtime smokes and the
   code health gate all pass.
+- 2026-09-19: Owner review round 1 (five findings, all fixed on the branch,
+  commits b9d8561..ccb7c68). (1) The session strip, pane toolbar, pane
+  header, telemetry strip and pane scrollbar coloured their ink from the app
+  skin while sitting on the terminal palette fill, so a dark skin with a
+  light terminal theme left the strip unreadable; `Theme` gains a workspace
+  ink family (`workspaceText/Soft/Muted/Subtle`, `workspaceBorder`,
+  `workspaceControlHover/Pressed`, `workspacePanel/RaisedBackground`) that
+  follows the terminal palette's darkness and `AppIconButton.onWorkspace`
+  selects it. (2) Settings rail titles and the V2 strings showed in
+  English: qsTr contexts are per file, so strings moved into
+  `SettingsCategoryRail` lost their `SettingsPane` entries, and lupdate had
+  never been run for the new strings; catalog regenerated (91 added, 14
+  dead removed, 0 unfinished) and `verify_translations.ps1` now runs
+  lupdate against the sources and fails on any string missing from the
+  catalog. (3) New tabs created from a content page stayed behind the
+  previous tab: the page switch focused the old viewport, whose focus
+  change re-activated the old pane; the tab is now created before the
+  page switch, and the title-navigation smoke asserts
+  `activeTerminalTabId`. (4) No resize cursor over grips: the full-window
+  pane drag capture `MouseArea` was disabled, but Qt's cursor lookup only
+  skips invisible items and a `MouseArea` always owns an arrow cursor; it
+  is now hidden instead, and the resize smoke asserts the window cursor
+  over the navigation grip and both split handles (moving the window
+  away from the physical pointer first, since Qt re-delivers hover at
+  the real pointer each frame). (5) Single pane: the accent frame, radius
+  and viewport inset are gone and the session strip loses its hairline so
+  strip and terminal are one surface; multi-pane: the accent moves to the
+  `AppSplitView` divider next to the active pane (`emphasized`), Windows
+  Terminal style, so nothing overlaps the native window edge. Evidence:
+  Release ctest 129/129, `ztermy_format_check`, `ztermy_qml_quality_check`,
+  full clang-tidy, code health gate PASS, the eight runtime smokes
+  (resize-interactions, title-navigation-mouse, ui-layout, ui-keyboard,
+  terminal-render, lifecycle, window-appearance, pane-scrollbar) exit 0
+  (resize 12/12 after the pointer fix); captures in
+  `docs/design/ui-v2/review-1/`. Not merged.

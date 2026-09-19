@@ -73,6 +73,18 @@ completion 被 100 ms 标记搜索量化：`main` 有 16/24 次落在 1570–159
 - 只构建了 `msvc-dynamic-release` 与 `msvc-dynamic-debug`；静态 Release、安装包与发布包不在本次目标内。
 - 窗格头默认隐藏，与合并前一致。
 
+## 所有者第一轮反馈的修复（2026-09-19，`b9d8561`..`ccb7c68`）
+
+| 反馈 | 根因 | 修复 | 证据 |
+| --- | --- | --- | --- |
+| 部分主题下会话小工具栏（IP、资源）看不见 | 工作区填充跟随终端调色板，文字与图标却取 app 皮肤的墨色；深色皮肤 + 浅色终端主题时同色 | `Theme.workspace*` 墨色族跟随终端调色板明暗，`AppIconButton.onWorkspace` 选用；工具栏、窗格头、遥测条、滚动条改用 | `docs/design/ui-v2/review-1/before-*.png` 与 `dark-skin-solarized-light-split.png` |
+| 设置左栏与新字符串没有中文 | `qsTr` 上下文按文件划分，移入 `SettingsCategoryRail` 的字符串失去 `SettingsPane` 的译文；新字符串从未跑 lupdate；门禁只检查已有条目 | 重新生成目录（+91 / −14，0 未完成）；`verify_translations.ps1` 对源码跑 lupdate，缺失即失败，`ctest translation-catalog` 接入 `Qt6::lupdate` | `ctest -R translation-catalog` 通过 |
+| 新建 tab 不切换、跳回上一个终端 tab | 先切页再建 tab，切页把焦点给旧视口，旧视口的焦点变化又激活旧窗格 | 先建 tab 再 `activateMainTerminal` | 标题栏导航 smoke 从主机页新建并断言 `activeTerminalTabId` |
+| 分割线上没有拉伸光标 | 全窗口窗格拖拽捕获层只是 `enabled: false`，Qt 光标查找只跳过不可见项，`MouseArea` 永远带箭头光标 | 改为 `visible` 门控；`SplitView` 把手本已带分割光标 | resize smoke 断言导航把手与两个分割把手的窗口光标，12/12 通过 |
+| 终端与工具栏割裂；单窗格有蓝紫边框；多窗格四面包边压住窗口边 | 叶子矩形画 1–2 px 边框与圆角，工具栏底部有发丝线 | 去掉边框、圆角与视口内缩，去掉发丝线；多窗格时把强调色放到活动窗格旁的分割线（`AppSplitView.emphasized`） | `review-1/ztermy-dark-single-pane.png`、`ztermy-dark-split.png` |
+
+本轮复验：Release 全量 CTest 129/129，`ztermy_format_check`、`ztermy_qml_quality_check`、全量 clang-tidy、代码健康门禁 PASS；八个真实窗口 smoke（含 resize-interactions、pane-scrollbar）退出 0。多窗格强调方式的其他候选见本轮回复，等所有者定夺。
+
 ## 所有者人工验收（未执行）
 
 - [ ] 在 acrylic / mica / solid 下切换工作台、主机、设置、AI 抽屉，确认只有标题栏与终端工作区透出材质。

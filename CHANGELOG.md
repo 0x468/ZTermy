@@ -49,6 +49,27 @@ The project has not published a release.
   the tab overflow. `SurfaceAlphas` moved to `WindowStateRuntimeSmoke.h`
   (main.cpp 4778 → 4739 lines). The new tests cast `qsizetype` counts
   explicitly and read `find()` results through `value_or`.
+- Give the terminal workspace its own ink tokens. The session strip, pane
+  toolbar, pane header, telemetry strip and pane scrollbar drew their text
+  from the app skin on top of the terminal palette fill, so a dark skin with
+  a light terminal theme was unreadable; `Theme.workspace*` follows the
+  terminal palette and `AppIconButton.onWorkspace` selects it.
+- Restore the Chinese catalog (settings rail titles, "Visual effects",
+  "Terminal theme" and the other UI V2 strings) and make the translation
+  gate run lupdate against the sources so a string missing from the catalog
+  fails `ctest`.
+- Fix a new tab created from the hosts, SFTP or settings page staying behind
+  the previously active terminal tab: the page switch focused the old
+  viewport and that focus re-activated the old pane. The tab is created
+  before the page switch; the title-navigation smoke asserts the active tab.
+- Show the resize cursor over the workbench, navigation, composer and pane
+  grips. The hidden-by-`enabled` pane drag capture layer still won Qt's
+  cursor lookup; it is now hidden by `visible`. The resize smoke asserts the
+  window cursor over the grips and split handles.
+- Remove the accent frame around a single terminal pane and the hairline
+  under the session strip so strip and terminal read as one surface; with
+  several panes the accent sits on the divider next to the active pane
+  instead of wrapping it.
 - Terminal benchmark against same-day `main` (Release, acrylic, 24 runs each):
   paint P50/max and heartbeat gap unchanged, completion median 1580 → 1678 ms
   (one 100 ms marker-search tick in about a quarter more runs; tier `off`
