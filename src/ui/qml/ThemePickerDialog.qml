@@ -6,23 +6,24 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 
 // Terminal theme picker (ADR 0121). Hovering a card previews the theme on
-// every live terminal through the controller; Apply persists it, closing
-// without applying restores the persisted theme.
+// every live terminal through the controller. Selection edits the settings
+// draft; only the settings page persists it.
 Dialog {
     id: control
 
     property var controller: null
     property string selectedId: ""
+    property string draftThemeId: ""
     property string statusMessage: ""
     property bool statusIsError: false
     readonly property var themes: controller ? controller.terminalThemes : []
     readonly property var selectedTheme: themes.find(theme => theme.id === selectedId) || null
     readonly property bool selectedIsCustom: !!selectedTheme && !selectedTheme.builtIn
 
-    signal themeApplied(string id)
+    signal themeSelected(string id)
 
     function openWithCurrent() {
-        selectedId = controller ? controller.terminalThemeId : "";
+        selectedId = draftThemeId || (controller ? controller.terminalThemeId : "");
         statusMessage = "";
         open();
     }
@@ -38,13 +39,8 @@ Dialog {
         if (!controller || selectedId.length === 0) {
             return;
         }
-        if (controller.saveTerminalTheme(selectedId)) {
-            themeApplied(selectedId);
-            accept();
-        } else {
-            statusMessage = qsTr("The theme could not be saved.");
-            statusIsError = true;
-        }
+        themeSelected(selectedId);
+        accept();
     }
 
     function importResultMessage(result) {
@@ -76,6 +72,8 @@ Dialog {
     onClosed: {
         if (controller) {
             controller.endTerminalThemePreview();
+            if (draftThemeId.length > 0)
+                controller.previewTerminalTheme(draftThemeId);
         }
     }
 
@@ -123,7 +121,7 @@ Dialog {
 
                 Text {
                     Layout.fillWidth: true
-                    text: qsTr("Hover a theme to preview it in every open terminal. Custom themes live in the themes folder next to your settings.")
+                    text: qsTr("Preview a theme, then select it. Save with Apply on the settings page. Import and Remove change the theme library immediately.")
                     color: Theme.textMuted
                     wrapMode: Text.WordWrap
                     font.family: Theme.uiFont
@@ -181,8 +179,8 @@ Dialog {
                             anchors.fill: parent
                             elevation: 1
                             color: card.modelData.background
-                            border.color: card.selected ? Theme.accent : card.hovered ? Theme.borderStrong : Theme.border
-                            border.width: card.selected ? 2 : 1
+                            border.color: cardAction.visualFocus ? Theme.focus : card.selected ? Theme.accent : card.hovered ? Theme.borderStrong : Theme.border
+                            border.width: card.selected || cardAction.visualFocus ? 2 : 1
 
                             Behavior on border.color {
                                 MotionColor {}
@@ -263,17 +261,26 @@ Dialog {
                             }
                         }
 
-                        TapHandler {
-                            onTapped: control.select(card.modelData.id)
-                            onDoubleTapped: {
+                        KeyboardAction {
+                            id: cardAction
+                            anchors.fill: parent
+                            accessibleName: card.modelData.name
+                            doubleClickEnabled: true
+                            onActivated: control.select(card.modelData.id)
+                            onVisualFocusChanged: {
+                                if (visualFocus) {
+                                    if (control.controller)
+                                        control.controller.previewTerminalTheme(card.modelData.id);
+                                    const top = card.y;
+                                    const current = grid.contentItem.contentY;
+                                    grid.contentItem.contentY = Math.max(0, Math.min(top, Math.max(current, top + card.height - grid.availableHeight)));
+                                }
+                            }
+                            onDoubleActivated: {
                                 control.select(card.modelData.id);
                                 control.applySelection();
                             }
                         }
-
-                        Accessible.role: Accessible.Button
-                        Accessible.name: card.modelData.name
-                        Accessible.onPressAction: control.select(card.modelData.id)
                     }
                 }
             }
@@ -306,8 +313,8 @@ Dialog {
                 id: applyButton
 
                 objectName: "themePickerApply"
-                text: qsTr("Apply")
-                accessibleName: qsTr("Apply the selected theme")
+                text: qsTr("Select")
+                accessibleName: qsTr("Use the selected theme in the settings draft")
                 enabled: control.selectedId.length > 0
                 variant: "primary"
                 KeyNavigation.left: cancelButton
@@ -344,6 +351,8 @@ Dialog {
             if (control.controller.removeTerminalTheme(id)) {
                 control.statusMessage = qsTr("Theme removed.");
                 control.statusIsError = false;
+                if (control.draftThemeId === id)
+                    control.themeSelected(control.controller.terminalThemeId);
                 control.select(control.controller.terminalThemeId);
             } else {
                 control.statusMessage = qsTr("The theme could not be removed.");

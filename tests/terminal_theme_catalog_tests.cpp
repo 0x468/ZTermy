@@ -30,6 +30,7 @@ private slots:
     void importsWindowsTerminalSchemes();
     void importsGhosttyThemes();
     void storesAndRemovesCustomThemes();
+    void boundsImportedIdsIncludingCollisionSuffix();
 };
 
 void TerminalThemeCatalogTests::parsesAndFormatsHexColors()
@@ -195,6 +196,44 @@ void TerminalThemeCatalogTests::storesAndRemovesCustomThemes()
     const auto unreadable = catalog.importFile(directory.filePath(QStringLiteral("missing.json")));
     QVERIFY(!unreadable.has_value());
     QCOMPARE(unreadable.error(), ztermy::config::TerminalThemeImportError::unreadable);
+}
+
+void TerminalThemeCatalogTests::boundsImportedIdsIncludingCollisionSuffix()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    TerminalThemeCatalog catalog(directory.filePath(QStringLiteral("themes")));
+    auto custom = catalog.find(QStringLiteral("nord"));
+    QVERIFY(custom.has_value());
+    custom->id = QString(100, QLatin1Char('a'));
+    const QString source = directory.filePath(QStringLiteral("long.json"));
+    QVERIFY(writeFile(source, QJsonDocument(ztermy::config::terminalThemeToJson(*custom)).toJson()));
+    const auto first = catalog.importFile(source);
+    const auto second = catalog.importFile(source);
+    QVERIFY(first.has_value());
+    QVERIFY(second.has_value());
+    QCOMPARE(first->size(), std::size_t{1});
+    QCOMPARE(second->size(), std::size_t{1});
+    QCOMPARE(first->front().size(), ztermy::config::maximumTerminalThemeIdLength);
+    QCOMPARE(second->front().size(), ztermy::config::maximumTerminalThemeIdLength);
+    QVERIFY(first->front() != second->front());
+    QVERIFY(second->front().endsWith(QStringLiteral("-2")));
+    const TerminalThemeCatalog reloaded(catalog.directory());
+    QVERIFY(reloaded.find(first->front()).has_value());
+    QVERIFY(reloaded.find(second->front()).has_value());
+
+    // Truncation at a separator must not leave trailing or doubled hyphens.
+    custom->id = QString(61, QLatin1Char('b')) + QStringLiteral("-c-def");
+    QVERIFY(writeFile(source, QJsonDocument(ztermy::config::terminalThemeToJson(*custom)).toJson()));
+    const auto separated = catalog.importFile(source);
+    const auto collision = catalog.importFile(source);
+    QVERIFY(separated.has_value());
+    QVERIFY(collision.has_value());
+    QCOMPARE(separated->size(), std::size_t{1});
+    QCOMPARE(collision->size(), std::size_t{1});
+    const TerminalThemeCatalog finalCatalog(catalog.directory());
+    QVERIFY(finalCatalog.find(separated->front()).has_value());
+    QVERIFY(finalCatalog.find(collision->front()).has_value());
 }
 
 } // namespace

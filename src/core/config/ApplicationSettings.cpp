@@ -1,4 +1,5 @@
 #include "core/config/ApplicationSettings.h"
+#include "core/config/TerminalThemeCatalog.h"
 
 #include "core/persistence/LastKnownGoodFile.h"
 
@@ -150,7 +151,7 @@ using ztermy::config::ThemePreference;
     const QString customAccent = settings.customAccent.trimmed();
     const QString terminalTheme = settings.terminalTheme.trimmed();
     const bool validTerminalTheme =
-        !terminalTheme.isEmpty() && terminalTheme.size() <= 64
+        !terminalTheme.isEmpty() && terminalTheme.size() <= ztermy::config::maximumTerminalThemeIdLength
         && std::ranges::all_of(terminalTheme, [](const QChar character) {
                return character.unicode() < 128 && (character.isLetterOrNumber() || character == QLatin1Char('-'));
            });

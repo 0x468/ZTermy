@@ -15,16 +15,14 @@ Item {
     signal activated
 
     implicitHeight: 56
-    Accessible.role: Accessible.Button
-    Accessible.name: qsTr("Choose terminal theme")
-    Accessible.onPressAction: strip.activated()
 
     AppSurface {
         anchors.fill: parent
         elevation: 1
         compact: true
         color: strip.theme.background || Theme.terminalBackground
-        border.color: hover.hovered ? Theme.accent : Theme.border
+        border.color: action.visualFocus ? Theme.focus : action.hovered ? Theme.accent : Theme.border
+        border.width: action.visualFocus ? 2 : 1
 
         Behavior on border.color {
             MotionColor {}
@@ -78,11 +76,10 @@ Item {
         }
     }
 
-    HoverHandler {
-        id: hover
-    }
-
-    TapHandler {
-        onTapped: strip.activated()
+    KeyboardAction {
+        id: action
+        anchors.fill: parent
+        accessibleName: qsTr("Choose terminal theme")
+        onActivated: strip.activated()
     }
 }

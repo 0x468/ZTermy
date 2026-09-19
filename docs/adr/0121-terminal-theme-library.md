@@ -38,9 +38,16 @@ background whenever one of them changed.
   never read the ANSI table.
 - `TerminalItem` takes `selectionBackground` / `selectionForeground` as
   properties; `TerminalSplitNode` binds them from `Theme`.
-- The picker is a dialog on elevation 3 with swatch cards; hovering a card
-  previews it, Apply persists, Cancel/Escape ends the preview. Import and
-  Remove live in the dialog; built-in themes cannot be removed.
+- The picker is a dialog on elevation 3 with keyboard-accessible swatch cards;
+  hover or keyboard focus previews a card, and Select updates the settings
+  draft. The settings page's Apply persists it. Cancel/Escape restores the
+  previous draft; discarding or leaving settings restores the persisted theme.
+  Import and Remove immediately edit the library, independently of the draft;
+  built-in themes cannot be removed. Saving failures retain a recoverable preview.
+- Imported IDs, including collision suffixes, are bounded to 64 characters,
+  matching the application-settings limit.
+- User format documentation and an original importable example live in
+  [CUSTOM_TERMINAL_THEMES.md](../CUSTOM_TERMINAL_THEMES.md).
 
 ## Consequences
 

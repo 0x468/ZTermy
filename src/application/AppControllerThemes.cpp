@@ -124,18 +124,16 @@ bool AppController::saveTerminalTheme(const QString &id)
         return false;
     }
     const bool previewing = !m_previewTerminalThemeId.isEmpty();
-    m_previewTerminalThemeId.clear();
     auto updated = m_settings;
     updated.terminalTheme = trimmed;
-    const bool changed = updated.terminalTheme != m_settings.terminalTheme;
     if (!persistApplicationSettings(updated))
     {
         return false;
     }
-    // persistApplicationSettings only re-applies on a change; a preview that
-    // ended on the persisted theme still needs the sessions refreshed.
-    if (!changed && previewing)
+    // Keep the preview recoverable until persistence succeeds.
+    if (previewing)
     {
+        m_previewTerminalThemeId.clear();
         applyTerminalThemeToSessions();
     }
     return true;
@@ -187,12 +185,13 @@ bool AppController::removeTerminalTheme(const QString &id)
     {
         return false;
     }
-    if (m_previewTerminalThemeId == trimmed)
+    const bool previewRemoved = m_previewTerminalThemeId == trimmed;
+    if (previewRemoved)
     {
         m_previewTerminalThemeId.clear();
     }
     emit terminalThemesChanged();
-    if (m_settings.terminalTheme == trimmed)
+    if (previewRemoved || m_settings.terminalTheme == trimmed)
     {
         // The persisted id now resolves to the built-in default.
         applyTerminalThemeToSessions();

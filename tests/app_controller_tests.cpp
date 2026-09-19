@@ -1954,6 +1954,11 @@ void AppControllerTests::persistsConnectionHistorySwitchWithoutStoppingSessions(
         futureSettings.close();
         QVERIFY(!reopened.setConnectionHistoryEnabled(false));
         QVERIFY(reopened.connectionHistoryEnabled()); // Failed persistence cannot change runtime policy.
+        reopened.previewTerminalTheme(QStringLiteral("nord"));
+        QVERIFY(!reopened.saveTerminalTheme(QStringLiteral("nord")));
+        QCOMPARE(reopened.terminalThemeId(), QStringLiteral("nord"));
+        reopened.endTerminalThemePreview();
+        QCOMPARE(reopened.terminalThemeId(), QStringLiteral("ztermy-dark"));
     }
 }
 

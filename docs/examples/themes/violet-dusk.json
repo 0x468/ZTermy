@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "id": "violet-dusk",
+  "name": "Violet Dusk",
+  "dark": true,
+  "background": "#171321",
+  "foreground": "#EEE8F5",
+  "cursor": "#C7A8F5",
+  "selectionBackground": "#53406D",
+  "selectionForeground": "#FFFFFF",
+  "accent": "#C7A8F5",
+  "ansi": {
+    "black": "#252030",
+    "red": "#E98B9B",
+    "green": "#9AC9A2",
+    "yellow": "#E2C38C",
+    "blue": "#A0B9E8",
+    "magenta": "#C7A8F5",
+    "cyan": "#90CAD0",
+    "white": "#D1C9DE",
+    "brightBlack": "#81768F",
+    "brightRed": "#FFADBB",
+    "brightGreen": "#B6E2BD",
+    "brightYellow": "#F5DCAA",
+    "brightBlue": "#BED2FF",
+    "brightMagenta": "#DFC6FF",
+    "brightCyan": "#B2E7EA",
+    "brightWhite": "#FAF5FF"
+  }
+}

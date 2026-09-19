@@ -612,10 +612,12 @@ bool TerminalThemeCatalog::remove(const QString &id)
 
 QString TerminalThemeCatalog::uniqueId(const QString &slug) const
 {
-    QString candidate = slug;
+    const QString base = terminalThemeSlug(slug.left(maximumTerminalThemeIdLength));
+    QString candidate = base;
     for (int suffix = 2; find(candidate).has_value(); ++suffix)
     {
-        candidate = QStringLiteral("%1-%2").arg(slug).arg(suffix);
+        const QString ending = QStringLiteral("-%1").arg(suffix);
+        candidate = terminalThemeSlug(base.left(maximumTerminalThemeIdLength - ending.size())) + ending;
     }
     return candidate;
 }

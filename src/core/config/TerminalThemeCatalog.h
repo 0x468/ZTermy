@@ -13,6 +13,8 @@
 namespace ztermy::config
 {
 
+inline constexpr qsizetype maximumTerminalThemeIdLength = 64;
+
 // A terminal theme is the palette layer of ADR 0121: the colors the terminal
 // engine renders with, plus the few skin hints (selection, accent) the chrome
 // derives its own ladder from. Chrome surfaces never read the ANSI table.

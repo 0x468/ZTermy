@@ -45,7 +45,7 @@ Item {
 
         AppIconButton {
             visible: control.dirty
-            focusPolicy: Qt.NoFocus
+            focusPolicy: Qt.TabFocus
             implicitWidth: 20
             implicitHeight: 20
             label: qsTr("Reset %1 to default").arg(control.text)

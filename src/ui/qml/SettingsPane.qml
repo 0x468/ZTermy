@@ -47,6 +47,7 @@ Rectangle {
     property var mcpReviewTool: null
     property real contentReveal: 1.0
     property string highlightedRow: ""
+    property string terminalThemeDraft: ""
     readonly property var defaults: controller.applicationSettingsDefaults()
     readonly property bool shortcutRecording: shortcutSettings.recording
     readonly property bool draftDark: themeBox.currentIndex === 1 || (themeBox.currentIndex === 0 && Theme.systemDark)
@@ -533,6 +534,8 @@ Rectangle {
 
     function loadDraft() {
         loadingDraft = true;
+        controller.endTerminalThemePreview();
+        terminalThemeDraft = controller.terminalThemeId;
         themeBox.currentIndex = themeIndex(controller.themePreference);
         opacitySlider.value = controller.backdropOpacity;
         backdropBox.currentIndex = backdropIndex(controller.backdropPreference);
@@ -597,7 +600,8 @@ Rectangle {
         const restartRequired = wantsOpaqueSurface !== windowChrome.opaqueSurface || performanceModeDraft !== windowChrome.performanceModeActive;
         const applicationSaved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, keepSelectionAfterCopySwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked, windowBehavior.closeToTray, performanceModeDraft, rightClickToken(), middleClickToken(), wordDelimitersField.text, wheelRowsBox.value);
         const effectsSaved = applicationSaved && controller.saveEffectsTier(effectsBox.model[Math.max(0, effectsBox.currentIndex)]);
-        const shellSaved = effectsSaved && controller.saveLocalShellPreference(localShellTokens[Math.max(0, localShellBox.currentIndex)] || "automatic");
+        const terminalThemeSaved = effectsSaved && controller.saveTerminalTheme(terminalThemeDraft);
+        const shellSaved = terminalThemeSaved && controller.saveLocalShellPreference(localShellTokens[Math.max(0, localShellBox.currentIndex)] || "automatic");
         const selectionSaved = shellSaved && controller.saveTerminalSelectionPopupSettings(selectionPopupSwitch.checked, selectionActionDraftValues());
         const saved = selectionSaved && controller.saveWindowInteractionSettings({
             singleInstance: windowBehavior.singleInstance,
@@ -626,6 +630,8 @@ Rectangle {
         if (visible) {
             loadDraft();
         } else {
+            themePicker.close();
+            controller.endTerminalThemePreview();
             appearancePreviewEnded();
         }
     }
@@ -986,9 +992,12 @@ Rectangle {
                     SettingsRowLabel {
                         Layout.columnSpan: parent.columns
                         text: qsTr("Terminal theme")
-                        dirty: pane.controller.terminalThemeId !== pane.defaults.terminalTheme
+                        dirty: pane.terminalThemeDraft !== pane.defaults.terminalTheme
                         highlighted: pane.highlightedRow === "terminalTheme"
-                        onReset: pane.controller.saveTerminalTheme(pane.defaults.terminalTheme)
+                        onReset: {
+                            pane.terminalThemeDraft = pane.defaults.terminalTheme;
+                            pane.controller.previewTerminalTheme(pane.terminalThemeDraft);
+                        }
                     }
                     TerminalThemeStrip {
                         objectName: "settingsTerminalTheme"
@@ -3392,7 +3401,8 @@ Rectangle {
         id: themePicker
 
         controller: pane.controller
-        onThemeApplied: pane.presentStatus(qsTr("Terminal theme applied."), false, true)
+        draftThemeId: pane.visible ? pane.terminalThemeDraft : ""
+        onThemeSelected: id => pane.terminalThemeDraft = id
     }
 
     FileDialog {

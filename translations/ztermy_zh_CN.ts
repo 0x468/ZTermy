@@ -9012,6 +9012,18 @@
 <context>
     <name>ThemePickerDialog</name>
     <message>
+        <source>Preview a theme, then select it. Save with Apply on the settings page. Import and Remove change the theme library immediately.</source>
+        <translation>预览并选择主题后，请在设置页点击“应用”保存。导入和移除会立即修改主题库。</translation>
+    </message>
+    <message>
+        <source>Select</source>
+        <translation>选择</translation>
+    </message>
+    <message>
+        <source>Use the selected theme in the settings draft</source>
+        <translation>将所选主题用于设置草稿</translation>
+    </message>
+    <message>
         <location filename="../src/ui/qml/ThemePickerDialog.qml" line="45"/>
         <source>The theme could not be saved.</source>
         <translation>无法保存主题。</translation>
