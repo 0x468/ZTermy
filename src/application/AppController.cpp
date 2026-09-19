@@ -17089,7 +17089,8 @@ bool AppController::persistApplicationSettings(const config::ApplicationSettings
     }
     const bool aiDebugTraceChanged = m_settings.aiDebugTraceEnabled != settings.aiDebugTraceEnabled;
     const bool terminalThemeChanged =
-        m_settings.terminalTheme != settings.terminalTheme || m_settings.theme != settings.theme;
+        m_settings.terminalTheme != settings.terminalTheme || m_settings.theme != settings.theme
+        || m_settings.lightTheme != settings.lightTheme || m_settings.darkTheme != settings.darkTheme;
     const bool aiProxyChanged = m_settings.aiProxy != settings.aiProxy || m_settings.aiProxyUrl != settings.aiProxyUrl
                                 || m_settings.aiProxyUsername != settings.aiProxyUsername;
     m_settings = settings;

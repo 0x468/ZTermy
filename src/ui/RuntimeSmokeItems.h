@@ -22,7 +22,22 @@ namespace ztermy::ui
 {
 [[nodiscard]] inline QQuickItem *quickItem(QQuickItem *rootObject, const char *objectName)
 {
-    return rootObject == nullptr ? nullptr : rootObject->findChild<QQuickItem *>(QString::fromLatin1(objectName));
+    if (rootObject == nullptr)
+        return nullptr;
+    const QString name = QString::fromLatin1(objectName);
+    if (auto *item = rootObject->findChild<QQuickItem *>(name))
+        return item;
+    // Repeater delegates can belong to a different QObject parent tree.
+    std::vector<QQuickItem *> pending{rootObject};
+    for (std::size_t index = 0; index < pending.size(); ++index)
+    {
+        auto *item = pending[index];
+        if (item->objectName() == name)
+            return item;
+        const auto children = item->childItems();
+        pending.insert(pending.end(), children.cbegin(), children.cend());
+    }
+    return nullptr;
 }
 
 [[nodiscard]] inline QString namedFocusItem(const ztermy::NativeWindow &window)

@@ -756,6 +756,7 @@ Rectangle {
     }
 
     Component.onCompleted: {
+        controller.setSystemDarkMode(root.windowChrome.systemDarkMode);
         Qt.callLater(root.refreshMainWorkspace);
         reportTitleBarMetrics();
         applyWindowAppearance();
@@ -825,6 +826,10 @@ Rectangle {
                 root.workspaceNavigationWidth = root.controller.windowInteractionSettings.navigationWidth;
                 root.workspaceNavigationExpandedWidth = root.controller.windowInteractionSettings.navigationExpandedWidth;
             }
+            Qt.callLater(root.applyWindowAppearance);
+        }
+
+        function onTerminalThemeChanged() {
             Qt.callLater(root.applyWindowAppearance);
         }
 
@@ -916,6 +921,7 @@ Rectangle {
         }
 
         function onSystemDarkModeChanged() {
+            root.controller.setSystemDarkMode(root.windowChrome.systemDarkMode);
             if (root.appearancePreviewActive) {
                 Qt.callLater(() => root.previewWindowAppearance(root.previewThemePreference, root.previewBackdropOpacity, root.previewBackdropPreference, root.previewAccentPreference, root.previewCustomAccent, root.previewEffectsTier));
             } else {

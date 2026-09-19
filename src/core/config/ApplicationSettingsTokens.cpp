@@ -88,6 +88,8 @@ template <>
 template <>
 [[nodiscard]] std::optional<AccentPreference> parsePreference(const QString &token)
 {
+    if (token == QStringLiteral("theme"))
+        return AccentPreference::theme;
     if (token == QStringLiteral("ztermy"))
     {
         return AccentPreference::ztermy;
@@ -408,6 +410,8 @@ QString accentPreferenceToken(const AccentPreference preference)
 {
     switch (preference)
     {
+        case AccentPreference::theme:
+            return QStringLiteral("theme");
         case AccentPreference::system:
             return QStringLiteral("system");
         case AccentPreference::custom:

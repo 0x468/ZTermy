@@ -165,6 +165,7 @@ class AppController final : public QObject
     Q_PROPERTY(QString backdropPreference READ backdropPreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString effectsTier READ effectsTier NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString terminalThemeId READ terminalThemeId NOTIFY terminalThemeChanged)
+    Q_PROPERTY(QVariantMap themePolicy READ themePolicy NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QVariantMap terminalThemeColors READ terminalThemeColors NOTIFY terminalThemeChanged)
     Q_PROPERTY(QVariantList terminalThemes READ terminalThemes NOTIFY terminalThemesChanged)
     Q_PROPERTY(QString accentPreference READ accentPreference NOTIFY applicationSettingsChanged)
@@ -434,6 +435,10 @@ public:
     Q_INVOKABLE bool saveEffectsTier(const QString &tier);
     // Terminal theme library (ADR 0121); the active theme is the preview if one runs.
     [[nodiscard]] QString terminalThemeId() const;
+    [[nodiscard]] QVariantMap themePolicy() const;
+    Q_INVOKABLE bool saveThemePolicy(const QString &mode, const QString &fixed, const QString &light,
+                                     const QString &dark);
+    Q_INVOKABLE void setSystemDarkMode(bool dark);
     [[nodiscard]] QVariantMap terminalThemeColors() const;
     [[nodiscard]] QVariantList terminalThemes() const;
     Q_INVOKABLE QVariantMap terminalThemeColorsFor(const QString &id) const;
@@ -1025,6 +1030,7 @@ private:
     config::ApplicationSettings m_settings;
     config::TerminalThemeCatalog m_terminalThemes;
     QString m_previewTerminalThemeId;
+    bool m_systemDarkMode = true;
     QString m_startupRecoveryNotice;
     QString m_workspaceOperationMessage;
     actions::ActionRegistry m_actionRegistry;

@@ -2,6 +2,9 @@
 
 Status: accepted for UI V2
 
+The independent chrome skin and modal picker are superseded by ADR 0124.
+The palette, catalog, import and session-update contracts remain in force.
+
 ## Context
 
 The terminal engine rendered with Ghostty's built-in palette and the QML

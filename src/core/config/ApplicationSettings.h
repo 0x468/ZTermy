@@ -40,6 +40,7 @@ enum class AccentPreference : std::uint8_t
     ztermy,
     system,
     custom,
+    theme,
 };
 
 enum class CursorPreference : std::uint8_t
@@ -175,6 +176,8 @@ struct ApplicationSettings final
     EffectsTier effectsTier = EffectsTier::full;
     // Id of a TerminalThemeCatalog theme; unknown ids resolve to the built-in default.
     QString terminalTheme = QStringLiteral("ztermy-dark");
+    QString lightTheme = QStringLiteral("ztermy-light");
+    QString darkTheme = QStringLiteral("ztermy-dark");
     CredentialStoragePreference credentialStorage = CredentialStoragePreference::automatic;
     LanguagePreference language = LanguagePreference::system;
     AiProviderPreference aiProvider = AiProviderPreference::openAiResponses;

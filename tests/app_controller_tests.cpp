@@ -252,6 +252,7 @@ private slots:
     void retriesProviderResponseWithoutRepeatingCompletedTool();
     void compactsConversationContextWithoutDeletingTranscript();
     void managesMultipleLocalTerminalTabs();
+    void unifiesThemePolicyAndSystemAppearance();
     void closesMultipleWorkspacesWithReentrantObservers();
     void tracksTemporaryTerminalWorkspacePins();
     void routesTerminalSelectionActionsToOwningTab();
@@ -1940,7 +1941,7 @@ void AppControllerTests::persistsConnectionHistorySwitchWithoutStoppingSessions(
         QCOMPARE(reopened.terminalThemeId(), QStringLiteral("ztermy-dark"));
         // Per-row reset (UI V2 chapter 5) compares drafts against these tokens.
         const QVariantMap defaults = reopened.applicationSettingsDefaults();
-        QCOMPARE(defaults.size(), 26);
+        QCOMPARE(defaults.size(), 28);
         QCOMPARE(defaults.value(QStringLiteral("terminalTheme")).toString(), QStringLiteral("ztermy-dark"));
         QCOMPARE(defaults.value(QStringLiteral("theme")).toString(), reopened.themePreference());
         QCOMPARE(defaults.value(QStringLiteral("effectsTier")).toString(), QStringLiteral("full"));
@@ -2113,6 +2114,34 @@ void AppControllerTests::refreshesShellHistoryWithoutInputAndPreservesSnapshotOn
     QCOMPARE(controller.terminalHistory(), snapshot);
     QVERIFY(state->inputs.isEmpty());
     QVERIFY(state->pastes.isEmpty());
+}
+
+void AppControllerTests::unifiesThemePolicyAndSystemAppearance()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts")),
+                                     directory.filePath(QStringLiteral("settings.json")));
+    controller.setSystemDarkMode(true);
+    QVERIFY(controller.saveThemePolicy(QStringLiteral("system"), QStringLiteral("nord"),
+                                       QStringLiteral("solarized-light"), QStringLiteral("dracula")));
+    QCOMPARE(controller.terminalThemeId(), QStringLiteral("dracula"));
+    controller.setSystemDarkMode(false);
+    QCOMPARE(controller.terminalThemeId(), QStringLiteral("solarized-light"));
+    controller.previewTerminalTheme(QStringLiteral("nord"));
+    controller.setSystemDarkMode(true);
+    QCOMPARE(controller.terminalThemeId(), QStringLiteral("nord"));
+    controller.endTerminalThemePreview();
+    QCOMPARE(controller.terminalThemeId(), QStringLiteral("dracula"));
+    QVERIFY(!controller.saveThemePolicy(QStringLiteral("system"), QStringLiteral("nord"), QStringLiteral("dracula"),
+                                        QStringLiteral("solarized-light")));
+    QCOMPARE(controller.terminalThemeId(), QStringLiteral("dracula"));
+    QVERIFY(controller.saveThemePolicy(QStringLiteral("fixed"), QStringLiteral("nord"),
+                                       QStringLiteral("solarized-light"), QStringLiteral("dracula")));
+    controller.setSystemDarkMode(false);
+    QCOMPARE(controller.terminalThemeId(), QStringLiteral("nord"));
+    QCOMPARE(controller.themePolicy().value(QStringLiteral("light")).toString(), QStringLiteral("solarized-light"));
 }
 
 void AppControllerTests::managesMultipleLocalTerminalTabs()

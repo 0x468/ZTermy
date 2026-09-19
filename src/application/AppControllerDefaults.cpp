@@ -22,6 +22,8 @@ QVariantMap AppController::applicationSettingsDefaults() const
         {QStringLiteral("uiFontFamily"), defaults.uiFontFamily},
         {QStringLiteral("language"), config::languagePreferenceToken(defaults.language)},
         {QStringLiteral("terminalTheme"), defaults.terminalTheme},
+        {QStringLiteral("lightTheme"), defaults.lightTheme},
+        {QStringLiteral("darkTheme"), defaults.darkTheme},
         {QStringLiteral("terminalFontFamily"), defaults.terminalFontFamily},
         {QStringLiteral("terminalFontSize"), defaults.terminalFontSize},
         {QStringLiteral("showAllTerminalFonts"), defaults.showAllTerminalFonts},

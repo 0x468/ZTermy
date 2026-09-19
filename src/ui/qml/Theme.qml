@@ -20,10 +20,28 @@ QtObject {
     property string accentPreference: "ztermy"
     property color systemAccent: "#0078D4"
     property color customAccent: "#22C55E"
-    // Terminal palette layer (ADR 0121): bound from the controller's active
-    // terminal theme. The chrome skin below derives only the workspace fill,
-    // the selection pair and an optional accent hint from it.
+    // ADR 0124: the active palette drives both terminal and application surfaces.
     property var terminalPalette: ({})
+    readonly property var skin: surfacePalette(terminalPalette)
+
+    // Shared with theme thumbnails; previewing does not mutate live sessions.
+    function surfacePalette(p) {
+        const isDark = p && typeof p.dark === "boolean" ? p.dark : preference !== "light";
+        const bg = p && p.background ? p.background : isDark ? "#0B1017" : "#FFFFFF";
+        const fg = p && p.foreground ? p.foreground : isDark ? "#F8FAFC" : "#0F172A";
+        const ink = mixColor(fg, isDark ? "#FFFFFF" : "#17131F", isDark ? 0.44 : 0.55);
+        return {
+            chrome: mixColor(bg, isDark ? "#FFFFFF" : fg, isDark ? 0.055 : 0.08),
+            panel: mixColor(bg, fg, isDark ? 0.038 : 0.035),
+            content: mixColor(bg, fg, 0.012),
+            card: mixColor(bg, "#FFFFFF", isDark ? 0.047 : 0.52),
+            field: mixColor(bg, isDark ? "#000000" : "#FFFFFF", isDark ? 0.13 : 0.7),
+            floating: mixColor(bg, "#FFFFFF", isDark ? 0.09 : 0.78),
+            text: ink,
+            muted: mixColor(bg, ink, isDark ? 0.66 : 0.80),
+            border: mixColor(bg, ink, isDark ? 0.18 : 0.21)
+        };
+    }
     readonly property bool terminalPaletteReady: !!terminalPalette && typeof terminalPalette.background === "string"
     readonly property color terminalBackground: terminalPaletteReady ? terminalPalette.background : (dark ? "#0B1017" : "#FFFFFF")
     readonly property color terminalForeground: terminalPaletteReady ? terminalPalette.foreground : (dark ? "#F8FAFC" : "#0F172A")
@@ -32,7 +50,7 @@ QtObject {
     readonly property color terminalSelectionForeground: terminalPaletteReady ? terminalPalette.selectionForeground : "#FFFFFF"
     readonly property var terminalAnsi: terminalPaletteReady ? terminalPalette.ansi : []
     readonly property bool terminalAccentHint: terminalPaletteReady && typeof terminalPalette.accent === "string" && terminalPalette.accent.length === 7
-    readonly property bool dark: highContrast ? relativeLuminance(highContrastBackground) < 0.5 : preference === "dark" || (preference === "system" && systemDark)
+    readonly property bool dark: highContrast ? relativeLuminance(highContrastBackground) < 0.5 : terminalPaletteReady ? !!terminalPalette.dark : preference === "dark" || (preference === "system" && systemDark)
     readonly property bool fullEffects: effectsTier === "full"
     readonly property bool reducedEffects: effectsTier === "reduced"
     readonly property bool materialEnabled: fullEffects && !highContrast
@@ -56,66 +74,63 @@ QtObject {
     readonly property real chromeAlpha: adjustableBackdrop ? normalizedBackdropOpacity : micaBackdrop ? 0.60 : micaAltBackdrop ? 0.72 : 1.0
     readonly property real workspaceAlpha: adjustableBackdrop ? normalizedBackdropOpacity : micaBackdrop ? 0.88 : micaAltBackdrop ? 0.92 : 1.0
 
-    readonly property color windowBackground: highContrast ? highContrastBackground : backdropActive ? "transparent" : (dark ? "#FF0B0F14" : "#FFF8FAFC")
-    readonly property color chromeBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#0F1722" : "#E2E8F0", chromeAlpha)
+    readonly property color windowBackground: highContrast ? highContrastBackground : backdropActive ? "transparent" : skin.content
+    readonly property color chromeBackground: highContrast ? highContrastBackground : withAlpha(skin.chrome, chromeAlpha)
     readonly property color workspaceBackground: highContrast ? highContrastBackground : withAlpha(terminalBackground, workspaceAlpha)
     // Opaque skin ladder: content pages sit on contentBackground, navigation
     // and side panels on panelBackground, cards and popups above them.
-    readonly property color contentBackground: highContrast ? highContrastBackground : dark ? "#0B1017" : "#FFFFFF"
-    readonly property color panelBackground: highContrast ? highContrastBackground : dark ? "#111824" : "#F1F5F9"
-    readonly property color raisedBackground: highContrast ? highContrastBackground : dark ? "#1E293B" : "#E2E8F0"
-    readonly property color elevatedBackground: highContrast ? highContrastBackground : dark ? "#141E2B" : "#F1F5F9"
-    readonly property color controlBackground: highContrast ? highContrastBackground : dark ? "#172033" : "#E2E8F0"
-    readonly property color controlDisabled: highContrast ? highContrastBackground : dark ? "#131B29" : "#E8EDF3"
+    readonly property color contentBackground: highContrast ? highContrastBackground : skin.content
+    readonly property color panelBackground: highContrast ? highContrastBackground : skin.panel
+    readonly property color raisedBackground: highContrast ? highContrastBackground : skin.card
+    readonly property color elevatedBackground: highContrast ? highContrastBackground : skin.card
+    readonly property color controlBackground: highContrast ? highContrastBackground : skin.card
+    readonly property color controlDisabled: highContrast ? highContrastBackground : skin.panel
     // Keep ordinary control labels readable in every Windows high-contrast
     // palette. System highlight colors are reserved for accent controls and
     // text selection, where the matching highlight-text color is also used.
-    readonly property color controlPressed: highContrast ? mixColor(highContrastBackground, highContrastText, 0.32) : dark ? "#263244" : "#CBD5E1"
-    readonly property color controlHover: highContrast ? mixColor(highContrastBackground, highContrastText, 0.18) : dark ? "#1F2A3A" : "#DCE5EF"
+    readonly property color controlPressed: highContrast ? mixColor(highContrastBackground, highContrastText, 0.32) : mixColor(skin.card, skin.text, 0.16)
+    readonly property color controlHover: highContrast ? mixColor(highContrastBackground, highContrastText, 0.18) : mixColor(skin.card, skin.text, 0.09)
     // Caption buttons sit directly on the chrome surface. The ordinary light
     // control hover is intentionally subtle on cards and fields, but is too
     // close to the light chrome tint to remain visible through a backdrop.
-    readonly property color captionPressed: highContrast ? controlPressed : dark ? "#263244" : "#B8C4D3"
-    readonly property color captionHover: highContrast ? controlHover : dark ? "#1F2A3A" : "#CBD5E1"
+    readonly property color captionPressed: controlPressed
+    readonly property color captionHover: controlHover
     // Selected title-bar tab: an opaque card that reads lighter than the
     // chrome in both skins (the light chrome tint equals controlBackground,
     // so the control colour cannot mark a selected tab there).
-    readonly property color tabSelectedBackground: highContrast ? selectedBackground : dark ? "#1B2637" : "#F8FAFC"
-    readonly property color fieldBackground: highContrast ? highContrastBackground : dark ? "#111827" : "#FFFFFF"
-    readonly property color floatingBackground: highContrast ? highContrastBackground : dark ? "#1E293B" : "#FFFFFF"
+    readonly property color tabSelectedBackground: highContrast ? selectedBackground : skin.content
+    readonly property color fieldBackground: highContrast ? highContrastBackground : skin.field
+    readonly property color floatingBackground: highContrast ? highContrastBackground : skin.floating
 
-    // Workspace ink: everything drawn on the terminal workspace (session strip,
-    // pane toolbars, pane headers, scrollbars, split handles) reads from the
-    // terminal palette's brightness, not from the chrome skin, so a light
-    // terminal theme under a dark skin keeps its labels visible.
+    // Workspace controls use the same ink as the rest of the themed interface.
     readonly property bool workspaceDark: highContrast ? dark : terminalPaletteReady ? !!terminalPalette.dark : dark
-    readonly property color workspaceText: highContrast ? highContrastText : workspaceDark ? "#F8FAFC" : "#0F172A"
-    readonly property color workspaceTextSoft: highContrast ? highContrastText : workspaceDark ? "#CBD5E1" : "#334155"
-    readonly property color workspaceTextMuted: highContrast ? highContrastText : workspaceDark ? "#94A3B8" : "#475569"
-    readonly property color workspaceTextSubtle: highContrast ? highContrastText : workspaceDark ? "#64748B" : "#64748B"
+    readonly property color workspaceText: text
+    readonly property color workspaceTextSoft: textSoft
+    readonly property color workspaceTextMuted: textMuted
+    readonly property color workspaceTextSubtle: textSubtle
     readonly property color workspaceBorder: highContrast ? highContrastText : withAlpha(workspaceText, workspaceDark ? 0.14 : 0.18)
     readonly property color workspaceControlHover: highContrast ? controlHover : withAlpha(workspaceText, 0.10)
     readonly property color workspaceControlPressed: highContrast ? controlPressed : withAlpha(workspaceText, 0.18)
     readonly property color workspacePanelBackground: highContrast ? highContrastBackground : mixColor(terminalBackground, workspaceText, 0.05)
     readonly property color workspaceRaisedBackground: highContrast ? highContrastBackground : mixColor(terminalBackground, workspaceText, 0.11)
 
-    readonly property color border: highContrast ? highContrastText : dark ? "#263244" : "#CBD5E1"
-    readonly property color borderStrong: highContrast ? highContrastText : dark ? "#334155" : "#94A3B8"
-    readonly property color text: highContrast ? highContrastText : dark ? "#F8FAFC" : "#0F172A"
-    readonly property color textMuted: highContrast ? highContrastText : dark ? "#94A3B8" : "#475569"
-    readonly property color textSoft: highContrast ? highContrastText : dark ? "#CBD5E1" : "#334155"
-    readonly property color textSubtle: highContrast ? highContrastText : dark ? "#64748B" : "#64748B"
+    readonly property color border: highContrast ? highContrastText : skin.border
+    readonly property color borderStrong: highContrast ? highContrastText : mixColor(skin.content, skin.text, 0.32)
+    readonly property color text: highContrast ? highContrastText : skin.text
+    readonly property color textMuted: highContrast ? highContrastText : skin.muted
+    readonly property color textSoft: highContrast ? highContrastText : mixColor(skin.content, skin.text, 0.84)
+    readonly property color textSubtle: textMuted
 
-    // "ztermy" follows the terminal theme's accent hint when it has one.
-    readonly property bool ztermyAccent: accentPreference === "ztermy" && !terminalAccentHint
-    readonly property color accentBase: accentPreference === "system" ? systemAccent : accentPreference === "custom" ? customAccent : terminalPalette.accent
-    readonly property color accent: highContrast ? highContrastHighlight : ztermyAccent ? (dark ? "#A78BFA" : "#7C3AED") : accentBase
-    readonly property color accentText: highContrast ? highContrastHighlightText : ztermyAccent ? (dark ? "#160D2B" : "#FFFFFF") : contrastText(accentBase)
-    readonly property color accentHover: ztermyAccent ? (dark ? "#C4B5FD" : "#6D28D9") : mixColor(accentBase, accentText, 0.14)
-    readonly property color accentPressed: ztermyAccent ? (dark ? "#8B5CF6" : "#5B21B6") : mixColor(accentBase, "#000000", 0.18)
-    readonly property color focus: highContrast ? highContrastHighlight : ztermyAccent ? (dark ? "#DDD6FE" : "#7C3AED") : mixColor(accentBase, accentText, 0.34)
-    readonly property color selectedBackground: highContrast ? mixColor(highContrastBackground, highContrastText, 0.22) : ztermyAccent ? (dark ? "#2E2147" : "#EDE9FE") : mixColor(accentBase, dark ? "#0B1017" : "#FFFFFF", dark ? 0.72 : 0.84)
-    readonly property color selectedHover: highContrast ? mixColor(highContrastBackground, highContrastText, 0.30) : ztermyAccent ? (dark ? "#443166" : "#DDD6FE") : mixColor(accentBase, dark ? "#0B1017" : "#FFFFFF", dark ? 0.58 : 0.72)
+    // Brand purple stays the default; adopting a theme accent is explicit.
+    readonly property bool ztermyAccent: accentPreference === "ztermy" || (accentPreference === "theme" && !terminalAccentHint)
+    readonly property color accentBase: accentPreference === "system" ? systemAccent : accentPreference === "custom" ? customAccent : accentPreference === "theme" && terminalAccentHint ? terminalPalette.accent : (dark ? "#B59AE8" : "#7043A4")
+    readonly property color accent: highContrast ? highContrastHighlight : accentBase
+    readonly property color accentText: highContrast ? highContrastHighlightText : contrastText(accentBase)
+    readonly property color accentHover: mixColor(accent, accentText, 0.14)
+    readonly property color accentPressed: mixColor(accent, "#000000", 0.18)
+    readonly property color focus: highContrast ? highContrastHighlight : accent
+    readonly property color selectedBackground: highContrast ? mixColor(highContrastBackground, highContrastText, 0.22) : mixColor(skin.panel, accent, dark ? 0.17 : 0.12)
+    readonly property color selectedHover: highContrast ? mixColor(highContrastBackground, highContrastText, 0.30) : mixColor(skin.panel, accent, dark ? 0.26 : 0.20)
     readonly property color success: highContrast ? highContrastHighlight : dark ? "#22C55E" : "#15803D"
     readonly property color successText: highContrast ? highContrastText : dark ? "#86EFAC" : "#15803D"
     readonly property color warning: highContrast ? highContrastHighlight : dark ? "#F59E0B" : "#D97706"

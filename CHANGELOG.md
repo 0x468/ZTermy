@@ -8,6 +8,11 @@ The project has not published a release.
 
 ### UI V2 design system — 2026-09-19 (branch `ui/v2-design-system`)
 
+- Unify application surfaces and terminal colours under one theme. Follow-system
+  mode has separate light/dark selections; fixed mode ignores system appearance.
+  Replace the theme dialog with inline cards and a full-interface preview; hover
+  stays local, selection previews the application, and Apply persists schema 36.
+  Keep the default accent purple and make theme-provided accents opt-in. ADR 0124.
 - Limit the window material to the title bar and terminal workspace. Mica or
   Acrylic used to show through every page with a per-surface alpha ladder;
   content pages, popups, menus, toasts and dialogs are now opaque and get

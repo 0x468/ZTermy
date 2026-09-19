@@ -10,6 +10,7 @@
 #include "platform/windows/CrashDiagnostics.h"
 #include "platform/windows/NativeWindow.h"
 #include "ui/RuntimeSmokeItems.h"
+#include "ui/ThemeSettingsRuntimeSmoke.h"
 #include "ui/WindowStateRuntimeSmoke.h"
 #include "ui/WorkbenchRuntimeSmoke.h"
 #include "ui/icons/SvgIconImageProvider.h"
@@ -1637,11 +1638,9 @@ struct ResizeHitRuntimeCase
         qCWarning(applicationLog) << "Appearance settings category did not activate from the keyboard";
         return false;
     }
-    constexpr std::array appearanceOrder{
-        "settingsLanguage", "settingsUiFont",  "settingsTheme", "settingsAccent",  "settingsEffectsTier",
-        "settingsBackdrop", "settingsOpacity", "settingsReset", "settingsDiscard", "settingsApply",
-    };
-    if (!verifyOrder(appearanceOrder))
+    if (!verifyOrder(std::array{"settingsLanguage", "settingsUiFont", "settingsThemeSystem", "settingsThemeFixed"})
+        || !verifyOrder(std::array{"settingsAccent", "settingsEffectsTier", "settingsBackdrop", "settingsOpacity",
+                                   "settingsReset", "settingsDiscard", "settingsApply"}))
     {
         return false;
     }
@@ -1948,6 +1947,9 @@ struct ResizeHitRuntimeCase
         return false;
     }
 
+    if (QCoreApplication::arguments().contains(QStringLiteral("--theme-settings-smoke")))
+        return ztermy::ui::verifyThemeSettings(window, controller, outputDirectory);
+
     constexpr std::array accessibleButtons{
         std::pair{"hostsTitleAction", "Workspace"},
         std::pair{"titleNewTabAction", "Open new terminal menu"},
@@ -2117,7 +2119,7 @@ struct ResizeHitRuntimeCase
     window.resize(QSize{1120, 800});
     processWindowEventsFor(std::chrono::milliseconds{150});
 
-    QQuickItem *theme = quickItem(rootObject, "settingsTheme");
+    QQuickItem *theme = quickItem(rootObject, "themeCard-ztermy-light");
     QQuickItem *accent = quickItem(rootObject, "settingsAccent");
     QQuickItem *opacity = quickItem(rootObject, "settingsOpacity");
     QQuickItem *fontSize = quickItem(rootObject, "settingsFontSize");
@@ -2140,18 +2142,14 @@ struct ResizeHitRuntimeCase
     }
     sendKey(window, Qt::Key_Space);
 
-    if (!focusItem(window, theme, QStringLiteral("settingsTheme")))
+    if (!focusItem(window, theme, QStringLiteral("themeCard-ztermy-light")))
     {
         return false;
     }
-    sendKey(window, Qt::Key_Down, Qt::AltModifier);
-    processWindowEventsFor(std::chrono::milliseconds{220});
-    auto *themePopup = theme->property("popup").value<QObject *>();
-    const bool popupOpened = themePopup != nullptr && themePopup->property("opened").toBool();
-    sendKey(window, Qt::Key_Escape);
-    const bool popupClosed = themePopup != nullptr && !themePopup->property("opened").toBool();
+    sendKey(window, Qt::Key_Space);
     processWindowEventsFor(std::chrono::milliseconds{160});
-    sendKey(window, Qt::Key_Down);
+    const bool themeSelected =
+        controller.terminalThemeColors().value(QStringLiteral("id")).toString() == QStringLiteral("ztermy-light");
 
     if (!focusItem(window, accent, QStringLiteral("settingsAccent")))
     {
@@ -2219,15 +2217,13 @@ struct ResizeHitRuntimeCase
         && rootObject->property("previewBackdropPreference").toString() == QStringLiteral("acrylic")
         && rootObject->property("previewAccentPreference").toString() == QStringLiteral("system")
         && qAbs(rootObject->property("previewBackdropOpacity").toReal() - 0.95) < 0.001;
-    const bool draftMatches = popupOpened && popupClosed && theme->property("currentIndex").toInt() == 2
-                              && accent->property("currentIndex").toInt() == 1
+    const bool draftMatches = themeSelected && accent->property("currentIndex").toInt() == 1
                               && qAbs(opacity->property("value").toReal() - 0.95) < 0.001
                               && fontSize->property("value").toInt() == 15 && switchesChanged && livePreviewMatches;
     if (!draftMatches)
     {
         qCWarning(applicationLog) << "Settings keyboard edits did not produce the expected draft"
-                                  << "popupOpened=" << popupOpened << "popupClosed=" << popupClosed
-                                  << "themeIndex=" << theme->property("currentIndex").toInt()
+                                  << "themeSelected=" << themeSelected
                                   << "accentIndex=" << accent->property("currentIndex").toInt()
                                   << "opacity=" << opacity->property("value").toReal()
                                   << "fontSize=" << fontSize->property("value").toInt()
@@ -3139,7 +3135,7 @@ struct ResizeHitRuntimeCase
                                         && namedFocusItem(window) == QStringLiteral("hostsTitleAction");
     qCInfo(applicationLog) << "UI keyboard route check"
                            << "settingsTabStops=" << 24 << "hostEditorTabStops=" << 22
-                           << "popupKeyboard=" << (popupOpened && popupClosed) << "settingsApplied=" << settingsApplied
+                           << "themeCardKeyboard=" << themeSelected << "settingsApplied=" << settingsApplied
                            << "checkboxKeyboard=" << checkboxChanged << "oneTabCreated=" << oneTabCreated
                            << "terminalSearchKeyboard=" << terminalSearchKeyboard << "dialogKeyboard=" << dialogKeyboard
                            << "navigationPreservedSession=" << navigationPreservedSession
@@ -4463,7 +4459,8 @@ int main(int argc, char *argv[])
     ztermy::FontCatalog fontCatalog;
     fontCatalog.applyUiFont(appController.uiFontFamily());
     const bool uiLayoutSmoke = QCoreApplication::arguments().contains(QStringLiteral("--ui-layout-smoke"));
-    const bool uiKeyboardSmoke = QCoreApplication::arguments().contains(QStringLiteral("--ui-keyboard-smoke"));
+    const bool uiKeyboardSmoke = QCoreApplication::arguments().contains(QStringLiteral("--ui-keyboard-smoke"))
+                                 || QCoreApplication::arguments().contains(QStringLiteral("--theme-settings-smoke"));
     const bool realHostUiSmoke = QCoreApplication::arguments().contains(QStringLiteral("--real-host-ui-smoke"));
     const bool terminalPerformanceBenchmark =
         QCoreApplication::arguments().contains(QStringLiteral("--performance-benchmark"));

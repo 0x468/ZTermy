@@ -55,7 +55,8 @@ namespace
 
 config::TerminalTheme AppController::activeTerminalTheme() const
 {
-    const bool preferDark = m_settings.theme != config::ThemePreference::light;
+    const bool followSystem = m_settings.theme == config::ThemePreference::system;
+    const bool preferDark = followSystem ? m_systemDarkMode : m_settings.theme != config::ThemePreference::light;
     if (!m_previewTerminalThemeId.isEmpty())
     {
         if (auto preview = m_terminalThemes.find(m_previewTerminalThemeId))
@@ -63,7 +64,57 @@ config::TerminalTheme AppController::activeTerminalTheme() const
             return *preview;
         }
     }
-    return m_terminalThemes.resolve(m_settings.terminalTheme, preferDark);
+    auto theme = m_terminalThemes.resolve(followSystem ? (preferDark ? m_settings.darkTheme : m_settings.lightTheme)
+                                                       : m_settings.terminalTheme,
+                                          preferDark);
+    if (followSystem && theme.dark != preferDark)
+        return m_terminalThemes.resolve({}, preferDark);
+    return theme;
+}
+
+QVariantMap AppController::themePolicy() const
+{
+    const auto slot = [this](const QString &id, bool dark) {
+        const auto theme = m_terminalThemes.resolve(id, dark);
+        return theme.dark == dark ? theme.id : m_terminalThemes.resolve({}, dark).id;
+    };
+    return {{QStringLiteral("mode"),
+             m_settings.theme == config::ThemePreference::system ? QStringLiteral("system") : QStringLiteral("fixed")},
+            {QStringLiteral("fixed"),
+             m_terminalThemes.resolve(m_settings.terminalTheme, m_settings.theme != config::ThemePreference::light).id},
+            {QStringLiteral("light"), slot(m_settings.lightTheme, false)},
+            {QStringLiteral("dark"), slot(m_settings.darkTheme, true)}};
+}
+
+bool AppController::saveThemePolicy(const QString &mode, const QString &fixed, const QString &light,
+                                    const QString &dark)
+{
+    const auto fixedTheme = m_terminalThemes.find(fixed.trimmed());
+    const auto lightTheme = m_terminalThemes.find(light.trimmed());
+    const auto darkTheme = m_terminalThemes.find(dark.trimmed());
+    if ((mode != QStringLiteral("system") && mode != QStringLiteral("fixed")) || !fixedTheme || !lightTheme
+        || !darkTheme || lightTheme->dark || !darkTheme->dark)
+        return false;
+    auto updated = m_settings;
+    updated.theme = mode == QStringLiteral("system") ? config::ThemePreference::system
+                    : fixedTheme->dark               ? config::ThemePreference::dark
+                                                     : config::ThemePreference::light;
+    updated.terminalTheme = fixedTheme->id;
+    updated.lightTheme = lightTheme->id;
+    updated.darkTheme = darkTheme->id;
+    if (!persistApplicationSettings(updated))
+        return false;
+    endTerminalThemePreview();
+    return true;
+}
+
+void AppController::setSystemDarkMode(bool dark)
+{
+    if (m_systemDarkMode == dark)
+        return;
+    m_systemDarkMode = dark;
+    if (m_settings.theme == config::ThemePreference::system && m_previewTerminalThemeId.isEmpty())
+        applyTerminalThemeToSessions();
 }
 
 void AppController::applyTerminalTheme(TerminalTab &tab) const
@@ -119,13 +170,15 @@ QVariantMap AppController::terminalThemeColorsFor(const QString &id) const
 bool AppController::saveTerminalTheme(const QString &id)
 {
     const QString trimmed = id.trimmed();
-    if (!m_terminalThemes.find(trimmed))
+    const auto theme = m_terminalThemes.find(trimmed);
+    if (!theme)
     {
         return false;
     }
     const bool previewing = !m_previewTerminalThemeId.isEmpty();
     auto updated = m_settings;
     updated.terminalTheme = trimmed;
+    updated.theme = theme->dark ? config::ThemePreference::dark : config::ThemePreference::light;
     if (!persistApplicationSettings(updated))
     {
         return false;
@@ -191,7 +244,8 @@ bool AppController::removeTerminalTheme(const QString &id)
         m_previewTerminalThemeId.clear();
     }
     emit terminalThemesChanged();
-    if (previewRemoved || m_settings.terminalTheme == trimmed)
+    if (previewRemoved || m_settings.terminalTheme == trimmed || m_settings.lightTheme == trimmed
+        || m_settings.darkTheme == trimmed)
     {
         // The persisted id now resolves to the built-in default.
         applyTerminalThemeToSessions();

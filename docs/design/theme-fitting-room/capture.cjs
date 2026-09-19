@@ -1,0 +1,77 @@
+// Browser-only review of the standalone mockup; does not launch or test ztermy.
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const path = require('node:path');
+const fs = require('node:fs');
+const { pathToFileURL } = require('node:url');
+(async () => {
+  const browser = await chromium.launch({ headless: true, channel: 'msedge' });
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  const output = path.join(__dirname, 'previews-v2');
+  fs.mkdirSync(output, { recursive: true });
+  await page.goto(pathToFileURL(path.join(__dirname, 'index.html')).href);
+  await page.locator('#systemState').selectOption('dark');
+  await page.locator('[data-slot="light"]').click();
+  await page.locator('[data-theme="solarized-light"]').click();
+  await page.locator('[data-theme="ztermy-light"]').hover();
+  if (await page.evaluate(() => draft.light) !== 'solarized-light') throw new Error('Hover edited draft');
+  if (await page.locator('#name').textContent() !== 'ztermy Light') throw new Error('Hover preview missing');
+  await page.locator('#discard').click();
+  if (await page.evaluate(() => draft.light) !== 'ztermy-light') throw new Error('Discard did not restore');
+  await page.locator('[data-slot="light"]').click();
+  await page.locator('[data-theme="solarized-light"]').click();
+  await page.screenshot({ path: path.join(output, 'editing-light-slot.png'), fullPage: true });
+  await page.locator('#apply').click();
+  if (await page.locator('#name').textContent() !== 'ztermy Dark') throw new Error('Apply did not resume OS mode');
+  await page.locator('#systemState').selectOption('light');
+  if (await page.locator('#name').textContent() !== 'Solarized Light') throw new Error('OS light slot not used');
+  await page.screenshot({ path: path.join(output, 'system-light.png'), fullPage: true });
+  await page.locator('[data-mode="fixed"]').click();
+  await page.locator('[data-theme="nord"]').focus();
+  await page.keyboard.press('Enter');
+  await page.locator('#systemState').selectOption('dark');
+  if (await page.locator('#name').textContent() !== 'Nord') throw new Error('Fixed theme followed OS');
+  await page.locator('#systemState').selectOption('light');
+  if (await page.locator('#name').textContent() !== 'Nord') throw new Error('Fixed theme changed on light OS');
+  await page.locator('#apply').click();
+  const ids = await page.locator('[data-theme]').evaluateAll(items => items.map(i => i.dataset.theme));
+  for (const id of ids) {
+    await page.locator(`[data-theme="${id}"]`).click();
+    for (const scene of ['terminal', 'settings', 'overlay']) {
+      await page.locator(`[data-scene="${scene}"]`).click();
+      if (await page.locator('.window').count() !== 1) throw new Error('Missing preview');
+      await page.screenshot({ path: path.join(output, `${id}-${scene}.png`), fullPage: true });
+    }
+  }
+  await page.locator('[data-theme="solarized-light"]').click();
+  await page.locator('[data-scene="terminal"]').click();
+  await page.locator('#compare').click();
+  if (await page.locator('.window').count() !== 2) throw new Error('Comparison missing');
+  await page.screenshot({ path: path.join(output, 'comparison.png'), fullPage: true });
+  await page.locator('#compare').click();
+  await page.locator('[data-token="panel"]').fill('#123456');
+  const color = await page.locator('.window[data-old="false"] .side').evaluate(el => getComputedStyle(el).backgroundColor);
+  if (color !== 'rgb(18, 52, 86)') throw new Error(`Editing failed: ${color}`);
+  await page.locator('#reset').click();
+  const downloadWait = page.waitForEvent('download');
+  await page.locator('#exportTerminal').click();
+  const download = await downloadWait;
+  const data = JSON.parse(fs.readFileSync(await download.path(), 'utf8'));
+  if (Object.keys(data.ansi).length !== 16 || data.version !== 1) throw new Error('Invalid export');
+  const proposalWait = page.waitForEvent('download');
+  await page.locator('#export').click();
+  const proposalDownload = await proposalWait;
+  const proposal = JSON.parse(fs.readFileSync(await proposalDownload.path(), 'utf8'));
+  if (!proposal.policy.light || !proposal.policy.dark || !proposal.themes[proposal.policy.fixed]) throw new Error('Incomplete policy export');
+  await page.locator('[data-theme="ztermy-dark"]').click();
+  await page.setViewportSize({ width: 760, height: 1000 });
+  await page.screenshot({ path: path.join(output, 'compact.png'), fullPage: true });
+  if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('Page overflow');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: path.join(output, 'mobile.png'), fullPage: true });
+  if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('Mobile overflow');
+  await browser.close();
+  if (errors.length) throw new Error(errors.join('\n'));
+  console.log(`Reviewed ${ids.length} palettes x 3 scenes; mode/slots, hover isolation, discard/apply, keyboard, OS switching, comparison, color edit, both exports and compact layouts passed.`);
+})().catch(e => { console.error(e); process.exit(1); });

@@ -29,6 +29,7 @@ private slots:
     void migratesSchema32AndPersistsConnectionHistoryPreference();
     void migratesSchema33AndPersistsEffectsTier();
     void migratesSchema34AndPersistsTerminalTheme();
+    void migratesSchema35AndPersistsThemeSlots();
     void savesAndLoadsEveryPreference();
     void roundTripsEveryAiProviderPreference();
     void migratesLegacyWindowOpacityAndNoneBackdrop();
@@ -53,6 +54,40 @@ private slots:
     void recoversLastKnownGoodSettings();
     void createsMissingParentDirectory();
 };
+
+void ApplicationSettingsTests::migratesSchema35AndPersistsThemeSlots()
+{
+    QTemporaryDir directory;
+    const QString path = directory.filePath(QStringLiteral("settings.json"));
+    const ztermy::config::ApplicationSettingsStore store(path);
+    ztermy::config::ApplicationSettings original;
+    original.terminalTheme = QStringLiteral("nord");
+    original.aiModel = QStringLiteral("preserved-model");
+    original.theme = ztermy::config::ThemePreference::system;
+    QVERIFY(store.save(original));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    auto json = QJsonDocument::fromJson(file.readAll()).object();
+    file.close();
+    json.insert(QStringLiteral("version"), 35);
+    json.remove(QStringLiteral("lightTheme"));
+    json.remove(QStringLiteral("darkTheme"));
+    QVERIFY(writeFile(path, QJsonDocument(json).toJson()));
+    auto loaded = store.load();
+    QVERIFY(loaded);
+    QCOMPARE(*loaded, original);
+    loaded->lightTheme = QStringLiteral("solarized-light");
+    loaded->darkTheme = QStringLiteral("catppuccin-mocha");
+    loaded->accent = ztermy::config::AccentPreference::theme;
+    QVERIFY(store.save(*loaded));
+    QCOMPARE(store.load(), loaded);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    json = QJsonDocument::fromJson(file.readAll()).object();
+    file.close();
+    QCOMPARE(json.value(QStringLiteral("version")).toInt(), 36);
+    loaded->lightTheme = QStringLiteral("../escape");
+    QVERIFY(!store.save(*loaded));
+}
 
 void ApplicationSettingsTests::migratesSchema31AndPreservesProvider()
 {
@@ -82,7 +117,7 @@ void ApplicationSettingsTests::migratesSchema31AndPreservesProvider()
     QVERIFY(store.save(*loaded));
     QCOMPARE(store.load(), loaded);
     QVERIFY(file.open(QIODevice::ReadOnly));
-    QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value(QStringLiteral("version")).toInt(), 35);
+    QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value(QStringLiteral("version")).toInt(), 36);
     loaded->windowInteraction.navigationWidth = 1;
     QVERIFY(!store.save(*loaded));
 }
@@ -113,7 +148,7 @@ void ApplicationSettingsTests::migratesSchema32AndPersistsConnectionHistoryPrefe
     QVERIFY(file.open(QIODevice::ReadOnly));
     json = QJsonDocument::fromJson(file.readAll()).object();
     file.close();
-    QCOMPARE(json.value(QStringLiteral("version")).toInt(), 35);
+    QCOMPARE(json.value(QStringLiteral("version")).toInt(), 36);
     QCOMPARE(json.value(QStringLiteral("connectionHistoryEnabled")).toBool(), false);
     json.insert(QStringLiteral("connectionHistoryEnabled"), QStringLiteral("false"));
     const QString invalidPath = directory.filePath(QStringLiteral("invalid-settings.json"));
@@ -147,7 +182,7 @@ void ApplicationSettingsTests::migratesSchema33AndPersistsEffectsTier()
     QVERIFY(file.open(QIODevice::ReadOnly));
     json = QJsonDocument::fromJson(file.readAll()).object();
     file.close();
-    QCOMPARE(json.value(QStringLiteral("version")).toInt(), 35);
+    QCOMPARE(json.value(QStringLiteral("version")).toInt(), 36);
     QCOMPARE(json.value(QStringLiteral("effectsTier")).toString(), QStringLiteral("reduced"));
     json.insert(QStringLiteral("effectsTier"), QStringLiteral("ultra"));
     const QString invalidPath = directory.filePath(QStringLiteral("invalid-settings.json"));
@@ -185,7 +220,7 @@ void ApplicationSettingsTests::migratesSchema34AndPersistsTerminalTheme()
     QVERIFY(file.open(QIODevice::ReadOnly));
     json = QJsonDocument::fromJson(file.readAll()).object();
     file.close();
-    QCOMPARE(json.value(QStringLiteral("version")).toInt(), 35);
+    QCOMPARE(json.value(QStringLiteral("version")).toInt(), 36);
     QCOMPARE(json.value(QStringLiteral("terminalTheme")).toString(), QStringLiteral("solarized-dark"));
     const QString invalidPath = directory.filePath(QStringLiteral("invalid-settings.json"));
     json.insert(QStringLiteral("terminalTheme"), QStringLiteral("   "));
@@ -334,7 +369,7 @@ void ApplicationSettingsTests::migratesLegacyWindowOpacityAndNoneBackdrop()
     QFile saved(path);
     QVERIFY(saved.open(QIODevice::ReadOnly));
     const QByteArray persisted = saved.readAll();
-    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 35")));
+    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 36")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdropOpacity\": 0.75")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdrop\": \"transparent\"")));
     QVERIFY(!persisted.contains(QByteArrayLiteral("windowOpacity")));
@@ -620,7 +655,7 @@ void ApplicationSettingsTests::migratesRecentPermissionSchemasAndAllowsResave()
 
         QVERIFY(file.open(QIODevice::ReadOnly));
         const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-        QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 35);
+        QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 36);
         QCOMPARE(persisted.value(QStringLiteral("aiPermission")).toString(), QStringLiteral("ask"));
         QCOMPARE(persisted.value(QStringLiteral("terminalFontSize")).toInt(), 16);
     }
@@ -657,7 +692,7 @@ void ApplicationSettingsTests::migratesRetiredExternalAgentSchemaWithoutLosingPr
     QVERIFY(store.save(*loaded));
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 35);
+    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 36);
     QVERIFY(!persisted.contains(QStringLiteral("aiAgent")));
     QCOMPARE(persisted.value(QStringLiteral("aiBaseUrl")).toString(), expected.aiBaseUrl);
     QCOMPARE(persisted.value(QStringLiteral("aiModel")).toString(), expected.aiModel);
@@ -697,7 +732,7 @@ void ApplicationSettingsTests::migratesNativeChatGptSchemaWithSystemAiProxy()
     QVERIFY(store.save(*loaded));
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 35);
+    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 36);
     QCOMPARE(persisted.value(QStringLiteral("aiProxy")).toString(), QStringLiteral("system"));
     QVERIFY(!loaded->closeToTray);
     QVERIFY(!loaded->performanceMode);
@@ -730,7 +765,7 @@ void ApplicationSettingsTests::migratesPrePerformanceSchemaWithPerformanceDisabl
     QVERIFY(store.save(*loaded));
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 35);
+    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 36);
     QCOMPARE(persisted.value(QStringLiteral("performanceMode")).toBool(), false);
 }
 
@@ -805,7 +840,7 @@ void ApplicationSettingsTests::migratesPreSelectionRetentionSchemaWithDismissDef
     QVERIFY(store.save(*loaded));
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 35);
+    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 36);
     QCOMPARE(persisted.value(QStringLiteral("keepSelectionAfterCopy")).toBool(), false);
 }
 
@@ -858,7 +893,7 @@ void ApplicationSettingsTests::migratesPreLocalShellSchemaWithAutomaticDefault()
     QVERIFY(store.save(*migrated));
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 35);
+    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 36);
     QCOMPARE(persisted.value(QStringLiteral("localShell")).toString(), QStringLiteral("automatic"));
 }
 
@@ -874,7 +909,7 @@ void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments
     QVERIFY(!malformed);
     QCOMPARE(malformed.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);
 
-    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":36})")));
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":37})")));
     const auto unsupported = store.load();
     QVERIFY(!unsupported);
     QCOMPARE(unsupported.error(), ztermy::config::ApplicationSettingsStoreError::unsupportedVersion);

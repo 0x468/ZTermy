@@ -1167,12 +1167,12 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS ConfirmationDialog.qml
 )
 set_source_files_properties(
-    src/ui/qml/ThemePickerDialog.qml
-    PROPERTIES QT_RESOURCE_ALIAS ThemePickerDialog.qml
+    src/ui/qml/ThemeSettings.qml
+    PROPERTIES QT_RESOURCE_ALIAS ThemeSettings.qml
 )
 set_source_files_properties(
-    src/ui/qml/TerminalThemeStrip.qml
-    PROPERTIES QT_RESOURCE_ALIAS TerminalThemeStrip.qml
+    src/ui/qml/ThemeWindowPreview.qml
+    PROPERTIES QT_RESOURCE_ALIAS ThemeWindowPreview.qml
 )
 set_source_files_properties(
     src/ui/qml/CommandPalette.qml
@@ -1403,8 +1403,8 @@ qt_add_qml_module(ztermy
         src/ui/qml/EditableSuggestionField.qml
         src/ui/qml/CaptionButton.qml
         src/ui/qml/ConfirmationDialog.qml
-        src/ui/qml/ThemePickerDialog.qml
-        src/ui/qml/TerminalThemeStrip.qml
+        src/ui/qml/ThemeSettings.qml
+        src/ui/qml/ThemeWindowPreview.qml
         src/ui/qml/CommandPalette.qml
         src/ui/qml/FontPicker.qml
         src/ui/qml/HostConnectionPane.qml

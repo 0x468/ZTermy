@@ -47,10 +47,8 @@ Rectangle {
     property var mcpReviewTool: null
     property real contentReveal: 1.0
     property string highlightedRow: ""
-    property string terminalThemeDraft: ""
     readonly property var defaults: controller.applicationSettingsDefaults()
     readonly property bool shortcutRecording: shortcutSettings.recording
-    readonly property bool draftDark: themeBox.currentIndex === 1 || (themeBox.currentIndex === 0 && Theme.systemDark)
     readonly property bool fullEffects: effectsBox.currentIndex === 0
     readonly property bool adjustableBackdrop: fullEffects && (backdropBox.currentIndex === 0 || backdropBox.currentIndex === 1)
     readonly property bool solidBackdrop: !fullEffects || backdropBox.currentIndex === 4
@@ -81,10 +79,6 @@ Rectangle {
     palette.highlight: Theme.accent
     palette.highlightedText: Theme.accentText
 
-    function themeIndex(token) {
-        return token === "system" ? 0 : token === "light" ? 2 : 1;
-    }
-
     function backdropIndex(token) {
         return token === "transparent" ? 1 : token === "mica" ? 2 : token === "micaAlt" ? 3 : token === "solid" ? 4 : 0;
     }
@@ -99,7 +93,7 @@ Rectangle {
     }
 
     function accentIndex(token) {
-        return token === "system" ? 1 : token === "custom" ? 2 : 0;
+        return token === "system" ? 1 : token === "custom" ? 2 : token === "theme" ? 3 : 0;
     }
 
     function credentialStorageIndex(token) {
@@ -367,7 +361,7 @@ Rectangle {
     }
 
     function themeToken() {
-        return themeBox.currentIndex === 0 ? "system" : themeBox.currentIndex === 2 ? "light" : "dark";
+        return themeEditor.mode === "system" ? "system" : controller.terminalThemeColorsFor(themeEditor.fixedTheme).dark ? "dark" : "light";
     }
 
     function backdropToken() {
@@ -468,7 +462,7 @@ Rectangle {
     }
 
     function accentToken() {
-        return accentBox.currentIndex === 1 ? "system" : accentBox.currentIndex === 2 ? "custom" : "ztermy";
+        return accentBox.currentIndex === 1 ? "system" : accentBox.currentIndex === 2 ? "custom" : accentBox.currentIndex === 3 ? "theme" : "ztermy";
     }
 
     function previewDraft() {
@@ -535,8 +529,7 @@ Rectangle {
     function loadDraft() {
         loadingDraft = true;
         controller.endTerminalThemePreview();
-        terminalThemeDraft = controller.terminalThemeId;
-        themeBox.currentIndex = themeIndex(controller.themePreference);
+        themeEditor.loadPolicy();
         opacitySlider.value = controller.backdropOpacity;
         backdropBox.currentIndex = backdropIndex(controller.backdropPreference);
         effectsBox.currentIndex = Math.max(0, effectsBox.model.indexOf(controller.effectsTier));
@@ -600,7 +593,7 @@ Rectangle {
         const restartRequired = wantsOpaqueSurface !== windowChrome.opaqueSurface || performanceModeDraft !== windowChrome.performanceModeActive;
         const applicationSaved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, keepSelectionAfterCopySwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked, windowBehavior.closeToTray, performanceModeDraft, rightClickToken(), middleClickToken(), wordDelimitersField.text, wheelRowsBox.value);
         const effectsSaved = applicationSaved && controller.saveEffectsTier(effectsBox.model[Math.max(0, effectsBox.currentIndex)]);
-        const terminalThemeSaved = effectsSaved && controller.saveTerminalTheme(terminalThemeDraft);
+        const terminalThemeSaved = effectsSaved && themeEditor.save();
         const shellSaved = terminalThemeSaved && controller.saveLocalShellPreference(localShellTokens[Math.max(0, localShellBox.currentIndex)] || "automatic");
         const selectionSaved = shellSaved && controller.saveTerminalSelectionPopupSettings(selectionPopupSwitch.checked, selectionActionDraftValues());
         const saved = selectionSaved && controller.saveWindowInteractionSettings({
@@ -630,7 +623,6 @@ Rectangle {
         if (visible) {
             loadDraft();
         } else {
-            themePicker.close();
             controller.endTerminalThemePreview();
             appearancePreviewEnded();
         }
@@ -991,37 +983,35 @@ Rectangle {
 
                     SettingsRowLabel {
                         Layout.columnSpan: parent.columns
-                        text: qsTr("Terminal theme")
-                        dirty: pane.terminalThemeDraft !== pane.defaults.terminalTheme
-                        highlighted: pane.highlightedRow === "terminalTheme"
+                        text: qsTr("Theme")
+                        highlighted: pane.highlightedRow === "theme" || pane.highlightedRow === "terminalTheme"
+                        dirty: themeEditor.mode !== "fixed" || themeEditor.fixedTheme !== pane.defaults.terminalTheme || themeEditor.lightTheme !== pane.defaults.lightTheme || themeEditor.darkTheme !== pane.defaults.darkTheme
                         onReset: {
-                            pane.terminalThemeDraft = pane.defaults.terminalTheme;
-                            pane.controller.previewTerminalTheme(pane.terminalThemeDraft);
+                            themeEditor.mode = "fixed";
+                            themeEditor.fixedTheme = pane.defaults.terminalTheme;
+                            themeEditor.lightTheme = pane.defaults.lightTheme;
+                            themeEditor.darkTheme = pane.defaults.darkTheme;
+                            themeEditor.editingSlot = false;
+                            themeEditor.previewDraft();
                         }
                     }
-                    TerminalThemeStrip {
+                    ThemeSettings {
+                        id: themeEditor
                         objectName: "settingsTerminalTheme"
                         Layout.fillWidth: true
                         Layout.columnSpan: parent.columns
-                        implicitHeight: 72
                         controller: pane.controller
-                        onActivated: themePicker.openWithCurrent()
-                    }
-
-                    SettingsRowLabel {
-                        text: qsTr("Theme")
-                        dirty: pane.themeToken() !== pane.defaults.theme
-                        highlighted: pane.highlightedRow === "theme"
-                        onReset: themeBox.currentIndex = pane.themeIndex(pane.defaults.theme)
-                    }
-                    AppComboBox {
-                        id: themeBox
-                        objectName: "settingsTheme"
-                        Layout.fillWidth: true
-                        model: ["system", "dark", "light"]
-                        displayTextModel: [qsTr("System"), qsTr("Dark"), qsTr("Light")]
-                        accessibleName: qsTr("Application theme")
-                        onCurrentIndexChanged: pane.previewDraft()
+                        onEdited: pane.previewDraft()
+                        onCardFocused: item => {
+                            const y = item.mapToItem(contentColumn, 0, 0).y + contentColumn.y;
+                            const view = scrollView.contentItem as Flickable;
+                            if (!view)
+                                return;
+                            if (y < view.contentY)
+                                view.contentY = y;
+                            else if (y + item.height > view.contentY + scrollView.height)
+                                view.contentY = y + item.height - scrollView.height;
+                        }
                     }
 
                     SettingsRowLabel {
@@ -1034,8 +1024,8 @@ Rectangle {
                         id: accentBox
                         objectName: "settingsAccent"
                         Layout.fillWidth: true
-                        model: ["ztermy", "system", "custom"]
-                        displayTextModel: ["ztermy", qsTr("Follow Windows"), qsTr("Custom")]
+                        model: ["ztermy", "system", "custom", "theme"]
+                        displayTextModel: ["ztermy", qsTr("Follow Windows"), qsTr("Custom"), qsTr("Follow theme")]
                         accessibleName: qsTr("Application accent color source")
                         onCurrentIndexChanged: pane.previewDraft()
                     }
@@ -3395,14 +3385,6 @@ Rectangle {
         acceptText: qsTr("Migrate and remove")
         destructive: pane.credentialStorageToken() === "session"
         onAccepted: pane.performCredentialMigration()
-    }
-
-    ThemePickerDialog {
-        id: themePicker
-
-        controller: pane.controller
-        draftThemeId: pane.visible ? pane.terminalThemeDraft : ""
-        onThemeSelected: id => pane.terminalThemeDraft = id
     }
 
     FileDialog {

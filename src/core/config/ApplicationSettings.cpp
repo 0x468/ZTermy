@@ -70,7 +70,8 @@ constexpr qint64 connectionHistorySchemaVersion = 33;
 constexpr qint64 effectsTierSchemaVersion = 34;
 // Version 35 adds the terminal theme id (palette layer of ADR 0121).
 constexpr qint64 terminalThemeSchemaVersion = 35;
-constexpr qint64 currentSchemaVersion = terminalThemeSchemaVersion;
+constexpr qint64 unifiedThemeSchemaVersion = 36;
+constexpr qint64 currentSchemaVersion = unifiedThemeSchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -149,12 +150,16 @@ using ztermy::config::ThemePreference;
     const QString fontFamily = settings.terminalFontFamily.trimmed();
     const QString uiFontFamily = settings.uiFontFamily.trimmed();
     const QString customAccent = settings.customAccent.trimmed();
-    const QString terminalTheme = settings.terminalTheme.trimmed();
+    const auto validThemeId = [](const QString &id) {
+        const QString value = id.trimmed();
+        return !value.isEmpty() && value.size() <= ztermy::config::maximumTerminalThemeIdLength
+               && std::ranges::all_of(value, [](const QChar character) {
+                      return character.unicode() < 128
+                             && (character.isLetterOrNumber() || character == QLatin1Char('-'));
+                  });
+    };
     const bool validTerminalTheme =
-        !terminalTheme.isEmpty() && terminalTheme.size() <= ztermy::config::maximumTerminalThemeIdLength
-        && std::ranges::all_of(terminalTheme, [](const QChar character) {
-               return character.unicode() < 128 && (character.isLetterOrNumber() || character == QLatin1Char('-'));
-           });
+        validThemeId(settings.terminalTheme) && validThemeId(settings.lightTheme) && validThemeId(settings.darkTheme);
     const bool validCustomAccent = customAccent.size() == 7 && customAccent.front() == QLatin1Char('#')
                                    && std::ranges::all_of(customAccent.sliced(1), [](const QChar character) {
                                           const ushort value = character.unicode();
@@ -242,6 +247,8 @@ using ztermy::config::ThemePreference;
     const QJsonValue connectionHistoryValue = root.value(QStringLiteral("connectionHistoryEnabled"));
     const QJsonValue effectsTierValue = root.value(QStringLiteral("effectsTier"));
     const QJsonValue terminalThemeValue = root.value(QStringLiteral("terminalTheme"));
+    const QJsonValue lightThemeValue = root.value(QStringLiteral("lightTheme"));
+    const QJsonValue darkThemeValue = root.value(QStringLiteral("darkTheme"));
     const QJsonValue credentialStorageValue = root.value(QStringLiteral("credentialStorage"));
     const QJsonValue languageValue = root.value(QStringLiteral("language"));
     const QJsonValue shortcutOverridesValue = root.value(QStringLiteral("shortcutOverrides"));
@@ -298,6 +305,7 @@ using ztermy::config::ThemePreference;
         || (version >= performanceModeSchemaVersion && !performanceModeValue.isBool())
         || (version >= connectionHistorySchemaVersion && !connectionHistoryValue.isBool())
         || (version >= effectsTierSchemaVersion && !effectsTierValue.isString())
+        || (version >= unifiedThemeSchemaVersion && (!lightThemeValue.isString() || !darkThemeValue.isString()))
         || (version >= terminalThemeSchemaVersion
             && (!terminalThemeValue.isString() || terminalThemeValue.toString().trimmed().isEmpty())))
     {
@@ -486,6 +494,10 @@ using ztermy::config::ThemePreference;
         .effectsTier = *effectsTier,
         .terminalTheme = version >= terminalThemeSchemaVersion ? terminalThemeValue.toString().trimmed()
                                                                : QStringLiteral("ztermy-dark"),
+        .lightTheme = version >= unifiedThemeSchemaVersion ? lightThemeValue.toString().trimmed()
+                                                           : QStringLiteral("ztermy-light"),
+        .darkTheme =
+            version >= unifiedThemeSchemaVersion ? darkThemeValue.toString().trimmed() : QStringLiteral("ztermy-dark"),
         .credentialStorage = *credentialStorage,
         .language = *language,
         .aiProvider = *aiProvider,
@@ -513,6 +525,8 @@ using ztermy::config::ThemePreference;
     settings.uiFontFamily = settings.uiFontFamily.trimmed();
     settings.customAccent = settings.customAccent.trimmed().toUpper();
     settings.terminalTheme = settings.terminalTheme.trimmed();
+    settings.lightTheme = settings.lightTheme.trimmed();
+    settings.darkTheme = settings.darkTheme.trimmed();
     settings.aiBaseUrl = settings.aiBaseUrl.trimmed();
     settings.aiEndpointPath = settings.aiEndpointPath.trimmed();
     settings.aiModel = settings.aiModel.trimmed();
@@ -622,6 +636,8 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("backdrop"), backdropPreferenceToken(settings.backdrop)},
         {QStringLiteral("effectsTier"), effectsTierToken(settings.effectsTier)},
         {QStringLiteral("terminalTheme"), settings.terminalTheme.trimmed()},
+        {QStringLiteral("lightTheme"), settings.lightTheme.trimmed()},
+        {QStringLiteral("darkTheme"), settings.darkTheme.trimmed()},
         {QStringLiteral("accent"), accentPreferenceToken(settings.accent)},
         {QStringLiteral("customAccent"), settings.customAccent.trimmed().toUpper()},
         {QStringLiteral("uiFontFamily"), settings.uiFontFamily.trimmed()},
