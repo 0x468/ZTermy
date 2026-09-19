@@ -103,6 +103,7 @@ private slots:
     void exposesScrollbarAndRequestsAbsoluteScroll();
     void rendersStyledWideCellsAndCursorPixels();
     void keepsBaseTextureDuringCursorBlink();
+    void blinksOnlyWhileFocused();
     void rendersImeAcrossResizeAndShutdown();
     void highlightsWideAndCaseInsensitiveKeywords();
     void recordsOptInRenderMetrics();
@@ -1413,9 +1414,11 @@ void TerminalItemTests::keepsBaseTextureDuringCursorBlink()
     item->setSnapshot(snapshotAt(2, 2));
     window.resize(640, 220);
     item->setSize(window.size());
+    item->forceActiveFocus();
     window.show();
     QTest::qWait(100);
     QVERIFY(!window.grabWindow().isNull());
+    QTRY_VERIFY_WITH_TIMEOUT(item->hasActiveFocus(), 1000);
 
     item->resetPerformanceMetrics();
     QTRY_VERIFY_WITH_TIMEOUT(item->performanceMetrics().cursorInvalidations >= 1, 1000);
@@ -1423,6 +1426,35 @@ void TerminalItemTests::keepsBaseTextureDuringCursorBlink()
     const ztermy::ui::TerminalRenderMetricsSnapshot metrics = item->performanceMetrics();
     QCOMPARE(metrics.uploadedBytes, std::uint64_t{0});
     QVERIFY(metrics.partialFrames >= 1);
+
+    window.close();
+    QCoreApplication::processEvents();
+}
+
+void TerminalItemTests::blinksOnlyWhileFocused()
+{
+    QQuickWindow window;
+    auto *item = new TestableTerminalItem(window.contentItem());
+    item->setPerformanceMetricsEnabled(true);
+    item->setSnapshot(snapshotAt(2, 2));
+    window.resize(640, 220);
+    item->setSize(window.size());
+    item->forceActiveFocus();
+    window.show();
+    QTest::qWait(100);
+    QTRY_VERIFY_WITH_TIMEOUT(item->hasActiveFocus(), 1000);
+
+    item->setFocus(false);
+    QTRY_VERIFY_WITH_TIMEOUT(!item->hasActiveFocus(), 1000);
+    QTest::qWait(50);
+    item->resetPerformanceMetrics();
+    QTest::qWait(1200);
+    QCOMPARE(item->performanceMetrics().cursorInvalidations, std::uint64_t{0});
+
+    item->forceActiveFocus();
+    QTRY_VERIFY_WITH_TIMEOUT(item->hasActiveFocus(), 1000);
+    item->resetPerformanceMetrics();
+    QTRY_VERIFY_WITH_TIMEOUT(item->performanceMetrics().cursorInvalidations >= 1, 1500);
 
     window.close();
     QCoreApplication::processEvents();

@@ -203,7 +203,8 @@ TerminalItem::TerminalItem(QQuickItem *parent) : QQuickItem(parent)
 
     m_cursorBlinkTimer.setInterval(530);
     QObject::connect(&m_cursorBlinkTimer, &QTimer::timeout, this, [this] {
-        if (!isVisible() || !m_snapshot || !m_snapshot->cursor.visible)
+        // Only the focused viewport blinks; the others keep a steady cursor.
+        if (!isVisible() || !hasActiveFocus() || !m_snapshot || !m_snapshot->cursor.visible)
         {
             return;
         }
@@ -345,9 +346,7 @@ bool TerminalItem::scrollbarVisible() const noexcept
 qreal TerminalItem::scrollbarPosition() const noexcept
 {
     if (!scrollbarVisible())
-    {
         return 1.0;
-    }
     const std::uint64_t maximumOffset = m_snapshot->scrollbar.total - m_snapshot->scrollbar.visible;
     return maximumOffset == 0 ? 1.0
                               : static_cast<qreal>(m_snapshot->scrollbar.offset) / static_cast<qreal>(maximumOffset);
@@ -356,9 +355,7 @@ qreal TerminalItem::scrollbarPosition() const noexcept
 qreal TerminalItem::scrollbarPageRatio() const noexcept
 {
     if (!m_snapshot || m_snapshot->scrollbar.total == 0)
-    {
         return 1.0;
-    }
     return std::clamp(
         static_cast<qreal>(m_snapshot->scrollbar.visible) / static_cast<qreal>(m_snapshot->scrollbar.total), 0.0, 1.0);
 }
@@ -452,9 +449,7 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
 {
     const QRectF previousCursor = inputCursorRectangle();
     if (m_quickSelectActive)
-    {
         cancelQuickSelect();
-    }
     if (!snapshot)
     {
         cancelSelectionGesture();
@@ -491,9 +486,7 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
     const bool selectionBecameVisible = !m_hasSelection && snapshot->selectionPresent;
     setHasSelection(snapshot->selectionPresent);
     if (!snapshot->selectionPresent || snapshot->searchSelectionPresent)
-    {
         dismissSelectionAction();
-    }
     else if (selectionBecameVisible && !m_selecting)
     {
         showSelectionAction(m_selectionPointerPosition, m_selectionActionPreferBelow);
@@ -510,9 +503,7 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
     m_searchStylesDirty = true;
     refreshSelectionMatchesKeywordHighlight();
     if (m_hoverInside)
-    {
         updateHoveredLink(m_hoverPosition, QGuiApplication::keyboardModifiers());
-    }
     if (focusReportingBecameActive)
     {
         m_lastReportedFocus.reset();
@@ -521,9 +512,7 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
     invalidateRenderer(true);
     notifyInputMethod();
     if (scrollbarMoved)
-    {
         emit scrollbarChanged();
-    }
     if (previousCursor != inputCursorRectangle())
     {
         emit cursorGeometryChanged();
@@ -533,9 +522,7 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
 QString TerminalItem::hoveredLink() const
 {
     if (!m_snapshot)
-    {
         return {};
-    }
     const terminal::TerminalHyperlink *link = m_snapshot->hyperlink(m_hoveredLinkId);
     return link == nullptr ? QString{} : QString::fromUtf8(link->uri);
 }
@@ -558,9 +545,7 @@ bool TerminalItem::copyModeActive() const noexcept
 void TerminalItem::setStatusText(const QString &status)
 {
     if (m_statusText == status)
-    {
         return;
-    }
     m_statusText = status;
     emit statusTextChanged();
 }
@@ -581,9 +566,7 @@ void TerminalItem::setFontFamily(const QString &family)
 {
     const QString normalized = family.trimmed();
     if (normalized.isEmpty() || normalized.size() > 128 || fontFamily() == normalized)
-    {
         return;
-    }
     m_font.setFamilies({normalized, QStringLiteral("Consolas")});
     refreshFontMetrics();
     m_reportedColumns = 0;
@@ -597,9 +580,7 @@ void TerminalItem::setFontFamily(const QString &family)
 void TerminalItem::setFontPixelSize(const int pixelSize)
 {
     if (pixelSize < 8 || pixelSize > 32 || m_font.pixelSize() == pixelSize)
-    {
         return;
-    }
     m_font.setPixelSize(pixelSize);
     refreshFontMetrics();
     m_reportedColumns = 0;
@@ -1763,6 +1744,7 @@ QVariant TerminalItem::inputMethodQuery(const Qt::InputMethodQuery query) const
 void TerminalItem::focusInEvent(QFocusEvent *event)
 {
     m_focusOutTimer.stop();
+    restartCursorBlink();
     reportFocus(true);
     QQuickItem::focusInEvent(event);
 }
@@ -1772,8 +1754,19 @@ void TerminalItem::focusOutEvent(QFocusEvent *event)
     cancelSelectionGesture();
     m_controlModifierDown = false;
     clearPreedit();
+    restartCursorBlink();
     m_focusOutTimer.start();
     QQuickItem::focusOutEvent(event);
+}
+
+void TerminalItem::restartCursorBlink()
+{
+    const bool wasShown = m_cursorBlinkPhase;
+    m_cursorBlinkPhase = true;
+    if (m_cursorBlink)
+        m_cursorBlinkTimer.start();
+    if (!wasShown)
+        invalidateRenderer(false);
 }
 
 void TerminalItem::hoverMoveEvent(QHoverEvent *event)

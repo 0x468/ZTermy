@@ -295,6 +295,7 @@ private:
     mouseEvent(ztermy::terminal::TerminalMouseAction action, ztermy::terminal::TerminalMouseButton button,
                const QPointF &position, Qt::KeyboardModifiers modifiers, Qt::MouseButtons buttons) const;
     void reportFocus(bool focused);
+    void restartCursorBlink();
     void requestPasteBytes(const QByteArray &bytes);
 
     static constexpr std::size_t styleBold = 1U << 0U;
