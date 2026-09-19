@@ -7,8 +7,10 @@ SplitView {
     required property Item leadingPane
     required property Item trailingPane
     property real ratio: 0.5
-    readonly property int handleThickness: 6
-    readonly property int handleHitThickness: 6
+    // The divider paints as a hairline; the pointer target stays wide through
+    // the handle's containmentMask so hover, press and cursor lookup all hit it.
+    readonly property int handleThickness: 1
+    readonly property int handleHitThickness: 7
     signal ratioEdited(real value)
     readonly property real availableSpan: Math.max(0, (orientation === Qt.Horizontal ? width : height) - handleThickness)
     readonly property real leadingSize: leadingPane ? (orientation === Qt.Horizontal ? leadingPane.width : leadingPane.height) : 0
