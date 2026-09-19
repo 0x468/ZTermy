@@ -845,6 +845,7 @@ target_link_libraries(ztermy_ssh_session
 )
 
 add_library(ztermy_terminal_ui STATIC
+    src/ui/WheelAcceleration.h
     src/ui/SplitHandleObserver.cpp
     src/ui/SplitHandleObserver.h
     src/platform/windows/WindowsTerminalInput.cpp
@@ -4732,6 +4733,15 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME windows-executable-metadata COMMAND ztermy_windows_executable_metadata_tests)
+
+    # These C++ tests do not load QML. Avoid scanning the entire repository
+    # (including build trees) once per executable during Qt finalization.
+    get_property(ztermy_directory_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(test_target IN LISTS ztermy_directory_targets)
+        if(test_target MATCHES "^ztermy_.*_tests$")
+            set_property(TARGET ${test_target} PROPERTY QT_QML_MODULE_NO_IMPORT_SCAN TRUE)
+        endif()
+    endforeach()
 
     add_test(
         NAME qml-native-window-smoke

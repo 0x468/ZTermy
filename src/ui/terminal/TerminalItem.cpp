@@ -2398,7 +2398,7 @@ void TerminalItem::wheelEvent(QWheelEvent *event)
         }
         else
         {
-            emit scrollRequested(-steps * m_scrollRowsPerWheel);
+            emit scrollRequested(-m_wheelAcceleration.scale(steps, event->timestamp()) * m_scrollRowsPerWheel);
         }
     }
     event->accept();

@@ -1174,6 +1174,13 @@ void TerminalItemTests::reflectsSelectionStateFromSnapshots()
 
 void TerminalItemTests::accumulatesWheelDeltasIntoScrollRows()
 {
+    ztermy::ui::WheelAcceleration acceleration;
+    QCOMPARE(acceleration.scale(1, 1000), 1);
+    QCOMPARE(acceleration.scale(1, 1040), 1);
+    QCOMPARE(acceleration.scale(1, 1080), 2);
+    QCOMPARE(acceleration.scale(-1, 1120), -1);
+    QCOMPARE(acceleration.scale(-1, 1400), -1);
+    QCOMPARE(acceleration.scale(1, 0), 1);
     TestableTerminalItem item;
     QSignalSpy scrollSpy(&item, &ztermy::ui::TerminalItem::scrollRequested);
     const auto sendWheel = [&item](const int angleDelta) {
@@ -1200,6 +1207,18 @@ void TerminalItemTests::accumulatesWheelDeltasIntoScrollRows()
     QVERIFY(pixelEvent.isAccepted());
     QCOMPARE(scrollSpy.count(), 3);
     QCOMPARE(scrollSpy.at(2).at(0).toInt(), -1);
+
+    scrollSpy.clear();
+    for (quint64 timestamp : {1000U, 1040U, 1080U})
+    {
+        QWheelEvent event(QPointF{}, QPointF{}, QPoint{}, QPoint{0, 120}, Qt::NoButton, Qt::NoModifier,
+                          Qt::ScrollUpdate, false);
+        event.setTimestamp(timestamp);
+        item.wheelEvent(&event);
+    }
+    QCOMPARE(scrollSpy.count(), 3);
+    QCOMPARE(scrollSpy.at(0).at(0).toInt(), -3);
+    QCOMPARE(scrollSpy.at(2).at(0).toInt(), -6);
 }
 
 void TerminalItemTests::routesTrackedMouseAndWheelToTerminal()
@@ -1237,6 +1256,14 @@ void TerminalItemTests::routesTrackedMouseAndWheelToTerminal()
     item.mousePressEvent(&shiftedPress);
     QCOMPARE(mouseEvents.size(), std::size_t{2});
     QCOMPARE(selectionSpy.count(), 1);
+
+    for (quint64 timestamp : {1000U, 1040U, 1080U})
+    {
+        wheel.setTimestamp(timestamp);
+        item.wheelEvent(&wheel);
+    }
+    QCOMPARE(mouseEvents.size(), std::size_t{5});
+    QCOMPARE(scrollSpy.count(), 0);
 }
 
 void TerminalItemTests::exposesScrollbarAndRequestsAbsoluteScroll()

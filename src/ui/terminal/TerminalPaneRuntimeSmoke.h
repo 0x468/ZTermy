@@ -248,6 +248,16 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
     auto *pane = window.findChild<TerminalItem *>(QStringLiteral("terminalViewport-") + paneId);
     bool passed = pane && pane->y() >= 32;
     qInfo() << "Window transfer header geometry:" << passed;
+    if (auto *action = window.findChild<QQuickItem *>(QStringLiteral("alwaysOnTopAction")))
+    {
+        synthesizeMouse(window, action->mapToScene(QPointF{action->width() / 2, action->height() / 2}), Qt::NoButton,
+                        Qt::NoButton, QEvent::MouseMove);
+        const QColor expected = action->property("feedbackColor").value<QColor>();
+        const bool directHover =
+            expected.alpha() > 0 && action->parentItem()->property("color").value<QColor>() == expected;
+        qInfo() << "Title action enters final hover color immediately:" << directHover;
+        passed = passed && directHover;
+    }
     const auto layout = controller.activeTerminalWorkspace().value(QStringLiteral("root")).toMap();
     const QString firstId = layout.value(QStringLiteral("first")).toMap().value(QStringLiteral("id")).toString();
     const QString secondId = layout.value(QStringLiteral("second")).toMap().value(QStringLiteral("id")).toString();
@@ -281,15 +291,34 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
         if (auto *sourcePane = window.findChild<TerminalItem *>(QStringLiteral("terminalViewport-") + firstId))
             sourcePane->forceActiveFocus(Qt::OtherFocusReason);
         settle();
+        int activationResizes = 0;
+        std::vector<terminal::TerminalSelectionGestureType> selectionEvents;
+        const auto resizeConnection = QObject::connect(targetPane, &TerminalItem::sizeRequested, targetPane, [&] {
+            ++activationResizes;
+        });
+        const auto gestureConnection = QObject::connect(targetPane, &TerminalItem::selectionGestureRequested,
+                                                        targetPane, [&](const auto &gesture) {
+                                                            selectionEvents.push_back(gesture.type);
+                                                        });
         const QPointF selectionStart = targetPane->mapToScene(QPointF(16, 18));
         const QPointF selectionEnd =
             targetPane->mapToScene(QPointF(std::min<qreal>(180, targetPane->width() - 16), 18));
-        dragMouse(window, selectionStart, selectionEnd, 6);
+        dragMouse(window, selectionStart, selectionEnd, 20, std::chrono::milliseconds{40});
         settle();
+        QObject::disconnect(resizeConnection);
+        QObject::disconnect(gestureConnection);
+        const bool continuousSelection =
+            activationResizes == 0 && !selectionEvents.empty()
+            && selectionEvents.back() == terminal::TerminalSelectionGestureType::release
+            && std::ranges::find(selectionEvents, terminal::TerminalSelectionGestureType::cancel)
+                   == selectionEvents.end();
+        qInfo() << "Inactive pane drag continuity:" << continuousSelection
+                << "resize notifications=" << activationResizes;
         const bool selectionPaneActive =
             controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString() == secondId;
-        const bool inactivePaneSelectionPreserved =
-            selectionPaneActive && targetPane->hasSelection() && targetPane->selectionActionVisible();
+        const bool inactivePaneSelectionPreserved = continuousSelection && selectionPaneActive
+                                                    && targetPane->hasSelection()
+                                                    && targetPane->selectionActionVisible();
         qInfo() << "Inactive pane activates without interrupting selection:" << inactivePaneSelectionPreserved
                 << "active=" << selectionPaneActive << "selected=" << targetPane->hasSelection()
                 << "actions=" << targetPane->selectionActionVisible();

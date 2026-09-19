@@ -18,6 +18,13 @@ The project has not published a release.
   workspace I/O and viewport refresh paths, preserve selection when dragging in
   an inactive pane, propagate split-pane selection actions, show detached pane
   titles by default, and restore the Transparent opacity control.
+- Reuse the settings/workbench navigation control, remove title-button hover
+  color interpolation, align split geometry to whole pixels and use hairline
+  active-pane edges. Share bounded wheel acceleration between settings and
+  scrollback without changing pixel scrolling or terminal-owned mouse events.
+- Make viewport attachment idempotent: pane activation no longer sends a
+  redundant resize that resets the terminal engine's active selection gesture.
+  Runtime coverage checks the complete drag and absence of resize notifications.
 
 ### UI V2 design system — 2026-09-19 (branch `ui/v2-design-system`)
 

@@ -42,9 +42,9 @@ SplitView {
         if (!leadingPane)
             return;
         if (orientation === Qt.Horizontal)
-            leadingPane.SplitView.preferredWidth = value;
+            leadingPane.SplitView.preferredWidth = Math.round(value);
         else
-            leadingPane.SplitView.preferredHeight = value;
+            leadingPane.SplitView.preferredHeight = Math.round(value);
     }
     function restoreRatio() {
         if (!resizing && availableSpan > 0)

@@ -43,10 +43,6 @@ Control {
     Rectangle {
         anchors.fill: parent
         color: control.surfaceColor
-
-        Behavior on color {
-            MotionColor {}
-        }
     }
 
     Rectangle {
@@ -65,10 +61,6 @@ Control {
         height: 20
         name: control.glyphName
         color: control.closeHighlighted ? Theme.dangerSurfaceText : Theme.text
-
-        Behavior on color {
-            MotionColor {}
-        }
     }
 
     MouseArea {

@@ -694,6 +694,31 @@ Rectangle {
         contentWidth: availableWidth
         contentHeight: contentColumn.implicitHeight + 72
 
+        WheelAcceleration {
+            id: wheelAcceleration
+        }
+        WheelHandler {
+            target: null
+            acceptedDevices: PointerDevice.Mouse
+            onWheel: event => {
+                // Pixel deltas already include device momentum. Leave them to Qt.
+                if (event.pixelDelta.y !== 0 || event.modifiers !== Qt.NoModifier) {
+                    event.accepted = false;
+                    return;
+                }
+                const view = scrollView.contentItem as Flickable;
+                const steps = event.angleDelta.y / 120;
+                if (!view || !Number.isInteger(steps)) {
+                    event.accepted = false;
+                    return;
+                }
+                const delta = wheelAcceleration.scale(steps, Date.now()) * 48;
+                view.cancelFlick();
+                view.contentY = Math.max(0, Math.min(view.contentHeight - view.height, view.contentY - delta));
+                event.accepted = true;
+            }
+        }
+
         ColumnLayout {
             id: contentColumn
 

@@ -7,7 +7,7 @@ Item {
 
     property int edges: 0
     property bool shown: false
-    readonly property int thickness: 2
+    readonly property int thickness: 1
 
     anchors.fill: parent
     visible: shown && edges !== 0

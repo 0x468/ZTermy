@@ -370,7 +370,7 @@ Item {
                         attachedController = null;
                         attachedPaneId = "";
                     }
-                    if (!root.controller || paneId.length === 0)
+                    if (!root.controller || paneId.length === 0 || !attachmentChanged)
                         return;
                     root.controller.attachTerminalViewport(paneId, viewport);
                     attachedController = root.controller;

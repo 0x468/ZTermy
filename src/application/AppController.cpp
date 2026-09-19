@@ -2701,7 +2701,6 @@ void AppController::attachTerminalViewport(const QString &paneId, QObject *viewp
     }
     if (const auto existing = m_terminalViewports.value(paneId); existing == terminal)
     {
-        showTabInViewport(*tab);
         return;
     }
     QObject::disconnect(terminal, nullptr, this, nullptr);

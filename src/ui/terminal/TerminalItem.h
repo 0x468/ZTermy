@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ui/WheelAcceleration.h"
+
 #include "domain/terminal/TerminalEngine.h"
 #include "ui/terminal/TerminalKeywordHighlighter.h"
 #include "ui/terminal/TerminalQuickSelect.h"
@@ -376,6 +378,7 @@ private:
     QColor m_selectionForeground = QColor(255, 255, 255);
     TerminalRenderMetrics m_renderMetrics;
     int m_wheelRemainder = 0;
+    WheelAcceleration m_wheelAcceleration;
     int m_scrollRowsPerWheel = 3;
     qreal m_pixelWheelRemainder = 0.0;
     int m_selectionAutoscrollDirection = 0;

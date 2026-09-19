@@ -13,14 +13,19 @@ Rectangle {
     property bool compact: false
     signal activated
 
+    function focusAction() {
+        action.forceActiveFocus();
+    }
+
     implicitHeight: 34
     radius: Theme.radiusControl
-    color: control.selected || action.hovered ? Theme.raisedBackground : "transparent"
+    color: action.pressed ? Theme.controlPressed : control.selected ? Theme.controlBackground : action.feedbackColor
     border.color: action.visualFocus ? Theme.focus : "transparent"
     border.width: action.visualFocus ? 1 : 0
 
     Rectangle {
         anchors.left: parent.left
+        anchors.leftMargin: control.compact ? 2 : 8
         anchors.verticalCenter: parent.verticalCenter
         width: 3
         height: 18
@@ -31,13 +36,13 @@ Rectangle {
     Row {
         id: contentRow
 
-        x: control.compact ? Math.round((control.width - width) / 2) : 10
+        x: control.compact ? Math.round((control.width - width) / 2) : 12
         anchors.verticalCenter: parent.verticalCenter
         spacing: 8
 
         AppIcon {
-            width: control.iconName.length > 0 ? 15 : 0
-            height: 15
+            width: control.iconName.length > 0 ? 16 : 0
+            height: 16
             visible: control.iconName.length > 0
             name: control.iconName
             color: control.selected ? Theme.text : Theme.textMuted

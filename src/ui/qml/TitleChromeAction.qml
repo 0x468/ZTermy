@@ -34,10 +34,6 @@ Rectangle {
     implicitHeight: Theme.titleBarHeight
     color: menuOpen && !action.pressed ? Theme.captionHover : action.feedbackColor
 
-    Behavior on color {
-        MotionColor {}
-    }
-
     Rectangle {
         visible: action.visualFocus
         anchors.fill: parent
@@ -55,10 +51,6 @@ Rectangle {
         visible: control.iconName.length > 0
         name: control.iconName
         color: control.iconColor
-
-        Behavior on color {
-            MotionColor {}
-        }
     }
 
     KeyboardAction {
