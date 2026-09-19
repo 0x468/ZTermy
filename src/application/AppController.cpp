@@ -2750,6 +2750,14 @@ void AppController::shutdown() noexcept
         return;
     }
     m_shutdownStarted = true;
+    try
+    {
+        static_cast<void>(persistTerminalWorkspaces());
+    }
+    catch (...)
+    {
+        qCWarning(appControllerLog) << "Unable to persist terminal workspace during shutdown";
+    }
     for (const auto &tab : m_tabs)
         if (tab->historyCancellation)
             tab->historyCancellation->request_stop();
@@ -4868,12 +4876,7 @@ bool AppController::activateTerminalTab(const QString &id)
         return true;
     }
     m_activeTabId = workspaceId;
-    const bool persistedWorkspaceChanged = m_workspaceState.activeTerminalWorkspaceId != utf8String(workspaceId);
     m_workspaceState.activeTerminalWorkspaceId = utf8String(workspaceId);
-    if (persistedWorkspaceChanged)
-    {
-        static_cast<void>(persistTerminalWorkspaces());
-    }
     emitActiveTerminalContextChanged();
     return true;
 }
@@ -5249,8 +5252,7 @@ bool AppController::activateTerminalPane(const QString &paneId)
     m_terminal = m_terminalViewports.value(paneId);
     if (changed)
     {
-        static_cast<void>(persistTerminalWorkspaces());
-        emitActiveTerminalContextChanged();
+        emitActiveTerminalContextChanged(false);
         emit terminalTabsChanged();
     }
     return true;
@@ -16293,7 +16295,7 @@ workbench::WorkspaceState AppController::persistableWorkspaceState(const workben
     return persistable;
 }
 
-void AppController::emitActiveTerminalContextChanged()
+void AppController::emitActiveTerminalContextChanged(const bool refreshViewports)
 {
     updateTelemetryVisibility();
     emit activeTerminalTabChanged();
@@ -16305,7 +16307,8 @@ void AppController::emitActiveTerminalContextChanged()
     emit terminalHistoryChanged();
     emit sftpChanged();
     emit aiConversationChanged();
-    showActiveTab();
+    if (refreshViewports)
+        showActiveTab();
 }
 
 void AppController::showActiveTab()

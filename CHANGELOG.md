@@ -14,6 +14,10 @@ The project has not published a release.
   remove page-transition transparency flashes, hide inactive-pane cursors,
   animate terminal-tab activation, dismiss title menus from the native title
   bar, and list saved hosts directly in the new-terminal menu.
+- Enter hover feedback at its final color, keep pane activation off synchronous
+  workspace I/O and viewport refresh paths, preserve selection when dragging in
+  an inactive pane, propagate split-pane selection actions, show detached pane
+  titles by default, and restore the Transparent opacity control.
 
 ### UI V2 design system — 2026-09-19 (branch `ui/v2-design-system`)
 

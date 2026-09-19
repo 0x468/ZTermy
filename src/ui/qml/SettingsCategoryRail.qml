@@ -159,10 +159,6 @@ Rectangle {
                         border.color: matchAction.visualFocus ? Theme.focus : "transparent"
                         border.width: 1
 
-                        Behavior on color {
-                            MotionColor {}
-                        }
-
                         Column {
                             anchors.left: parent.left
                             anchors.right: parent.right

@@ -1004,7 +1004,7 @@ private:
     void publishTerminalOwnership();
     [[nodiscard]] bool terminalWorkspaceCanTransfer(const QString &workspaceId) const;
     [[nodiscard]] workbench::WorkspaceState persistableWorkspaceState(const workbench::WorkspaceState &candidate) const;
-    void emitActiveTerminalContextChanged();
+    void emitActiveTerminalContextChanged(bool refreshViewports = true);
     void showTabInViewport(const TerminalTab &tab);
     void showAllTerminalViewports();
     void showActiveTab();

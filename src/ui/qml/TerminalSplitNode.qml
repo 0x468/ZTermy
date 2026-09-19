@@ -384,7 +384,7 @@ Item {
                 anchors.fill: parent
                 anchors.margins: 0
                 anchors.topMargin: leaf.paneHeaderVisible ? 32 : 0
-                focus: !!leaf.node.active
+                focus: !!leaf.node.active || activeFocus
                 fontFamily: leaf.tab.sessionFontFamily && leaf.tab.sessionFontFamily.length > 0 ? leaf.tab.sessionFontFamily : root.defaultFontFamily
                 fontPixelSize: leaf.tab.sessionFontSize > 0 ? leaf.tab.sessionFontSize : root.defaultFontSize
                 ligaturesEnabled: leaf.tab.sessionFontSize > 0 ? leaf.tab.sessionLigatures : root.defaultLigatures
@@ -1012,6 +1012,8 @@ Item {
                         item.cursorBlink = root.cursorBlink;
                         item.copyOnSelect = root.copyOnSelect;
                         item.keepSelectionAfterCopy = root.keepSelectionAfterCopy;
+                        item.selectionActionPopupEnabled = root.selectionActionPopupEnabled;
+                        item.selectionActions = root.selectionActions;
                         item.confirmMultilinePaste = root.confirmMultilinePaste;
                         item.rightClickBehavior = root.rightClickBehavior;
                         item.middleClickBehavior = root.middleClickBehavior;
@@ -1058,6 +1060,18 @@ Item {
                     target: firstLoader.item
                     property: "keepSelectionAfterCopy"
                     value: root.keepSelectionAfterCopy
+                    when: firstLoader.item !== null
+                }
+                Binding {
+                    target: firstLoader.item
+                    property: "selectionActionPopupEnabled"
+                    value: root.selectionActionPopupEnabled
+                    when: firstLoader.item !== null
+                }
+                Binding {
+                    target: firstLoader.item
+                    property: "selectionActions"
+                    value: root.selectionActions
                     when: firstLoader.item !== null
                 }
                 Binding {
@@ -1182,6 +1196,8 @@ Item {
                         item.cursorBlink = root.cursorBlink;
                         item.copyOnSelect = root.copyOnSelect;
                         item.keepSelectionAfterCopy = root.keepSelectionAfterCopy;
+                        item.selectionActionPopupEnabled = root.selectionActionPopupEnabled;
+                        item.selectionActions = root.selectionActions;
                         item.confirmMultilinePaste = root.confirmMultilinePaste;
                         item.rightClickBehavior = root.rightClickBehavior;
                         item.middleClickBehavior = root.middleClickBehavior;
@@ -1228,6 +1244,18 @@ Item {
                     target: secondLoader.item
                     property: "keepSelectionAfterCopy"
                     value: root.keepSelectionAfterCopy
+                    when: secondLoader.item !== null
+                }
+                Binding {
+                    target: secondLoader.item
+                    property: "selectionActionPopupEnabled"
+                    value: root.selectionActionPopupEnabled
+                    when: secondLoader.item !== null
+                }
+                Binding {
+                    target: secondLoader.item
+                    property: "selectionActions"
+                    value: root.selectionActions
                     when: secondLoader.item !== null
                 }
                 Binding {

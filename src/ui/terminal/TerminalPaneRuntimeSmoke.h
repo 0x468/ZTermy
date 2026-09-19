@@ -8,6 +8,7 @@
 #include <QDir>
 #include <QGuiApplication>
 #include <QQuickItem>
+#include <algorithm>
 #include <vector>
 
 QT_BEGIN_NAMESPACE
@@ -271,6 +272,29 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
     }
     if (header && targetPane)
     {
+        const bool nestedSelectionActions =
+            window.findChildren<QObject *>(QStringLiteral("terminalSelectionSearchAction")).size() >= 2;
+        qInfo() << "Recursive panes receive selection actions:" << nestedSelectionActions;
+        passed = passed && nestedSelectionActions;
+
+        controller.activateTerminalPane(firstId);
+        if (auto *sourcePane = window.findChild<TerminalItem *>(QStringLiteral("terminalViewport-") + firstId))
+            sourcePane->forceActiveFocus(Qt::OtherFocusReason);
+        settle();
+        const QPointF selectionStart = targetPane->mapToScene(QPointF(16, 18));
+        const QPointF selectionEnd =
+            targetPane->mapToScene(QPointF(std::min<qreal>(180, targetPane->width() - 16), 18));
+        dragMouse(window, selectionStart, selectionEnd, 6);
+        settle();
+        const bool selectionPaneActive =
+            controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString() == secondId;
+        const bool inactivePaneSelectionPreserved =
+            selectionPaneActive && targetPane->hasSelection() && targetPane->selectionActionVisible();
+        qInfo() << "Inactive pane activates without interrupting selection:" << inactivePaneSelectionPreserved
+                << "active=" << selectionPaneActive << "selected=" << targetPane->hasSelection()
+                << "actions=" << targetPane->selectionActionVisible();
+        passed = passed && inactivePaneSelectionPreserved;
+
         clickMouse(window, header->mapToScene(QPointF(12, 16)));
         settle();
         const bool headerFocused =
@@ -350,6 +374,11 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
     qInfo() << "Window transfer independent native window:" << passed;
     if (detached)
     {
+        const auto *detachedHeader = detached->findChild<QQuickItem *>(QStringLiteral("terminalPaneHeader-") + paneId);
+        const bool detachedHeaderVisible = detached->property("paneHeadersVisible").toBool() && detachedHeader
+                                           && detachedHeader->isVisible() && detachedHeader->height() >= 32;
+        qInfo() << "Detached pane title is visible by default:" << detachedHeaderVisible;
+        passed = passed && detachedHeaderVisible;
         const auto *actions = detached->findChild<QQuickItem *>(QStringLiteral("terminalPaneActions-") + paneId);
         const QPointF toolbarOrigin = actions ? actions->mapToScene(QPointF{}) : QPointF{-1, -1};
         const bool controlsFlush = actions && qAbs(toolbarOrigin.y()) < 1

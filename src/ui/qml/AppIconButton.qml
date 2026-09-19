@@ -48,9 +48,6 @@ ToolButton {
             color: Theme.withAlpha(feedbackColor, feedbackColor.a * feedbackAmount)
             border.color: control.visualFocus ? Theme.focus : "transparent"
             border.width: control.visualFocus ? 2 : 0
-            Behavior on feedbackAmount {
-                MotionFeedback {}
-            }
         }
         Rectangle {
             anchors.horizontalCenter: parent.horizontalCenter

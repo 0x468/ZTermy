@@ -22,10 +22,6 @@ Rectangle {
     border.color: action.visualFocus ? Theme.focus : "transparent"
     border.width: action.visualFocus ? 1 : 0
 
-    Behavior on color {
-        MotionColor {}
-    }
-
     Rectangle {
         anchors.left: parent.left
         anchors.leftMargin: 8

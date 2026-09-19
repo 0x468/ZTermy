@@ -11,7 +11,7 @@ Window {
     property var workspace: ({})
     property var pendingPasteViewport: null
     property int pendingPasteLineCount: 0
-    property bool paneHeadersVisible: false
+    property bool paneHeadersVisible: true
 
     transientParent: null
     // Same native style as the main window: Windows owns maximize, minimize
@@ -29,7 +29,7 @@ Window {
             hostRoot.controller.activateTerminalTab(workspaceId);
     }
     title: qsTr("%1 — Detached pane").arg(workspace.title || qsTr("Terminal"))
-    color: Theme.windowBackground
+    color: Theme.workspaceBackground
     onClosing: close => {
         close.accepted = false;
         Qt.callLater(() => hostRoot.controller.closeTerminalTab(workspaceId));
@@ -46,7 +46,7 @@ Window {
         defaultFontFamily: detachedTerminalWindow.hostRoot.controller.terminalFontFamily
         defaultFontSize: detachedTerminalWindow.hostRoot.controller.terminalFontSize
         defaultLigatures: detachedTerminalWindow.hostRoot.controller.terminalLigatures
-        defaultBackgroundOpacity: detachedTerminalWindow.hostRoot.controller.terminalBackgroundOpacity
+        defaultBackgroundOpacity: 0.0
         defaultCursor: detachedTerminalWindow.hostRoot.controller.cursorPreference
         cursorBlink: detachedTerminalWindow.hostRoot.controller.cursorBlink
         copyOnSelect: detachedTerminalWindow.hostRoot.controller.copyOnSelect

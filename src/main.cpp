@@ -2135,6 +2135,7 @@ struct ResizeHitRuntimeCase
 
     QQuickItem *theme = quickItem(rootObject, "themeCard-ztermy-light");
     QQuickItem *accent = quickItem(rootObject, "settingsAccent");
+    QQuickItem *backdrop = quickItem(rootObject, "settingsBackdrop");
     QQuickItem *opacity = quickItem(rootObject, "settingsOpacity");
     QQuickItem *fontSize = quickItem(rootObject, "settingsFontSize");
     QQuickItem *cursorBlink = quickItem(rootObject, "settingsCursorBlink");
@@ -2142,9 +2143,9 @@ struct ResizeHitRuntimeCase
     QQuickItem *keepSelectionAfterCopy = quickItem(rootObject, "settingsKeepSelectionAfterCopy");
     QQuickItem *multilinePaste = quickItem(rootObject, "settingsMultilinePaste");
     QQuickItem *apply = quickItem(rootObject, "settingsApply");
-    if (theme == nullptr || accent == nullptr || opacity == nullptr || fontSize == nullptr || cursorBlink == nullptr
-        || copyOnSelect == nullptr || keepSelectionAfterCopy == nullptr || multilinePaste == nullptr
-        || apply == nullptr)
+    if (theme == nullptr || accent == nullptr || backdrop == nullptr || opacity == nullptr || fontSize == nullptr
+        || cursorBlink == nullptr || copyOnSelect == nullptr || keepSelectionAfterCopy == nullptr
+        || multilinePaste == nullptr || apply == nullptr)
     {
         qCWarning(applicationLog) << "Settings keyboard smoke object lookup failed";
         return false;
@@ -2184,6 +2185,15 @@ struct ResizeHitRuntimeCase
                                   << "visible=" << opacity->isVisible() << "enabled=" << opacity->isEnabled();
         return false;
     }
+    backdrop->setProperty("currentIndex", 2);
+    processWindowEventsFor(std::chrono::milliseconds{50});
+    if (!opacity->isVisible() || !opacity->isEnabled())
+    {
+        qCWarning(applicationLog) << "Transparent backdrop lost its opacity control";
+        return false;
+    }
+    backdrop->setProperty("currentIndex", 0);
+    processWindowEventsFor(std::chrono::milliseconds{50});
     if (!focusItem(window, opacity, QStringLiteral("settingsOpacity")))
     {
         return false;

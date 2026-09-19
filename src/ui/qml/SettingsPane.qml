@@ -50,8 +50,8 @@ Rectangle {
     readonly property var defaults: controller.applicationSettingsDefaults()
     readonly property bool shortcutRecording: shortcutSettings.recording
     readonly property bool fullEffects: effectsBox.currentIndex === 0
-    readonly property bool adjustableBackdrop: fullEffects && (backdropBox.currentIndex === 0 || backdropBox.currentIndex === 1)
-    readonly property bool solidBackdrop: !fullEffects || backdropBox.currentIndex === 4
+    readonly property bool adjustableBackdrop: fullEffects && (backdropToken() === "acrylic" || backdropToken() === "aero" || backdropToken() === "transparent")
+    readonly property bool solidBackdrop: !fullEffects || backdropToken() === "solid"
     readonly property bool customAccentSelected: accentBox.currentIndex === 2
     readonly property bool compactLayout: width < Theme.narrowWindowWidth
     readonly property int contentInset: compactLayout ? 10 : 16
