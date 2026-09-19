@@ -8,10 +8,13 @@ ToolButton {
 
     required property string label
     required property string iconName
-    property color iconColor: selected ? Theme.accent : Theme.textSoft
+    property color iconColor: selected ? Theme.accent : onWorkspace ? Theme.workspaceTextSoft : Theme.textSoft
     property string toolTipText: label
     property bool toolTipEnabled: true
     property bool selected: false
+    // Drawn on the terminal workspace: ink and hover feedback follow the
+    // terminal palette instead of the chrome skin.
+    property bool onWorkspace: false
 
     implicitWidth: 28
     implicitHeight: 28
@@ -31,7 +34,7 @@ ToolButton {
 
     contentItem: AppIcon {
         name: control.iconName
-        color: control.enabled ? control.iconColor : Theme.textSubtle
+        color: control.enabled ? control.iconColor : control.onWorkspace ? Theme.workspaceTextSubtle : Theme.textSubtle
     }
 
     background: Item {
@@ -41,7 +44,7 @@ ToolButton {
             height: width
             radius: width / 2
             property real feedbackAmount: control.down || control.hovered ? 1 : 0
-            readonly property color feedbackColor: control.down ? Theme.controlPressed : Theme.controlHover
+            readonly property color feedbackColor: control.down ? (control.onWorkspace ? Theme.workspaceControlPressed : Theme.controlPressed) : control.onWorkspace ? Theme.workspaceControlHover : Theme.controlHover
             color: Theme.withAlpha(feedbackColor, feedbackColor.a * feedbackAmount)
             border.color: control.visualFocus ? Theme.focus : "transparent"
             border.width: control.visualFocus ? 2 : 0

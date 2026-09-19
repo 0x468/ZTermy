@@ -72,7 +72,7 @@ Item {
         required property string metric
         required property string iconName
         required property string label
-        property color iconColor: Theme.textMuted
+        property color iconColor: Theme.workspaceTextMuted
 
         implicitWidth: contentRow.implicitWidth + 8
         implicitHeight: 24
@@ -92,7 +92,7 @@ Item {
 
         background: Rectangle {
             radius: Theme.radiusSmall
-            color: metricButton.down ? Theme.controlPressed : metricButton.hovered || metricButton.visualFocus ? Theme.controlHover : "transparent"
+            color: metricButton.down ? Theme.workspaceControlPressed : metricButton.hovered || metricButton.visualFocus ? Theme.workspaceControlHover : "transparent"
             border.color: metricButton.visualFocus ? Theme.focus : "transparent"
         }
 
@@ -111,7 +111,7 @@ Item {
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 text: metricButton.label
-                color: Theme.textMuted
+                color: Theme.workspaceTextMuted
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.textCompact
             }
@@ -180,7 +180,7 @@ Item {
             metric: "disk"
             iconName: "disk"
             label: strip.rootDisk() ? strip.kib(strip.rootDisk().usedKiB) + "/" + strip.kib(strip.rootDisk().totalKiB) : "--"
-            iconColor: strip.rootDisk() && strip.rootDisk().percent >= 90 ? Theme.danger : Theme.textMuted
+            iconColor: strip.rootDisk() && strip.rootDisk().percent >= 90 ? Theme.danger : Theme.workspaceTextMuted
         }
 
         MetricButton {
@@ -285,7 +285,7 @@ Item {
                     values: strip.series(detailPopup.metric === "cpu" ? "cpu" : detailPopup.metric === "memory" ? "memory" : detailPopup.metric === "disk" ? "disk" : detailPopup.metric === "latency" ? "latency" : "received")
                     upperBound: detailPopup.metric === "cpu" || detailPopup.metric === "memory" || detailPopup.metric === "disk" ? 100 : -1
                     minimumSpan: detailPopup.metric === "network" ? 1024 : detailPopup.metric === "latency" ? 10 : 8
-                    lineColor: detailPopup.metric === "latency" ? "#A78BFA" : Theme.accent
+                    lineColor: detailPopup.metric === "latency" ? Theme.accentHover : Theme.accent
                 }
 
                 Flow {

@@ -84,6 +84,21 @@ QtObject {
     readonly property color fieldBackground: highContrast ? highContrastBackground : dark ? "#111827" : "#FFFFFF"
     readonly property color floatingBackground: highContrast ? highContrastBackground : dark ? "#1E293B" : "#FFFFFF"
 
+    // Workspace ink: everything drawn on the terminal workspace (session strip,
+    // pane toolbars, pane headers, scrollbars, split handles) reads from the
+    // terminal palette's brightness, not from the chrome skin, so a light
+    // terminal theme under a dark skin keeps its labels visible.
+    readonly property bool workspaceDark: highContrast ? dark : terminalPaletteReady ? !!terminalPalette.dark : dark
+    readonly property color workspaceText: highContrast ? highContrastText : workspaceDark ? "#F8FAFC" : "#0F172A"
+    readonly property color workspaceTextSoft: highContrast ? highContrastText : workspaceDark ? "#CBD5E1" : "#334155"
+    readonly property color workspaceTextMuted: highContrast ? highContrastText : workspaceDark ? "#94A3B8" : "#475569"
+    readonly property color workspaceTextSubtle: highContrast ? highContrastText : workspaceDark ? "#64748B" : "#64748B"
+    readonly property color workspaceBorder: highContrast ? highContrastText : withAlpha(workspaceText, workspaceDark ? 0.14 : 0.18)
+    readonly property color workspaceControlHover: highContrast ? controlHover : withAlpha(workspaceText, 0.10)
+    readonly property color workspaceControlPressed: highContrast ? controlPressed : withAlpha(workspaceText, 0.18)
+    readonly property color workspacePanelBackground: highContrast ? highContrastBackground : mixColor(terminalBackground, workspaceText, 0.05)
+    readonly property color workspaceRaisedBackground: highContrast ? highContrastBackground : mixColor(terminalBackground, workspaceText, 0.11)
+
     readonly property color border: highContrast ? highContrastText : dark ? "#263244" : "#CBD5E1"
     readonly property color borderStrong: highContrast ? highContrastText : dark ? "#334155" : "#94A3B8"
     readonly property color text: highContrast ? highContrastText : dark ? "#F8FAFC" : "#0F172A"

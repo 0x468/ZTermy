@@ -89,7 +89,8 @@ RowLayout {
             }
             iconName: modelData === "headers" ? "list" : modelData === "zoom" ? "locate" : modelData === "detach" ? "external-link" : modelData === "copy" ? "copy" : modelData === "new" ? "plus" : "close"
             selected: (modelData === "headers" && root.headersVisible) || (modelData === "zoom" && root.zoomed)
-            iconColor: selected ? Theme.accent : Theme.text
+            onWorkspace: true
+            iconColor: selected ? Theme.accent : Theme.workspaceText
             toolTipEnabled: !newPaneMenu.visible
             onClicked: {
                 switch (modelData) {

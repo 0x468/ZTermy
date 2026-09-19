@@ -491,7 +491,7 @@ Item {
                     width: paneScrollbarMouse.containsMouse || paneScrollbarMouse.pressed ? 6 : 4
                     height: paneScrollbarMouse.pressed ? paneScrollbarMouse.grabbedHeight : normalHeight
                     radius: width / 2
-                    color: paneScrollbarMouse.pressed ? Theme.text : paneScrollbarMouse.containsMouse ? Theme.textSoft : Theme.textMuted
+                    color: paneScrollbarMouse.pressed ? Theme.workspaceText : paneScrollbarMouse.containsMouse ? Theme.workspaceTextSoft : Theme.workspaceTextMuted
                 }
 
                 MouseArea {

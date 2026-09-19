@@ -25,7 +25,7 @@ Rectangle {
     implicitHeight: 32
     topLeftRadius: cornerRadius
     topRightRadius: cornerRadius
-    color: active ? Theme.controlBackground : Theme.panelBackground
+    color: active ? Theme.workspaceRaisedBackground : Theme.workspacePanelBackground
 
     Behavior on color {
         MotionColor {}
@@ -64,7 +64,7 @@ Rectangle {
         anchors.rightMargin: header.actionsWidth > 0 ? header.actionsWidth : 10
         anchors.verticalCenter: parent.verticalCenter
         text: header.paneTitle
-        color: header.active ? Theme.text : Theme.textMuted
+        color: header.active ? Theme.workspaceText : Theme.workspaceTextMuted
         elide: Text.ElideRight
         font.family: Theme.uiFont
         font.pixelSize: Theme.textLabel
@@ -80,6 +80,6 @@ Rectangle {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         height: 1
-        color: Theme.border
+        color: Theme.workspaceBorder
     }
 }

@@ -127,6 +127,13 @@ Rectangle {
         currentPage = "terminal";
         focusTerminalAfterLayout();
     }
+    // Session strip actions share the workspace ink because the strip sits on
+    // the terminal palette fill, not on the app skin.
+    component SessionStripAction: AppIconButton {
+        onWorkspace: true
+        Layout.preferredWidth: 28
+        Layout.preferredHeight: 22
+    }
     readonly property var terminalLayoutRoot: mainWorkspace.root || ({})
     readonly property var visibleTerminalLayoutRoot: {
         if (zoomedTerminalPaneId.length > 0)
@@ -1767,14 +1774,14 @@ Rectangle {
                                 Layout.preferredWidth: 6
                                 Layout.preferredHeight: 6
                                 radius: height / 2
-                                color: root.activeTerminalTab && root.activeTerminalTab.running ? root.accentColor : Theme.textSubtle
+                                color: root.activeTerminalTab && root.activeTerminalTab.running ? Theme.accent : Theme.workspaceTextSubtle
                             }
 
                             Text {
                                 Layout.alignment: Qt.AlignVCenter
                                 Layout.maximumWidth: 250
                                 text: root.activeTerminalTab ? root.activeTerminalTab.identity : qsTr("Terminal")
-                                color: root.textColor
+                                color: Theme.workspaceText
                                 elide: Text.ElideRight
                                 font.family: Theme.uiFont
                                 font.pixelSize: Theme.textCompact
@@ -1783,6 +1790,7 @@ Rectangle {
 
                             AppIconButton {
                                 id: copyAddressButton
+                                onWorkspace: true
 
                                 Layout.preferredWidth: 24
                                 Layout.preferredHeight: 22
@@ -1790,7 +1798,7 @@ Rectangle {
                                 onClicked: root.controller.copyActiveTerminalAddress()
                                 label: qsTr("Copy host address")
                                 iconName: "copy"
-                                iconColor: root.mutedColor
+                                iconColor: Theme.workspaceTextMuted
 
                                 toolTipText: qsTr("Copy host address")
                             }
@@ -1799,7 +1807,7 @@ Rectangle {
                                 Layout.alignment: Qt.AlignVCenter
                                 Layout.preferredWidth: 1
                                 Layout.preferredHeight: 12
-                                color: root.borderColor
+                                color: Theme.workspaceBorder
                                 visible: terminalSessionStatus.visible || remoteTelemetryStrip.visible
                             }
 
@@ -1822,7 +1830,7 @@ Rectangle {
                                 Layout.minimumWidth: 0
                                 visible: root.width >= 1080 || (root.activeTerminalTab !== null && root.activeTerminalTab.kind !== "ssh")
                                 text: terminalViewport.statusText
-                                color: root.mutedColor
+                                color: Theme.workspaceTextMuted
                                 elide: Text.ElideRight
                                 font.family: Theme.uiFont
                                 font.pixelSize: Theme.textCompact
@@ -1832,7 +1840,7 @@ Rectangle {
                                 Layout.alignment: Qt.AlignVCenter
                                 visible: root.width >= 900 && root.activeTerminalTab !== null && root.activeTerminalTab.connectedUtcMs > 0
                                 text: root.activeTerminalTab !== null ? qsTr("Connected %1").arg(root.formatSessionDuration(root.activeTerminalTab.connectedUtcMs)) : ""
-                                color: root.mutedColor
+                                color: Theme.workspaceTextMuted
                                 font.family: Theme.uiFont
                                 font.pixelSize: Theme.textCompact
                                 Accessible.name: text
@@ -1843,12 +1851,10 @@ Rectangle {
                                 visible: !terminalSessionStatus.visible
                             }
 
-                            AppIconButton {
+                            SessionStripAction {
                                 id: keywordHighlightButton
 
                                 objectName: "terminalKeywordHighlightAction"
-                                Layout.preferredWidth: 28
-                                Layout.preferredHeight: 22
                                 checkable: true
                                 checked: root.activeTerminalTab !== null && root.activeTerminalTab.keywordHighlightEnabled && root.activeTerminalTab.keywordHighlightRules.length > 0
                                 selected: checked
@@ -1862,17 +1868,15 @@ Rectangle {
                                 }
                                 label: qsTr("Host keyword highlighting")
                                 iconName: "highlight"
-                                iconColor: keywordHighlightButton.checked ? Theme.accent : root.mutedColor
+                                iconColor: keywordHighlightButton.checked ? Theme.accent : Theme.workspaceTextMuted
                                 toolTipText: qsTr("Host keyword highlighting")
                                 toolTipEnabled: !keywordHighlightPopover.visible
                             }
 
-                            AppIconButton {
+                            SessionStripAction {
                                 id: sftpToolbarButton
 
                                 objectName: "terminalSftpAction"
-                                Layout.preferredWidth: 28
-                                Layout.preferredHeight: 22
                                 checkable: true
                                 checked: root.activeTerminalTab !== null && root.activeTerminalTab.workbenchOpen && root.activeTerminalTab.workbenchPage === "sftp"
                                 selected: checked
@@ -1881,16 +1885,14 @@ Rectangle {
                                 onClicked: root.controller.toggleTerminalWorkbench("sftp")
                                 label: qsTr("Open remote files")
                                 iconName: "folder"
-                                iconColor: sftpToolbarButton.checked ? Theme.accent : root.mutedColor
+                                iconColor: sftpToolbarButton.checked ? Theme.accent : Theme.workspaceTextMuted
                                 toolTipText: qsTr("Open remote files")
                             }
 
-                            AppIconButton {
+                            SessionStripAction {
                                 id: composerToolbarButton
 
                                 objectName: "terminalComposerAction"
-                                Layout.preferredWidth: 28
-                                Layout.preferredHeight: 22
                                 checkable: true
                                 checked: root.activeTerminalTab !== null && root.activeTerminalTab.composerOpen
                                 selected: checked
@@ -1907,31 +1909,27 @@ Rectangle {
                                 }
                                 label: qsTr("Command composer")
                                 iconName: "compose"
-                                iconColor: composerToolbarButton.checked ? Theme.accent : root.mutedColor
+                                iconColor: composerToolbarButton.checked ? Theme.accent : Theme.workspaceTextMuted
 
                                 toolTipText: qsTr("Command composer")
                             }
 
-                            AppIconButton {
+                            SessionStripAction {
                                 id: terminalFindButton
 
                                 objectName: "terminalFindAction"
-                                Layout.preferredWidth: 28
-                                Layout.preferredHeight: 22
                                 visible: root.width >= 700
                                 enabled: root.activeTerminalTab !== null
                                 onClicked: root.toggleTerminalSearch()
                                 label: qsTr("Find in terminal")
                                 iconName: "search"
-                                iconColor: root.mutedColor
+                                iconColor: Theme.workspaceTextMuted
                                 toolTipText: qsTr("Find in terminal")
                             }
 
-                            AppIconButton {
+                            SessionStripAction {
                                 id: sessionLogToolbarButton
 
-                                Layout.preferredWidth: 28
-                                Layout.preferredHeight: 22
                                 checkable: true
                                 checked: root.activeTerminalTab !== null && (root.activeTerminalTab.logState === "active" || root.activeTerminalTab.logState === "starting")
                                 selected: checked
@@ -1940,16 +1938,14 @@ Rectangle {
                                 onClicked: root.toggleSessionLog()
                                 label: checked ? qsTr("Stop session log") : qsTr("Start session log")
                                 iconName: "save"
-                                iconColor: root.activeTerminalTab !== null && root.activeTerminalTab.logDroppedBytes > 0 ? Theme.warning : sessionLogToolbarButton.checked ? Theme.accent : root.mutedColor
+                                iconColor: root.activeTerminalTab !== null && root.activeTerminalTab.logDroppedBytes > 0 ? Theme.warning : sessionLogToolbarButton.checked ? Theme.accent : Theme.workspaceTextMuted
                                 toolTipText: root.activeTerminalTab !== null && root.activeTerminalTab.logDroppedBytes > 0 ? qsTr("Session log is incomplete: %1 byte(s) were dropped.").arg(root.activeTerminalTab.logDroppedBytes) : sessionLogToolbarButton.checked ? qsTr("Stop session log") : qsTr("Start session log")
                             }
 
-                            AppIconButton {
+                            SessionStripAction {
                                 id: scriptsToolbarButton
 
                                 objectName: "terminalScriptsAction"
-                                Layout.preferredWidth: 28
-                                Layout.preferredHeight: 22
                                 checkable: true
                                 checked: root.activeTerminalTab !== null && root.activeTerminalTab.workbenchOpen && root.activeTerminalTab.workbenchPage === "scripts"
                                 selected: checked
@@ -1958,18 +1954,17 @@ Rectangle {
                                 onClicked: root.controller.toggleTerminalWorkbench("scripts")
                                 label: qsTr("Command snippets")
                                 iconName: "commands"
-                                iconColor: scriptsToolbarButton.checked ? Theme.accent : root.mutedColor
+                                iconColor: scriptsToolbarButton.checked ? Theme.accent : Theme.workspaceTextMuted
                                 toolTipText: qsTr("Command snippets")
                             }
 
-                            AppIconButton {
+                            SessionStripAction {
                                 id: scriptRecordingIndicator
                                 iconName: "commands"
                                 label: toolTipText
 
                                 objectName: "terminalScriptRecordingIndicator"
                                 Layout.preferredWidth: root.activeTerminalTab !== null && root.activeTerminalTab.scriptRecordingState === "review" ? 42 : 50
-                                Layout.preferredHeight: 22
                                 visible: root.activeTerminalTab !== null && root.activeTerminalTab.scriptRecordingState !== "idle"
                                 selected: root.activeTerminalTab !== null && root.activeTerminalTab.scriptRecordingState !== "review"
                                 onClicked: {
@@ -1993,7 +1988,7 @@ Rectangle {
                                     Text {
                                         anchors.verticalCenter: parent.verticalCenter
                                         text: root.activeTerminalTab !== null && root.activeTerminalTab.scriptRecordingState === "review" ? root.activeTerminalTab.scriptRecordingSteps.length : "REC"
-                                        color: root.textColor
+                                        color: Theme.workspaceText
                                         font.family: Theme.uiFont
                                         font.pixelSize: Theme.textCompact
                                         font.weight: Font.DemiBold
@@ -2005,6 +2000,7 @@ Rectangle {
 
                             AppIconButton {
                                 id: aiToolbarButton
+                                onWorkspace: true
 
                                 objectName: "terminalAiAction"
                                 Layout.preferredWidth: 28
@@ -2016,13 +2012,14 @@ Rectangle {
                                 onClicked: root.controller.toggleTerminalWorkbench("ai")
                                 label: qsTr("AI assistant")
                                 iconName: "ai"
-                                iconColor: aiToolbarButton.checked ? Theme.accent : root.mutedColor
+                                iconColor: aiToolbarButton.checked ? Theme.accent : Theme.workspaceTextMuted
 
                                 toolTipText: qsTr("AI assistant")
                             }
 
                             AppIconButton {
                                 id: terminalMoreButton
+                                onWorkspace: true
                                 objectName: "terminalMoreAction"
 
                                 Layout.preferredWidth: 28
@@ -2031,7 +2028,7 @@ Rectangle {
                                 onClicked: terminalMoreMenu.open()
                                 label: qsTr("More terminal actions")
                                 iconName: "more"
-                                iconColor: root.mutedColor
+                                iconColor: Theme.workspaceTextMuted
 
                                 toolTipText: qsTr("More terminal actions")
                                 toolTipEnabled: !terminalMoreMenu.visible
