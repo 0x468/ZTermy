@@ -1,6 +1,6 @@
 # UI V2 设计系统交付记录（分支 `ui/v2-design-system`）
 
-状态：六章全部落地并通过全量自动验证；等待所有者人工验收与合并决定。未合并，未推送。
+状态：六章全部落地，所有者第一轮反馈已修复，全量自动验证再次通过；等待所有者人工验收与合并决定。未合并，未推送。
 
 计划、各章进度与基准细节见 [../UI_V2_PLAN.md](../UI_V2_PLAN.md)；不把本记录当作所有者已验收的证明。
 
@@ -9,12 +9,12 @@
 | 字段 | 值 |
 | --- | --- |
 | 日期 | 2026-09-19 |
-| 分支 / HEAD | `ui/v2-design-system` @ `5ab2aa8`，领先 `main`（`713ee66`）32 个提交 |
-| 二进制源提交 | `7619587`（`5ab2aa8` 仅改文档） |
+| 分支 / HEAD | `ui/v2-design-system` @ `ac46565`，领先 `main`（`713ee66`）39 个提交 |
+| 二进制源提交 | `ccb7c68`（`ac46565` 仅改文档） |
 | 版本 | `0.4.6` |
 | 平台 | Windows 11 25H2 x64，MSVC 14.44，Qt 6.8.3 msvc2022_64 动态链接，D3D11 |
-| 二进制 | `build/msvc-dynamic-release/ztermy.exe`，12,819,456 字节，2026-09-19 06:38:47 |
-| SHA-256 | `1c2c631ff45fceb81d68eba3ef28c08e3a5777da40aa979558b3b67664687b2c` |
+| 二进制 | `build/msvc-dynamic-release/ztermy.exe`，12,852,736 字节，2026-09-19 12:43:20 |
+| SHA-256 | `f9bd4c1ef40c240f74284f3f713fc974b82baaf2be1f594ed209b15b66e368da` |
 | 部署包 | `build/msvc-dynamic-release/package/dynamic/`，132 个文件，111.5 MB；其中 `ztermy.exe` 与上者逐字节一致 |
 
 `build/` 不入库；以上哈希与源提交共同标识交付物。
@@ -83,7 +83,7 @@ completion 被 100 ms 标记搜索量化：`main` 有 16/24 次落在 1570–159
 | 分割线上没有拉伸光标 | 全窗口窗格拖拽捕获层只是 `enabled: false`，Qt 光标查找只跳过不可见项，`MouseArea` 永远带箭头光标 | 改为 `visible` 门控；`SplitView` 把手本已带分割光标 | resize smoke 断言导航把手与两个分割把手的窗口光标，12/12 通过 |
 | 终端与工具栏割裂；单窗格有蓝紫边框；多窗格四面包边压住窗口边 | 叶子矩形画 1–2 px 边框与圆角，工具栏底部有发丝线 | 去掉边框、圆角与视口内缩，去掉发丝线；多窗格时把强调色放到活动窗格旁的分割线（`AppSplitView.emphasized`） | `review-1/ztermy-dark-single-pane.png`、`ztermy-dark-split.png` |
 
-本轮复验：Release 全量 CTest 129/129，`ztermy_format_check`、`ztermy_qml_quality_check`、全量 clang-tidy、代码健康门禁 PASS；八个真实窗口 smoke（含 resize-interactions、pane-scrollbar）退出 0。多窗格强调方式的其他候选见本轮回复，等所有者定夺。
+本轮复验：Release 与 Debug 全量 CTest 各 129/129（`build/_ctest_release_r7.txt`、`build/_ctest_debug_r7.txt`），`ztermy_format_check`、`ztermy_qml_quality_check`、全量 clang-tidy（`build/_tidy_r7.log`）、代码健康门禁 PASS，隔离动态部署 smoke 通过（`build/_deploy_smoke_r7.log`）；八个真实窗口 smoke（含 resize-interactions、pane-scrollbar）退出 0（`build/_smoke7/`）。上表二进制身份已按本轮更新。多窗格强调方式的其他候选见本轮回复，等所有者定夺。
 
 ## 所有者人工验收（未执行）
 
