@@ -3,10 +3,13 @@
 #include "ui/terminal/TerminalPaneRuntimeSmoke.h"
 
 #include <QCoreApplication>
+#include <QCursor>
 #include <QDebug>
 #include <QElapsedTimer>
+#include <QScreen>
 #include <QStringView>
 
+#include <algorithm>
 #include <chrono>
 #include <vector>
 
@@ -72,6 +75,20 @@ inline void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const
     qt_handleMouseEvent(&window, local, global, Qt::NoButton, Qt::LeftButton, QEvent::MouseButtonRelease, {},
                         static_cast<int>(GetTickCount()));
     processWindowEventsFor(std::chrono::milliseconds{80});
+}
+
+// Hover-sensitive checks need the physical pointer outside the window: Qt re-delivers
+// hover at the real pointer position on every frame, which would undo synthetic moves.
+inline void moveWindowAwayFromPointer(ztermy::NativeWindow &window)
+{
+    const QPoint pointer = QCursor::pos();
+    if (!window.frameGeometry().contains(pointer) || window.screen() == nullptr)
+        return;
+    const QRect available = window.screen()->availableGeometry();
+    const bool pointerOnLeft = pointer.x() < available.center().x();
+    window.setX(pointerOnLeft ? std::max(available.left(), available.right() - window.frameGeometry().width())
+                              : available.left());
+    processWindowEventsFor(std::chrono::milliseconds{100});
 }
 
 inline void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF itemPosition)

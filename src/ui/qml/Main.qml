@@ -2763,11 +2763,14 @@ Rectangle {
         }
     }
 
+    // A MouseArea always owns an arrow cursor and a disabled one still wins the
+    // cursor lookup, which masked every resize grip below this layer; hiding it
+    // keeps the grips' cursors reachable.
     MouseArea {
         id: paneDragCapture
         anchors.fill: parent
         z: 80
-        enabled: pressed || (paneHeaderHover.overHeader && root.currentPage === "terminal" && root.paneHeadersVisible)
+        visible: pressed || (paneHeaderHover.overHeader && root.currentPage === "terminal" && root.paneHeadersVisible)
         acceptedButtons: Qt.LeftButton
         preventStealing: true
         property point pressPoint: Qt.point(0, 0)

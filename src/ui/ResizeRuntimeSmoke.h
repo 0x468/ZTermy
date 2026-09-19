@@ -14,6 +14,7 @@ inline bool verifyResizeInteractions(NativeWindow &window, AppController &)
     window.hide();
     window.show();
     window.requestActivate();
+    moveWindowAwayFromPointer(window);
     const auto send = [&window](QPointF point, Qt::MouseButtons buttons, Qt::MouseButton button, QEvent::Type type) {
         qt_handleMouseEvent(&window, point, window.mapToGlobal(point.toPoint()), buttons, button, type, Qt::NoModifier,
                             static_cast<int>(GetTickCount()));
@@ -41,8 +42,23 @@ inline bool verifyResizeInteractions(NativeWindow &window, AppController &)
         return false;
     qInfo() << "Resize navigation geometry" << navigation->mapToScene({0, 0}) << navigation->size()
             << root->property("workspaceNavigationWidth");
+    const auto hoverCursor = [&](QQuickItem &item, const Qt::CursorShape expected) {
+        const QPointF centre = item.mapToScene({item.width() / 2, item.height() / 2});
+        send(centre + QPointF{0, 8}, Qt::NoButton, Qt::NoButton, QEvent::MouseMove);
+        send(centre, Qt::NoButton, Qt::NoButton, QEvent::MouseMove);
+        // The cursor is resolved on the frame-synced hover pass, not on the move event itself.
+        const bool matches = processWindowEventsUntil(
+            [&] {
+                return window.cursor().shape() == expected;
+            },
+            std::chrono::milliseconds{1000});
+        qInfo() << "Resize hover cursor" << item.objectName() << "shape=" << window.cursor().shape()
+                << "passed=" << matches;
+        return matches;
+    };
+    bool passed = hoverCursor(*navigation, Qt::SizeHorCursor);
     doubleClick(*navigation);
-    bool passed = qAbs(root->property("workspaceNavigationWidth").toReal() - 208) < 0.5;
+    passed = qAbs(root->property("workspaceNavigationWidth").toReal() - 208) < 0.5 && passed;
     qInfo() << "Resize navigation double click passed=" << passed;
 
     QQmlComponent gripComponent(window.engine());
@@ -136,6 +152,7 @@ AppSplitView {
         auto *leading = split->property("leadingPane").value<QQuickItem *>();
         if (!leading)
             return false;
+        passed = hoverCursor(*handle, horizontal ? Qt::SplitHCursor : Qt::SplitVCursor) && passed;
         doubleClick(*leading);
         const bool untouchedOutsideHandle = qAbs(split->property("ratio").toReal() - 0.65) < 0.001;
         doubleClick(*handle);
