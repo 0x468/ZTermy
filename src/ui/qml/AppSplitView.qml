@@ -7,11 +7,10 @@ SplitView {
     required property Item leadingPane
     required property Item trailingPane
     property real ratio: 0.5
-    // Marks the divider next to the active terminal pane (Windows Terminal
-    // style): the pane itself draws no frame, the shared edge carries the accent.
-    property bool emphasized: false
+    readonly property int handleThickness: 6
+    readonly property int handleHitThickness: 6
     signal ratioEdited(real value)
-    readonly property real availableSpan: Math.max(0, (orientation === Qt.Horizontal ? width : height) - 6)
+    readonly property real availableSpan: Math.max(0, (orientation === Qt.Horizontal ? width : height) - handleThickness)
     readonly property real leadingSize: leadingPane ? (orientation === Qt.Horizontal ? leadingPane.width : leadingPane.height) : 0
     property real dragMinimum: 0
     property real dragMaximum: 0
@@ -90,18 +89,20 @@ SplitView {
     }
     handle: Rectangle {
         objectName: "splitResizeHandle"
-        implicitWidth: 6
-        implicitHeight: 6
+        implicitWidth: control.handleThickness
+        implicitHeight: control.handleThickness
         color: SplitHandle.hovered || SplitHandle.pressed ? Theme.accent : Theme.border
-        Rectangle {
-            anchors.centerIn: parent
-            width: control.orientation === Qt.Horizontal ? 2 : parent.width
-            height: control.orientation === Qt.Horizontal ? parent.height : 2
-            color: Theme.accent
-            visible: control.emphasized && !parent.SplitHandle.hovered && !parent.SplitHandle.pressed
+        containmentMask: hitArea
+        Item {
+            id: hitArea
+            readonly property real overhang: (control.handleHitThickness - control.handleThickness) / 2
+            x: control.orientation === Qt.Horizontal ? -overhang : 0
+            y: control.orientation === Qt.Horizontal ? 0 : -overhang
+            width: control.orientation === Qt.Horizontal ? control.handleHitThickness : parent.width
+            height: control.orientation === Qt.Horizontal ? parent.height : control.handleHitThickness
         }
         SplitHandleObserver {
-            anchors.fill: parent
+            anchors.fill: hitArea
             property real initialCoordinate: 0
             property real initialSize: 0
             onPointerPressed: position => {

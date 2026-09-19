@@ -28,6 +28,10 @@ Item {
     property bool detachedPane: false
     property int paneCount: 1
     property bool headersVisible: false
+    // Bitmask of the edges this node shares with a sibling pane (1 left, 2 top,
+    // 4 right, 8 bottom). The active leaf paints its accent on those edges only,
+    // so the native window edge never carries a highlight.
+    property int innerEdges: 0
     // Dynamic self-loading is required because QML rejects static recursive type instantiation.
     // qmllint disable missing-property
     readonly property var activeViewport: contentLoader.item && contentLoader.item["activeViewport"] ? contentLoader.item["activeViewport"] : null
@@ -50,33 +54,28 @@ Item {
     }
 
     function requestCurrentSize() {
-        if (activeViewport) {
+        if (activeViewport)
             activeViewport.requestCurrentSize();
-        }
     }
 
     function copySelection() {
-        if (activeViewport) {
+        if (activeViewport)
             activeViewport.copySelection();
-        }
     }
 
     function pasteClipboard() {
-        if (activeViewport) {
+        if (activeViewport)
             activeViewport.pasteClipboard();
-        }
     }
 
     function selectVisibleTerminal() {
-        if (activeViewport) {
+        if (activeViewport)
             activeViewport.selectVisibleTerminal();
-        }
     }
 
     function selectAllTerminal() {
-        if (activeViewport) {
+        if (activeViewport)
             activeViewport.selectAllTerminal();
-        }
     }
 
     function startQuickSelect() {
@@ -85,15 +84,13 @@ Item {
     }
 
     function scrollLines(rows) {
-        if (activeViewport) {
+        if (activeViewport)
             activeViewport.scrollLines(rows);
-        }
     }
 
     function scrollPage(pages) {
-        if (activeViewport) {
+        if (activeViewport)
             activeViewport.scrollPage(pages);
-        }
     }
 
     function actionShortcut(actionId) {
@@ -236,21 +233,18 @@ Item {
             }
 
             function focusActivePane() {
-                if (node.active) {
+                if (node.active)
                     viewport.forceActiveFocus();
-                }
             }
 
             function closePane() {
-                if (root.controller.activateTerminalPane(node.id)) {
+                if (root.controller.activateTerminalPane(node.id))
                     root.controller.closeActiveTerminalPane();
-                }
             }
 
             function restoreTerminalFocusAfterSelectionAction() {
-                if (!viewport.multilinePastePending) {
+                if (!viewport.multilinePastePending)
                     Qt.callLater(viewport.forceActiveFocus);
-                }
             }
 
             function dismissSelectionActionAndRestoreFocus() {
@@ -376,9 +370,8 @@ Item {
                         attachedController = null;
                         attachedPaneId = "";
                     }
-                    if (!root.controller || paneId.length === 0) {
+                    if (!root.controller || paneId.length === 0)
                         return;
-                    }
                     root.controller.attachTerminalViewport(paneId, viewport);
                     attachedController = root.controller;
                     attachedPaneId = paneId;
@@ -417,9 +410,8 @@ Item {
 
                 Component.onCompleted: Qt.callLater(attachToController)
                 Component.onDestruction: {
-                    if (attachedController && attachedPaneId.length > 0) {
+                    if (attachedController && attachedPaneId.length > 0)
                         attachedController.detachTerminalViewport(attachedPaneId, viewport);
-                    }
                 }
                 onActiveFocusChanged: {
                     if (activeFocus && root.Window.window && root.Window.window.active) {
@@ -445,6 +437,13 @@ Item {
                         Qt.callLater(viewport.attachToController);
                     }
                 }
+            }
+
+            PaneFocusEdges {
+                objectName: "terminalPaneFocusEdges-" + leaf.node.id
+                edges: root.innerEdges
+                shown: !!leaf.node.active && !root.detachedPane && root.paneCount > 1
+                z: 14
             }
 
             Item {
@@ -986,7 +985,6 @@ Item {
             leadingPane: firstNode
             trailingPane: secondNode
             ratio: node.ratio
-            emphasized: root.paneCount > 1 && ((!!node.first && !!node.first.active) || (!!node.second && !!node.second.active))
             onRatioEdited: value => root.controller.setTerminalSplitRatio(node.id, value)
 
             Item {
@@ -1027,6 +1025,7 @@ Item {
                         item.detachedPane = root.detachedPane;
                         item.paneCount = Qt.binding(() => root.paneCount);
                         item.headersVisible = Qt.binding(() => root.headersVisible);
+                        item.innerEdges = Qt.binding(() => root.innerEdges | (split.orientation === Qt.Horizontal ? 4 : 8));
                     }
                 }
 
@@ -1196,6 +1195,7 @@ Item {
                         item.detachedPane = root.detachedPane;
                         item.paneCount = Qt.binding(() => root.paneCount);
                         item.headersVisible = Qt.binding(() => root.headersVisible);
+                        item.innerEdges = Qt.binding(() => root.innerEdges | (split.orientation === Qt.Horizontal ? 1 : 2));
                     }
                 }
 

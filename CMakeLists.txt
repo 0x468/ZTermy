@@ -1360,6 +1360,7 @@ set_source_files_properties(
 )
 
 set_source_files_properties(src/ui/qml/TerminalPaneToolbar.qml PROPERTIES QT_RESOURCE_ALIAS TerminalPaneToolbar.qml)
+set_source_files_properties(src/ui/qml/PaneFocusEdges.qml PROPERTIES QT_RESOURCE_ALIAS PaneFocusEdges.qml)
 set_source_files_properties(src/ui/qml/DetachedTerminalWindow.qml PROPERTIES QT_RESOURCE_ALIAS DetachedTerminalWindow.qml)
 set_source_files_properties(src/ui/qml/TerminalWindowCoordinator.qml PROPERTIES QT_RESOURCE_ALIAS TerminalWindowCoordinator.qml)
 set_source_files_properties(src/ui/qml/WindowBehaviorSettings.qml PROPERTIES QT_RESOURCE_ALIAS WindowBehaviorSettings.qml)
@@ -1445,6 +1446,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/TerminalSessionSettingsPopover.qml
         src/ui/qml/TerminalSplitNode.qml
         src/ui/qml/TerminalPaneToolbar.qml
+        src/ui/qml/PaneFocusEdges.qml
         src/ui/qml/DetachedTerminalWindow.qml
         src/ui/qml/TerminalWindowCoordinator.qml
         src/ui/qml/WindowBehaviorSettings.qml
