@@ -633,8 +633,8 @@ struct ResizeHitRuntimeCase
                        && brandLockup->property("width").toReal() > 0.0
                        && brandLockup->property("height").toReal() > 0.0 && releaseIdentity != nullptr
                        && releaseIdentity->property("visible").toBool()
-                       && releaseIdentity->property("codename").toString() == QStringLiteral("紫")
-                       && releaseIdentity->property("verse").toString() == QStringLiteral("紫衣惊鸿影")
+                       && releaseIdentity->property("codename").toString() == QStringLiteral("汐")
+                       && releaseIdentity->property("verse").toString() == QStringLiteral("半轮月，一道水")
                        && diagnosticsCard != nullptr && diagnosticsCard->property("visible").toBool()
                        && diagnosticsCard->property("width").toReal() > 0.0 && buildInfo != nullptr
                        && buildInfo->property("visible").toBool()

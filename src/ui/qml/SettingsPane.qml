@@ -836,9 +836,9 @@ Rectangle {
                 Layout.fillWidth: true
                 visible: pane.currentCategory === "about"
                 compact: pane.compactLayout
-                codename: "紫"
+                codename: "汐"
                 version: Qt.application.version
-                verse: "紫衣惊鸿影"
+                verse: "半轮月，一道水"
             }
 
             WindowBehaviorSettings {

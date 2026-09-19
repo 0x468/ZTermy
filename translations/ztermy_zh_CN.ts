@@ -4534,8 +4534,8 @@
     <name>ReleaseIdentityCard</name>
     <message>
         <location filename="../src/ui/qml/ReleaseIdentityCard.qml" line="19"/>
-        <source>ztermy version %1, codename %2. %3</source>
-        <translation>ztermy 版本 %1，代号 %2。%3</translation>
+        <source>ztermy %1 · %2. %3</source>
+        <translation>ztermy %1 · %2。%3</translation>
     </message>
     <message>
         <location filename="../src/ui/qml/ReleaseIdentityCard.qml" line="218"/>

@@ -6,6 +6,15 @@ The project has not published a release.
 
 ## Unreleased
 
+## 0.5.0 — 汐 — 2026-09-20
+
+半轮月，一道水
+
+- Merge the UI V2 and unified-theme work into main. Refresh the version card
+  with a half moon and a quiet waterline; hover animates the tide only when
+  full motion is enabled. Display the release name and verse without prefixes
+  or quotation marks.
+
 - Make the terminal session strip, pane title and viewport one continuous
   material; add experimental WCA Glass, default new settings to follow-system
   themes, and reduce the two global opacity controls to one background-opacity setting
