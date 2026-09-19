@@ -447,14 +447,14 @@ Rectangle {
     }
 
     function startLocalTerminalTab(shellId) {
-        currentPage = "terminal";
-        Qt.callLater(() => {
-            if (shellId && shellId.length > 0)
-                controller.startLocalTerminalWithShell(shellId);
-            else
-                controller.startLocalTerminal();
-            focusTerminalAfterLayout();
-        });
+        // Create the tab before switching pages: switching first focused the
+        // previous tab's viewport, and that focus change re-activated the
+        // previous tab underneath the new one.
+        const tabId = shellId && shellId.length > 0 ? controller.startLocalTerminalWithShell(shellId) : controller.startLocalTerminal();
+        if (tabId.length > 0)
+            activateMainTerminal(tabId);
+        else
+            currentPage = "terminal";
     }
 
     function focusTerminalAfterLayout() {

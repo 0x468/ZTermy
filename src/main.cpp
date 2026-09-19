@@ -2550,9 +2550,7 @@ struct ResizeHitRuntimeCase
     const qsizetype initialTabCount = controller.terminalTabs().size();
     QQuickItem *newTabAction = quickItem(rootObject, "titleNewTabAction");
     if (!focusItem(window, newTabAction, QStringLiteral("titleNewTabAction")))
-    {
         return false;
-    }
     sendKey(window, Qt::Key_Return);
     QQuickItem *newLocalTerminalMenuAction = nullptr;
     const bool newTerminalMenuOpened = processWindowEventsUntil(
@@ -2569,24 +2567,26 @@ struct ResizeHitRuntimeCase
     }
     sendKey(window, Qt::Key_Return);
     processWindowEventsFor(std::chrono::milliseconds{250});
+    const QVariantMap newestTab = controller.terminalTabs().constLast().toMap(); // must also become active
     const bool oneTabCreated = controller.terminalTabs().size() == initialTabCount + 1
                                && rootObject->property("currentPage").toString() == QStringLiteral("terminal")
+                               && controller.activeTerminalTabId() == newestTab.value(QStringLiteral("id")).toString()
                                && terminalViewportHasFocus(window);
     if (!oneTabCreated)
     {
-        qCWarning(applicationLog) << "Enter did not create exactly one focused local terminal"
+        qCWarning(applicationLog) << "Enter did not create exactly one focused, active local terminal"
                                   << "initialTabs=" << initialTabCount
                                   << "finalTabs=" << controller.terminalTabs().size()
+                                  << "activeTab=" << controller.activeTerminalTabId()
                                   << "page=" << rootObject->property("currentPage").toString()
                                   << "focus=" << namedFocusItem(window);
         return false;
     }
-    const QString activeTerminalTitle =
-        controller.terminalTabs().constLast().toMap().value(QStringLiteral("title")).toString();
+    const QString activeTerminalTitle = newestTab.value(QStringLiteral("title")).toString();
     if (window.title() != QStringLiteral("%1 — ztermy").arg(activeTerminalTitle))
     {
-        qCWarning(applicationLog) << "Terminal tab did not update the native window title"
-                                  << "expectedContext=" << activeTerminalTitle << "actual=" << window.title();
+        qCWarning(applicationLog) << "Terminal tab did not update the native window title" << activeTerminalTitle
+                                  << "actual=" << window.title();
         return false;
     }
     if (!verifyTerminalSelectionActionStrip(window, rootObject))
