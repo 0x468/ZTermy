@@ -14,13 +14,12 @@ including resize hit testing and Snap Layouts.
 System backdrops use a transparent Qt Quick clear color and an alpha-capable
 surface created before the first `QQuickWindow`. On Windows 11 build 26100 and
 later, the native layer also enables premultiplied alpha for the redirected
-window bitmap while Acrylic, Transparent, Mica, or Mica Alt is active.
+window bitmap while Glass, Acrylic, Transparent, Mica, or Mica Alt is active.
 
-The QML design system keeps the root surface transparent while a material is
-active and composes readable semi-transparent application surfaces above it.
-Mica uses stable surface tints and Mica Alt uses a stronger fixed tint.
-Acrylic and Transparent expose background-surface opacity; Acrylic keeps DWM's
-behind-window blur and sampling, while Transparent does not request a material.
+The QML design system paints one shared terminal/title tint above the native
+material. Mica uses a stable fixed tint and Mica Alt a stronger one. Glass,
+Acrylic and Transparent expose background opacity; Glass and Acrylic use
+dynamically resolved WCA blur policies while Transparent requests no material.
 The native window remains fully opaque so text, controls, and the final DWM
 effect are never faded as a group.
 

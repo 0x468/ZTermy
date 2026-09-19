@@ -19,9 +19,9 @@ Rectangle {
     readonly property int titleQuickActionsWidth: titleQuickActionWidth * (width < 700 ? 2 : 4)
     readonly property int titleSecurityActionWidth: portableVaultNeedsAttention ? 40 : 0
     readonly property int titleNavigationWidth: Math.max(0, width - (captionButtonWidth * 3) - titleQuickActionsWidth - titleSecurityActionWidth - (width < 700 ? 4 : 24))
-    readonly property color backgroundColor: Theme.windowBackground
+    readonly property color backgroundColor: currentPage === "terminal" ? Theme.workspaceBackground : Theme.windowBackground
     readonly property color panelColor: Theme.panelBackground
-    readonly property color chromeColor: Theme.chromeBackground
+    readonly property color chromeColor: currentPage === "terminal" ? "transparent" : Theme.chromeBackground
     readonly property color contentColor: Theme.contentBackground
     readonly property color workspaceColor: Theme.workspaceBackground
     readonly property color raisedColor: Theme.raisedBackground
@@ -225,13 +225,18 @@ Rectangle {
         resizeWorkspaceNavigation(workspaceNavigationMinimumWidth);
     }
 
+    function dismissTitleMenus() {
+        newTerminalMenu.close();
+        titleTabOverflow.closeMenu();
+    }
+
     Binding {
         target: root.windowChrome
         property: "title"
         value: root.applicationWindowTitle
     }
 
-    color: root.currentPage === "terminal" ? "transparent" : backgroundColor
+    color: backgroundColor
 
     FontMetrics {
         id: titleTabFontMetrics
@@ -722,7 +727,7 @@ Rectangle {
     Binding {
         target: Theme
         property: "effectsTier"
-        value: root.appearancePreviewActive ? root.previewEffectsTier : root.controller.effectsTier
+        value: root.windowChrome.performanceModeActive ? "off" : root.appearancePreviewActive ? root.previewEffectsTier : root.controller.effectsTier
     }
 
     Binding {
@@ -913,6 +918,9 @@ Rectangle {
                     root.controller.closeTerminalTab(id);
             }
         }
+        function onTitleBarPressed() {
+            root.dismissTitleMenus();
+        }
         function onDetachedWindowMoving(window, globalPosition) {
             terminalWindows.updateWindowDrop(window, globalPosition);
         }
@@ -940,14 +948,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         height: root.titleBarHeight
-        color: Theme.chromeBackground
-
-        Rectangle {
-            anchors.bottom: parent.bottom
-            width: parent.width
-            height: 1
-            color: root.borderColor
-        }
+        color: root.chromeColor
 
         Row {
             id: titleNavigation
@@ -1137,6 +1138,9 @@ Rectangle {
                     compact: !selected
                     width: selected ? root.terminalTabPreferredWidth(modelData.title) : 38
                     height: titleTerminalTabs.height
+                    Behavior on width {
+                        MotionRelocate {}
+                    }
                     onActivated: {
                         root.activateMainTerminal(modelData.id);
                     }
@@ -1225,9 +1229,29 @@ Rectangle {
                         }
                     }
 
+                    AppMenu {
+                        id: savedHostsMenu
+                        title: qsTr("Saved hosts")
+                        enabled: root.controller.hostProfiles.length > 0
+
+                        Instantiator {
+                            model: root.controller.hostProfiles
+                            delegate: AppMenuItem {
+                                required property var modelData
+                                text: modelData.name
+                                onTriggered: {
+                                    root.currentPage = "hosts";
+                                    Qt.callLater(() => hostConnectionPane.connectSaved(modelData, titleNewTabContainer));
+                                }
+                            }
+                            onObjectAdded: (index, object) => savedHostsMenu.insertItem(index, object)
+                            onObjectRemoved: (index, object) => savedHostsMenu.removeItem(object)
+                        }
+                    }
+
                     AppMenuItem {
                         objectName: "browseHostsMenuAction"
-                        text: qsTr("Browse hosts")
+                        text: qsTr("Manage hosts")
                         onTriggered: {
                             root.currentPage = "hosts";
                             Qt.callLater(hostsTitleTab.focusAction);
@@ -1741,15 +1765,15 @@ Rectangle {
             Layout.fillHeight: true
 
             Rectangle {
+                anchors.fill: parent
+                color: root.currentPage === "terminal" ? "transparent" : Theme.contentBackground
+            }
+
+            Rectangle {
                 id: terminalPanel
                 anchors.fill: parent
                 color: "transparent"
                 visible: root.currentPage === "terminal"
-                opacity: root.pageReveal
-
-                transform: Translate {
-                    x: Motion.distance * (1.0 - root.pageReveal)
-                }
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -1758,7 +1782,7 @@ Rectangle {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 26
-                        color: Theme.workspaceBackground
+                        color: "transparent"
 
                         RowLayout {
                             anchors.fill: parent
@@ -2181,7 +2205,7 @@ Rectangle {
                             defaultFontFamily: root.controller.terminalFontFamily
                             defaultFontSize: root.controller.terminalFontSize
                             defaultLigatures: root.controller.terminalLigatures
-                            defaultBackgroundOpacity: root.controller.terminalBackgroundOpacity
+                            defaultBackgroundOpacity: 0.0
                             defaultCursor: root.controller.cursorPreference
                             cursorBlink: root.controller.cursorBlink
                             copyOnSelect: root.controller.copyOnSelect

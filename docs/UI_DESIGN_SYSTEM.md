@@ -69,10 +69,11 @@ and high contrast). Nothing else may draw a shadow or a translucent fill.
 Depth comes from elevation, never from stacked alpha.
 
 The Windows backdrop is one native layer behind the chrome and workspace only.
-Acrylic and Transparent background opacity scales exactly those two tints: 0%
-is transparent and 100% is opaque. Mica and Mica Alt use fixed tints and do
-not expose an opacity control. Content pages never reveal the material, so
-lowering the opacity cannot make settings text unreadable.
+Glass, Acrylic and Transparent background opacity scales one shared tint behind
+the terminal title and viewport: 0% is transparent and 100% is opaque. Mica and
+Mica Alt use fixed tints and do not expose an opacity control. Content pages
+never reveal the material, so lowering the opacity cannot make settings text
+unreadable.
 
 Radii come from four tokens: `radiusSmall` (chips, focus rings, drop
 targets), `radiusCompact` (tab and pane affordances), `radiusControl`

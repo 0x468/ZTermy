@@ -642,6 +642,15 @@ void TerminalItem::setCursorBlink(const bool enabled)
     emit cursorAppearanceChanged();
 }
 
+void TerminalItem::setTerminalCursorVisible(const bool visible)
+{
+    if (m_terminalCursorVisible == visible)
+        return;
+    m_terminalCursorVisible = visible;
+    invalidateRenderer(false);
+    emit cursorAppearanceChanged();
+}
+
 void TerminalItem::setCopyOnSelect(const bool enabled)
 {
     if (m_copyOnSelect == enabled)
@@ -1147,7 +1156,8 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
     {
         if (node->cursorNode != nullptr)
         {
-            node->cursorNode->setRect((!m_cursorBlink || m_cursorBlinkPhase) ? node->cursorRect : QRectF{});
+            node->cursorNode->setRect(
+                m_terminalCursorVisible && (!m_cursorBlink || m_cursorBlinkPhase) ? node->cursorRect : QRectF{});
         }
         const qint64 paintNanoseconds = timingEnabled ? frameTimer.nsecsElapsed() : 0;
         if (m_renderMetrics.enabled())
@@ -1209,9 +1219,9 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         const std::vector<PreeditCluster> preeditClusters = layoutPreeditText(m_preeditText, m_font, cellWidthValue);
         const int insertedColumns = preeditColumnCount(preeditClusters);
         const int snapshotColumns = static_cast<int>(m_snapshot->columns);
-        const bool terminalCursorPresent = preeditClusters.empty() && m_snapshot->cursor.visible
-                                           && m_snapshot->cursor.column < m_snapshot->columns
-                                           && m_snapshot->cursor.row < m_snapshot->rows;
+        const bool terminalCursorPresent =
+            m_terminalCursorVisible && preeditClusters.empty() && m_snapshot->cursor.visible
+            && m_snapshot->cursor.column < m_snapshot->columns && m_snapshot->cursor.row < m_snapshot->rows;
         if (m_searchStylesDirty)
         {
             refreshSearchStyles();

@@ -48,6 +48,10 @@ template <>
     {
         return BackdropPreference::acrylic;
     }
+    if (token == QStringLiteral("aero"))
+    {
+        return BackdropPreference::aero;
+    }
     if (token == QStringLiteral("transparent") || token == QStringLiteral("none"))
     {
         return BackdropPreference::transparent;
@@ -379,6 +383,8 @@ QString backdropPreferenceToken(const BackdropPreference preference)
     {
         case BackdropPreference::acrylic:
             return QStringLiteral("acrylic");
+        case BackdropPreference::aero:
+            return QStringLiteral("aero");
         case BackdropPreference::transparent:
             return QStringLiteral("transparent");
         case BackdropPreference::mica:

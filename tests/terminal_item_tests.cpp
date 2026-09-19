@@ -518,6 +518,7 @@ void TerminalItemTests::appliesRendererPreferences()
     item.setLigaturesEnabled(false);
     item.setCursorPreference(QStringLiteral("bar"));
     item.setCursorBlink(false);
+    item.setTerminalCursorVisible(false);
     item.setBackgroundOpacity(0.45);
     item.setSearchQuery(QStringLiteral("needle"));
     item.setSearchCaseSensitive(true);
@@ -530,6 +531,7 @@ void TerminalItemTests::appliesRendererPreferences()
     QVERIFY(!item.ligaturesEnabled());
     QCOMPARE(item.cursorPreference(), QStringLiteral("bar"));
     QVERIFY(!item.cursorBlink());
+    QVERIFY(!item.terminalCursorVisible());
     QCOMPARE(item.backgroundOpacity(), 0.45);
     QCOMPARE(item.searchQuery(), QStringLiteral("needle"));
     QVERIFY(item.searchCaseSensitive());
@@ -537,7 +539,7 @@ void TerminalItemTests::appliesRendererPreferences()
     QCOMPARE(item.searchCurrentBackground(), QColor(QStringLiteral("#AA5500")));
     QCOMPARE(item.searchCurrentForeground(), QColor(QStringLiteral("#FFFFFF")));
     QCOMPARE(fontSpy.count(), 3);
-    QCOMPARE(cursorSpy.count(), 2);
+    QCOMPARE(cursorSpy.count(), 3);
     QCOMPARE(backgroundSpy.count(), 1);
     QCOMPARE(searchSpy.count(), 5);
 

@@ -35,15 +35,13 @@ cmake --build --preset msvc-static-release `
   --target ztermy_window_appearance_runtime_smoke
 ```
 
-The gate opens the real native window and uses `DwmGetWindowAttribute` to
-verify Dark and Light immersive-mode values, the Windows 11 rounded-corner
-preference, and the exact Acrylic, Transparent, Mica, and Mica Alt backdrop
-types. It requires the Qt window itself to remain at 100% opacity in every
-mode, rejects out-of-range backdrop opacity and unknown backdrop tokens, and
-checks that only the QML background surfaces change alpha. Acrylic and
-Transparent must have adjustable translucent surfaces; Mica must retain a
-fixed surface palette; Mica Alt must use a stronger fixed tint than Mica. All
-four modes require a fully transparent scene root.
+The gate opens the real native window and verifies Dark and Light immersive
+mode, rounded corners, Mica/Mica Alt backdrop types, and successful WCA policy
+application for Glass and Acrylic. It requires the Qt window itself to remain
+at 100% opacity, rejects out-of-range opacity and unknown backdrop tokens, and
+checks the terminal title and viewport share one adjustable tint. Glass,
+Acrylic and Transparent are adjustable; Mica keeps a fixed palette and Mica
+Alt uses a stronger fixed tint.
 
 The native Qt Quick window must request an alpha buffer before its creation,
 expose at least one alpha bit, and use a transparent clear color. On Windows
@@ -54,8 +52,8 @@ visible; the visual checks below remain necessary for readability, material
 appearance, and interaction review.
 
 1. Place ztermy over a colorful, high-contrast window or desktop background.
-2. In Dark and Light themes, compare Acrylic, Transparent, Mica, and Mica Alt.
-3. In Acrylic and Transparent, compare backdrop opacity at 0%, 50%, and 100%.
+2. In Dark and Light themes, compare Glass, Acrylic, Transparent, Mica, and Mica Alt.
+3. In Glass, Acrylic and Transparent, compare backdrop opacity at 0%, 50%, and 100%.
 4. Confirm the opacity control is unavailable for Mica and Mica Alt.
 5. Maximize, restore, snap, and resize after each backdrop change.
 6. Apply System theme, then change the Windows app color mode and restart
@@ -143,11 +141,10 @@ Expected:
   the active terminal cursor style.
 - Disabling blink leaves the cursor continuously visible.
 
-## Terminal background opacity
+## Terminal and title background opacity
 
-1. Place ztermy over a colorful window and select Acrylic or Transparent.
-2. Apply terminal background opacity at 100%, 50%, and 0%, returning to the
-   terminal after each change.
+1. Place ztermy over a colorful window and select Glass, Acrylic or Transparent.
+2. Apply background opacity at 100%, 50%, and 0%.
 3. In PowerShell run:
 
    ```powershell
@@ -160,9 +157,10 @@ Expected:
 
 Expected:
 
-- At 100% the default terminal background remains unchanged.
-- At 50% and 0% only the terminal's default background reveals the selected
-  window material; text remains fully opaque.
+- The terminal title, session strip, pane title and default terminal background
+  remain seamless at every opacity.
+- At 50% and 0% the whole terminal surface reveals the selected material while
+  text remains fully opaque.
 - The explicit red ANSI background stays solid even at 0%.
 - Selection, cursor, and IME composition remain solid and readable.
 - A full-screen program keeps its explicit colors and exits without stale

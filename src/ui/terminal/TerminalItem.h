@@ -47,6 +47,8 @@ class TerminalItem : public QQuickItem
         qreal backgroundOpacity READ backgroundOpacity WRITE setBackgroundOpacity NOTIFY backgroundOpacityChanged)
     Q_PROPERTY(QString cursorPreference READ cursorPreference WRITE setCursorPreference NOTIFY cursorAppearanceChanged)
     Q_PROPERTY(bool cursorBlink READ cursorBlink WRITE setCursorBlink NOTIFY cursorAppearanceChanged)
+    Q_PROPERTY(bool terminalCursorVisible READ terminalCursorVisible WRITE setTerminalCursorVisible NOTIFY
+                   cursorAppearanceChanged)
     Q_PROPERTY(bool copyOnSelect READ copyOnSelect WRITE setCopyOnSelect NOTIFY copyOnSelectChanged)
     Q_PROPERTY(bool keepSelectionAfterCopy READ keepSelectionAfterCopy WRITE setKeepSelectionAfterCopy NOTIFY
                    keepSelectionAfterCopyChanged)
@@ -105,6 +107,7 @@ public:
     [[nodiscard]] qreal backgroundOpacity() const noexcept;
     [[nodiscard]] QString cursorPreference() const;
     [[nodiscard]] bool cursorBlink() const noexcept;
+    [[nodiscard]] bool terminalCursorVisible() const noexcept { return m_terminalCursorVisible; }
     [[nodiscard]] bool copyOnSelect() const noexcept;
     [[nodiscard]] bool keepSelectionAfterCopy() const noexcept;
     [[nodiscard]] bool confirmMultilinePaste() const noexcept;
@@ -151,6 +154,7 @@ public slots:
     void setBackgroundOpacity(qreal opacity);
     void setCursorPreference(const QString &preference);
     void setCursorBlink(bool enabled);
+    void setTerminalCursorVisible(bool visible);
     void setCopyOnSelect(bool enabled);
     void setKeepSelectionAfterCopy(bool enabled);
     void setConfirmMultilinePaste(bool enabled);
@@ -353,6 +357,7 @@ private:
     bool m_selectionMatchesKeywordHighlight = false;
     bool m_cursorBlink = true;
     bool m_cursorBlinkPhase = true;
+    bool m_terminalCursorVisible = true;
     bool m_ligaturesEnabled = true;
     bool m_copyOnSelect = false;
     bool m_keepSelectionAfterCopy = false;

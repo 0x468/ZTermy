@@ -999,7 +999,7 @@ void AppControllerTests::persistsApplicationSettings()
 
     ztermy::AppController controller(profilesPath, knownHostsPath, settingsPath);
     QSignalSpy settingsChanged(&controller, &ztermy::AppController::applicationSettingsChanged);
-    QCOMPARE(controller.themePreference(), QStringLiteral("dark"));
+    QCOMPARE(controller.themePreference(), QStringLiteral("system"));
     QCOMPARE(controller.backdropOpacity(), 1.0);
     QCOMPARE(controller.backdropPreference(), QStringLiteral("acrylic"));
     QCOMPARE(controller.accentPreference(), QStringLiteral("ztermy"));
@@ -1007,7 +1007,7 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(controller.uiFontFamily().isEmpty());
     QVERIFY(!controller.showAllTerminalFonts());
     QVERIFY(controller.terminalLigatures());
-    QCOMPARE(controller.terminalBackgroundOpacity(), 1.0);
+    QCOMPARE(controller.terminalBackgroundOpacity(), 0.0);
     QCOMPARE(controller.localShellPreference(), QStringLiteral("automatic"));
     QVERIFY(controller.availableLocalShells().size() >= 4);
     QCOMPARE(controller.languagePreference(), QStringLiteral("system"));
@@ -1204,14 +1204,14 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(reloaded.aiProxyUsername(), QStringLiteral("proxy-user"));
 
     QVERIFY(reloaded.resetApplicationSettings());
-    QCOMPARE(reloaded.themePreference(), QStringLiteral("dark"));
+    QCOMPARE(reloaded.themePreference(), QStringLiteral("system"));
     QCOMPARE(reloaded.backdropOpacity(), 1.0);
     QCOMPARE(reloaded.backdropPreference(), QStringLiteral("acrylic"));
     QVERIFY(!reloaded.performanceMode());
     QCOMPARE(reloaded.accentPreference(), QStringLiteral("ztermy"));
     QCOMPARE(reloaded.customAccent(), QStringLiteral("#22C55E"));
     QCOMPARE(reloaded.terminalFontFamily(), QStringLiteral("Cascadia Mono"));
-    QCOMPARE(reloaded.terminalBackgroundOpacity(), 1.0);
+    QCOMPARE(reloaded.terminalBackgroundOpacity(), 0.0);
     QVERIFY(!reloaded.keepSelectionAfterCopy());
     QCOMPARE(reloaded.localShellPreference(), QStringLiteral("automatic"));
     QCOMPARE(reloaded.languagePreference(), QStringLiteral("system"));

@@ -37,8 +37,11 @@ constexpr int kRedirectionBitmapAlphaMinimumBuild = 26100;
 constexpr int kDwmWindowCornerRound = 2;
 constexpr int kDwmSystemBackdropNone = 1;
 constexpr int kDwmSystemBackdropMainWindow = 2;
-constexpr int kDwmSystemBackdropTransientWindow = 3;
 constexpr int kDwmSystemBackdropTabbedWindow = 4;
+constexpr int kWindowCompositionAttributeAccentPolicy = 19;
+constexpr int kAccentDisabled = 0;
+constexpr int kAccentBlurBehind = 3;
+constexpr int kAccentAcrylicBlurBehind = 4;
 constexpr auto kNativeWindowProperty = L"ztermy.NativeWindow";
 constexpr UINT kNcUahDrawCaption = 0x00AE;
 constexpr UINT kNcUahDrawFrame = 0x00AF;
@@ -48,6 +51,53 @@ constexpr UINT kTrayShowCommand = 0x3101;
 constexpr UINT kTrayHideCommand = 0x3102;
 constexpr UINT kTrayExitCommand = 0x3103;
 constexpr WORD kApplicationIconResource = 101;
+
+struct AccentPolicy
+{
+    int state = kAccentDisabled;
+    int flags = 0;
+    DWORD gradientColor = 0;
+    int animationId = 0;
+};
+
+struct WindowCompositionAttributeData
+{
+    int attribute = kWindowCompositionAttributeAccentPolicy;
+    void *data = nullptr;
+    SIZE_T size = 0;
+};
+
+using SetWindowCompositionAttributeFn = BOOL(WINAPI *)(HWND, WindowCompositionAttributeData *);
+
+[[nodiscard]] SetWindowCompositionAttributeFn setWindowCompositionAttribute() noexcept
+{
+    static const auto function = [] {
+        const HMODULE user32 = GetModuleHandleW(L"user32.dll");
+        return user32 == nullptr
+                   ? nullptr
+                   : reinterpret_cast<SetWindowCompositionAttributeFn>( // NOLINT(performance-no-int-to-ptr)
+                         GetProcAddress(user32, "SetWindowCompositionAttribute"));
+    }();
+    return function;
+}
+
+[[nodiscard]] bool applyAccentPolicy(const HWND windowHandle, AccentPolicy policy)
+{
+    const auto function = setWindowCompositionAttribute();
+    if (function == nullptr)
+    {
+        qCWarning(windowLog) << "SetWindowCompositionAttribute is unavailable";
+        return false;
+    }
+    WindowCompositionAttributeData data{.data = &policy, .size = sizeof(policy)};
+    const bool applied = function(windowHandle, &data) != FALSE;
+    if (!applied)
+    {
+        qCWarning(windowLog) << "SetWindowCompositionAttribute(WCA_ACCENT_POLICY) failed"
+                             << "state=" << policy.state;
+    }
+    return applied;
+}
 
 [[nodiscard]] LRESULT toNativeHitArea(const ztermy::windowing::HitArea area) noexcept
 {
@@ -329,8 +379,8 @@ void NativeWindow::setCloseToTrayEnabled(const bool enabled)
 bool NativeWindow::applyAppearance(const QString &backdropPreference, const bool darkMode)
 {
     if (backdropPreference != QStringLiteral("acrylic") && backdropPreference != QStringLiteral("transparent")
-        && backdropPreference != QStringLiteral("mica") && backdropPreference != QStringLiteral("micaAlt")
-        && backdropPreference != QStringLiteral("solid"))
+        && backdropPreference != QStringLiteral("aero") && backdropPreference != QStringLiteral("mica")
+        && backdropPreference != QStringLiteral("micaAlt") && backdropPreference != QStringLiteral("solid"))
     {
         return false;
     }
@@ -453,6 +503,8 @@ bool NativeWindow::nativeEvent(const QByteArray &eventType, void *message, qintp
             break;
 
         case WM_NCLBUTTONDOWN:
+            if (nativeMessage->wParam == HTCAPTION)
+                emit titleBarPressed();
             if (nativeMessage->wParam == HTMAXBUTTON)
             {
                 setMaximizeButtonPressed(true);
@@ -729,6 +781,8 @@ bool NativeWindow::handleWindowProcedureMessage(const HWND windowHandle, const U
             break;
 
         case WM_NCLBUTTONDOWN:
+            if (wParam == HTCAPTION)
+                emit titleBarPressed();
             if (wParam == HTMAXBUTTON)
             {
                 setMaximizeButtonPressed(true);
@@ -1020,19 +1074,23 @@ bool NativeWindow::applyBackdrop(QQuickWindow *target)
         target->setFormat(format);
     }
     const auto windowHandle = reinterpret_cast<HWND>(target->winId()); // NOLINT(performance-no-int-to-ptr)
+    const bool aero = !solidSurface && !m_highContrastState.enabled && m_backdropPreference == QStringLiteral("aero");
+    const bool acrylic =
+        !solidSurface && !m_highContrastState.enabled && m_backdropPreference == QStringLiteral("acrylic");
     int backdropType = kDwmSystemBackdropNone;
     if (!solidSurface && !m_highContrastState.enabled && m_backdropPreference == QStringLiteral("mica"))
     {
         backdropType = kDwmSystemBackdropMainWindow;
     }
-    else if (!solidSurface && !m_highContrastState.enabled && m_backdropPreference == QStringLiteral("acrylic"))
-    {
-        backdropType = kDwmSystemBackdropTransientWindow;
-    }
     else if (!solidSurface && !m_highContrastState.enabled && m_backdropPreference == QStringLiteral("micaAlt"))
     {
         backdropType = kDwmSystemBackdropTabbedWindow;
     }
+
+    const bool systemBackdrop =
+        backdropType == kDwmSystemBackdropMainWindow || backdropType == kDwmSystemBackdropTabbedWindow;
+    const AccentPolicy disabledAccent{.state = kAccentDisabled, .flags = 2};
+    const bool accentCleared = !systemBackdrop || applyAccentPolicy(windowHandle, disabledAccent);
 
     const HRESULT darkResult =
         DwmSetWindowAttribute(windowHandle, kDwmUseImmersiveDarkMode, &darkMode, sizeof(darkMode));
@@ -1040,6 +1098,18 @@ bool NativeWindow::applyBackdrop(QQuickWindow *target)
         DwmSetWindowAttribute(windowHandle, kDwmWindowCornerPreference, &cornerPreference, sizeof(cornerPreference));
     const HRESULT backdropResult =
         DwmSetWindowAttribute(windowHandle, kDwmSystemBackdropType, &backdropType, sizeof(backdropType));
+    const DWM_BLURBEHIND blurBehind{
+        .dwFlags = DWM_BB_ENABLE,
+        .fEnable = aero,
+        .hRgnBlur = nullptr,
+        .fTransitionOnMaximized = FALSE,
+    };
+    const HRESULT blurResult = DwmEnableBlurBehindWindow(windowHandle, &blurBehind);
+    const AccentPolicy accent =
+        acrylic ? AccentPolicy{.state = kAccentAcrylicBlurBehind, .gradientColor = 0x01000000UL}
+        : aero  ? AccentPolicy{.state = kAccentBlurBehind, .gradientColor = m_darkMode ? 0x602B2B2BUL : 0x40F2F2F2UL}
+                : disabledAccent;
+    const bool accentResult = systemBackdrop ? accentCleared : applyAccentPolicy(windowHandle, accent);
     const bool redirectionAlphaSupported =
         QOperatingSystemVersion::current().microVersion() >= kRedirectionBitmapAlphaMinimumBuild;
     const BOOL redirectionAlpha = solidSurface ? FALSE : TRUE;
@@ -1051,9 +1121,11 @@ bool NativeWindow::applyBackdrop(QQuickWindow *target)
         solidSurface ? MARGINS{} : MARGINS{.cxLeftWidth = 1, .cxRightWidth = 1, .cyTopHeight = 1, .cyBottomHeight = 1};
     const HRESULT frameResult = DwmExtendFrameIntoClientArea(windowHandle, &margins);
     const bool applied = SUCCEEDED(darkResult) && SUCCEEDED(cornerResult) && SUCCEEDED(backdropResult)
-                         && SUCCEEDED(redirectionAlphaResult) && SUCCEEDED(frameResult);
+                         && SUCCEEDED(blurResult) && accentResult && SUCCEEDED(redirectionAlphaResult)
+                         && SUCCEEDED(frameResult);
     qCInfo(windowLog) << "applied DWM appearance"
-                      << "backdropType=" << backdropType << "redirectionAlphaSupported=" << redirectionAlphaSupported
+                      << "backdropType=" << backdropType << "accentState=" << accent.state
+                      << "redirectionAlphaSupported=" << redirectionAlphaSupported
                       << "redirectionAlpha=" << static_cast<bool>(redirectionAlpha)
                       << "surfaceAlphaBits=" << target->format().alphaBufferSize() << "opaqueSurface=" << solidSurface
                       << "performanceMode=" << m_performanceMode << "result=" << applied;

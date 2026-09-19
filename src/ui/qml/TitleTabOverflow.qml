@@ -13,6 +13,10 @@ TitleChromeAction {
     signal terminalActivated(string tabId)
     signal terminalCloseRequested(var tab)
 
+    function closeMenu() {
+        overflowMenu.close();
+    }
+
     implicitWidth: visible ? 26 : 0
     visible: tabs.length > 1
     iconName: "chevron-down"

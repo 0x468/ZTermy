@@ -61,11 +61,12 @@ QtObject {
     readonly property string effectiveBackdrop: materialEnabled ? backdropPreference : "solid"
     readonly property bool micaBackdrop: effectiveBackdrop === "mica"
     readonly property bool micaAltBackdrop: effectiveBackdrop === "micaAlt"
+    readonly property bool aeroBackdrop: effectiveBackdrop === "aero"
     readonly property bool acrylicBackdrop: effectiveBackdrop === "acrylic"
     readonly property bool transparentBackdrop: effectiveBackdrop === "transparent"
     readonly property bool solidBackdrop: effectiveBackdrop === "solid"
-    readonly property bool backdropActive: micaBackdrop || micaAltBackdrop || acrylicBackdrop || transparentBackdrop
-    readonly property bool adjustableBackdrop: acrylicBackdrop || transparentBackdrop
+    readonly property bool backdropActive: micaBackdrop || micaAltBackdrop || aeroBackdrop || acrylicBackdrop || transparentBackdrop
+    readonly property bool adjustableBackdrop: aeroBackdrop || acrylicBackdrop || transparentBackdrop
     readonly property real normalizedBackdropOpacity: Math.max(0.0, Math.min(1.0, backdropOpacity))
 
     // ADR 0120: the material only shows through the chrome (title bar, tab

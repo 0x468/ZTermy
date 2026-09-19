@@ -81,7 +81,7 @@ SectionCard {
 
         Text {
             Layout.fillWidth: true
-            text: qsTr("Uses a truly opaque window, disables Windows backdrop materials, and reduces decorative motion. Your selected material is restored when this mode is turned off. Restart required.")
+            text: qsTr("Uses a truly opaque window and disables material, shadows and motion. Your selected visual-effects preference is kept and restored when this mode is turned off. Restart required.")
             color: Theme.textMuted
             wrapMode: Text.WordWrap
             font.family: Theme.uiFont

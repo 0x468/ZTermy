@@ -80,7 +80,7 @@ Rectangle {
     palette.highlightedText: Theme.accentText
 
     function backdropIndex(token) {
-        return token === "transparent" ? 1 : token === "mica" ? 2 : token === "micaAlt" ? 3 : token === "solid" ? 4 : 0;
+        return token === "aero" ? 1 : token === "transparent" ? 2 : token === "mica" ? 3 : token === "micaAlt" ? 4 : token === "solid" ? 5 : 0;
     }
 
     function cursorIndex(token) {
@@ -365,7 +365,7 @@ Rectangle {
     }
 
     function backdropToken() {
-        return backdropBox.currentIndex === 1 ? "transparent" : backdropBox.currentIndex === 2 ? "mica" : backdropBox.currentIndex === 3 ? "micaAlt" : backdropBox.currentIndex === 4 ? "solid" : "acrylic";
+        return backdropBox.currentIndex === 1 ? "aero" : backdropBox.currentIndex === 2 ? "transparent" : backdropBox.currentIndex === 3 ? "mica" : backdropBox.currentIndex === 4 ? "micaAlt" : backdropBox.currentIndex === 5 ? "solid" : "acrylic";
     }
 
     function cursorToken() {
@@ -542,7 +542,6 @@ Rectangle {
         fontSizeBox.value = controller.terminalFontSize;
         showAllFontsSwitch.checked = controller.showAllTerminalFonts;
         ligatureSwitch.checked = controller.terminalLigatures;
-        terminalOpacitySlider.value = controller.terminalBackgroundOpacity;
         cursorBox.currentIndex = cursorIndex(controller.cursorPreference);
         cursorBlinkSwitch.checked = controller.cursorBlink;
         copyOnSelectSwitch.checked = controller.copyOnSelect;
@@ -591,7 +590,7 @@ Rectangle {
         }
         const wantsOpaqueSurface = performanceModeDraft;
         const restartRequired = wantsOpaqueSurface !== windowChrome.opaqueSurface || performanceModeDraft !== windowChrome.performanceModeActive;
-        const applicationSaved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, keepSelectionAfterCopySwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked, windowBehavior.closeToTray, performanceModeDraft, rightClickToken(), middleClickToken(), wordDelimitersField.text, wheelRowsBox.value);
+        const applicationSaved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, 0.0, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, keepSelectionAfterCopySwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked, windowBehavior.closeToTray, performanceModeDraft, rightClickToken(), middleClickToken(), wordDelimitersField.text, wheelRowsBox.value);
         const effectsSaved = applicationSaved && controller.saveEffectsTier(effectsBox.model[Math.max(0, effectsBox.currentIndex)]);
         const terminalThemeSaved = effectsSaved && themeEditor.save();
         const shellSaved = terminalThemeSaved && controller.saveLocalShellPreference(localShellTokens[Math.max(0, localShellBox.currentIndex)] || "automatic");
@@ -985,9 +984,9 @@ Rectangle {
                         Layout.columnSpan: parent.columns
                         text: qsTr("Theme")
                         highlighted: pane.highlightedRow === "theme" || pane.highlightedRow === "terminalTheme"
-                        dirty: themeEditor.mode !== "fixed" || themeEditor.fixedTheme !== pane.defaults.terminalTheme || themeEditor.lightTheme !== pane.defaults.lightTheme || themeEditor.darkTheme !== pane.defaults.darkTheme
+                        dirty: themeEditor.mode !== (pane.defaults.theme === "system" ? "system" : "fixed") || themeEditor.fixedTheme !== pane.defaults.terminalTheme || themeEditor.lightTheme !== pane.defaults.lightTheme || themeEditor.darkTheme !== pane.defaults.darkTheme
                         onReset: {
-                            themeEditor.mode = "fixed";
+                            themeEditor.mode = pane.defaults.theme === "system" ? "system" : "fixed";
                             themeEditor.fixedTheme = pane.defaults.terminalTheme;
                             themeEditor.lightTheme = pane.defaults.lightTheme;
                             themeEditor.darkTheme = pane.defaults.darkTheme;
@@ -1062,10 +1061,22 @@ Rectangle {
                         id: effectsBox
                         objectName: "settingsEffectsTier"
                         Layout.fillWidth: true
+                        enabled: !pane.performanceModeDraft
                         model: ["full", "reduced", "off"]
                         displayTextModel: [qsTr("Full (material, shadows, motion)"), qsTr("Reduced (no shadows, shorter motion)"), qsTr("Off (solid surfaces, no motion)")]
                         accessibleName: qsTr("Visual effects tier")
                         onCurrentIndexChanged: pane.previewDraft()
+                    }
+
+                    Text {
+                        Layout.columnSpan: appearanceLayout.columns
+                        Layout.fillWidth: true
+                        visible: pane.performanceModeDraft
+                        text: qsTr("Performance mode keeps this preference but temporarily disables material, shadows and motion. It is restored when performance mode is turned off.")
+                        color: Theme.textMuted
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
                     }
 
                     SettingsRowLabel {
@@ -1078,16 +1089,16 @@ Rectangle {
                         id: backdropBox
                         objectName: "settingsBackdrop"
                         Layout.fillWidth: true
-                        enabled: pane.fullEffects
-                        model: ["acrylic", "transparent", "mica", "micaAlt", "solid"]
-                        displayTextModel: [qsTr("Acrylic"), qsTr("Transparent"), "Mica", "Mica Alt", qsTr("No material (solid)")]
+                        enabled: pane.fullEffects && !pane.performanceModeDraft
+                        model: ["acrylic", "aero", "transparent", "mica", "micaAlt", "solid"]
+                        displayTextModel: [qsTr("Acrylic"), qsTr("Glass"), qsTr("Transparent"), "Mica", "Mica Alt", qsTr("No material (solid)")]
                         accessibleName: qsTr("Windows backdrop material")
                         onCurrentIndexChanged: pane.previewDraft()
                     }
 
                     SettingsRowLabel {
                         visible: pane.adjustableBackdrop
-                        text: qsTr("Window background opacity")
+                        text: qsTr("Background opacity")
                         dirty: Math.abs(opacitySlider.value - pane.defaults.backdropOpacity) > 0.001
                         highlighted: pane.highlightedRow === "backdropOpacity"
                         onReset: opacitySlider.value = pane.defaults.backdropOpacity
@@ -1103,7 +1114,7 @@ Rectangle {
                             from: 0.0
                             to: 1.0
                             stepSize: 0.05
-                            accessibleName: qsTr("Window background opacity")
+                            accessibleName: qsTr("Window and terminal background opacity")
                             onValueChanged: pane.previewDraft()
                         }
 
@@ -1222,35 +1233,6 @@ Rectangle {
                         wrapMode: Text.WordWrap
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.textLabel
-                    }
-
-                    SettingsRowLabel {
-                        text: qsTr("Terminal background opacity")
-                        dirty: Math.abs(terminalOpacitySlider.value - pane.defaults.terminalBackgroundOpacity) > 0.001
-                        highlighted: pane.highlightedRow === "terminalBackgroundOpacity"
-                        onReset: terminalOpacitySlider.value = pane.defaults.terminalBackgroundOpacity
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-
-                        AppSlider {
-                            id: terminalOpacitySlider
-                            objectName: "settingsTerminalOpacity"
-                            Layout.fillWidth: true
-                            from: 0.0
-                            to: 1.0
-                            stepSize: 0.05
-                            accessibleName: qsTr("Terminal background opacity")
-                        }
-
-                        Text {
-                            Layout.preferredWidth: 42
-                            horizontalAlignment: Text.AlignRight
-                            text: Math.round(terminalOpacitySlider.value * 100) + "%"
-                            color: Theme.textSoft
-                            font.family: Theme.terminalFont
-                            font.pixelSize: Theme.textLabel
-                        }
                     }
 
                     SettingsRowLabel {

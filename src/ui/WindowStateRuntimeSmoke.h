@@ -138,9 +138,9 @@ struct SurfaceAlphas
         return content == 255 && panel == 255 && elevated == 255 && control == 255 && field == 255;
     }
 
-    [[nodiscard]] bool materialTint(const int chromeAlpha, const int workspaceAlpha) const
+    [[nodiscard]] bool terminalMaterialTint(const int backgroundAlpha) const
     {
-        return root == 0 && chrome == chromeAlpha && workspace == workspaceAlpha && contentOpaque();
+        return root == backgroundAlpha && chrome == 0 && workspace == backgroundAlpha && contentOpaque();
     }
 };
 

@@ -68,6 +68,7 @@ public:
 
 signals:
     void restartRequested();
+    void titleBarPressed();
     void windowClosing(bool quitApplication);
     void detachedWindowMoved(QQuickWindow *window, QPoint globalPosition, bool cancelled = false);
     void detachedWindowMoving(QQuickWindow *window, QPoint globalPosition);

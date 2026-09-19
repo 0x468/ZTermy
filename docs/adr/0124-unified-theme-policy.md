@@ -5,7 +5,7 @@ Status: accepted by owner through theme fitting room V2; implemented with focuse
 ## Decision
 
 - One theme supplies terminal colors and derives the application surface/ink ladder. The independent light/dark UI selector is removed. A theme's `dark` attribute determines interface appearance, including native window styling.
-- Two modes: follow system uses separate `lightTheme` and `darkTheme` IDs; fixed uses `terminalTheme` regardless of Windows appearance. The existing `theme` field retains `system` for follow-system and `dark`/`light` for fixed (the selected theme determines which); these values remain readable for previous data.
+- Two modes: follow system uses separate `lightTheme` and `darkTheme` IDs; fixed uses `terminalTheme` regardless of Windows appearance. New settings and Reset default to follow system. The existing `theme` field retains `system` for follow-system and `dark`/`light` for fixed (the selected theme determines which); these values remain readable for previous data.
 - Settings schema 36 adds the two system slots. Schema 35 upgrades preserve all existing fields, including the fixed terminal theme; system slots initially use ztermy Light/Dark. Missing custom themes fall back to built-ins; system slots enforce the expected brightness at resolution and save.
 - Windows appearance changes are delivered from NativeWindow via Main to AppController. The controller alone resolves the active theme and sends palette changes through existing session queues. During explicit draft preview, system changes are remembered but do not override the preview; ending it uses the latest system state.
 - Settings contain an inline keyboard-accessible card grid and a local full-window preview. Hover/focus changes only the local preview. Selecting a card previews the whole application, including detached windows. Apply saves; leaving settings or discarding restores persisted settings. No second theme selection dialog remains.
@@ -15,7 +15,7 @@ Status: accepted by owner through theme fitting room V2; implemented with focuse
 
 ## Verification contract
 
-Focused coverage: schema-35 migration/36 round trip, invalid slot IDs, system changes, fixed mode, preview cancellation and save failure. Runtime acceptance must cover both system slots, hover isolation, keyboard navigation, Apply/Discard, and detached windows. Web evidence alone is not native acceptance.
+Focused coverage: schema-35/36 migration and schema-37 round trip, invalid slot IDs, system changes, fixed mode, preview cancellation and save failure. Runtime acceptance must cover both system slots, hover isolation, keyboard navigation, Apply/Discard, and detached windows. Web evidence alone is not native acceptance.
 
 The fitting room remains a design reference, not a release artifact. No merge is implied by this ADR.
 

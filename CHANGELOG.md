@@ -6,6 +6,15 @@ The project has not published a release.
 
 ## Unreleased
 
+- Make the terminal session strip, pane title and viewport one continuous
+  material; add experimental WCA Glass, default new settings to follow-system
+  themes, and reduce the two global opacity controls to one background-opacity setting
+  (settings schema 37).
+- Freeze the saved visual-effects tier while performance mode is enabled,
+  remove page-transition transparency flashes, hide inactive-pane cursors,
+  animate terminal-tab activation, dismiss title menus from the native title
+  bar, and list saved hosts directly in the new-terminal menu.
+
 ### UI V2 design system — 2026-09-19 (branch `ui/v2-design-system`)
 
 - Unify application surfaces and terminal colours under one theme. Follow-system

@@ -71,7 +71,9 @@ constexpr qint64 effectsTierSchemaVersion = 34;
 // Version 35 adds the terminal theme id (palette layer of ADR 0121).
 constexpr qint64 terminalThemeSchemaVersion = 35;
 constexpr qint64 unifiedThemeSchemaVersion = 36;
-constexpr qint64 currentSchemaVersion = unifiedThemeSchemaVersion;
+// Version 37 adds Aero and retires the second global terminal-opacity layer.
+constexpr qint64 unifiedMaterialSchemaVersion = 37;
+constexpr qint64 currentSchemaVersion = unifiedMaterialSchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -446,7 +448,7 @@ using ztermy::config::ThemePreference;
     ApplicationSettings settings{
         .backdropOpacity = opacityValue.toDouble(),
         .terminalBackgroundOpacity =
-            version >= terminalAppearanceSchemaVersion ? terminalBackgroundOpacityValue.toDouble() : 1.0,
+            version >= unifiedMaterialSchemaVersion ? terminalBackgroundOpacityValue.toDouble() : 0.0,
         .shortcutOverrides = std::move(shortcutOverrides),
         .customAccent = version >= accentSchemaVersion ? customAccentValue.toString() : QStringLiteral("#22C55E"),
         .uiFontFamily = version >= fontOptionsSchemaVersion ? uiFontFamilyValue.toString() : QString{},

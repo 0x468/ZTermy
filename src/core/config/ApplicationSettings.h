@@ -22,6 +22,7 @@ enum class ThemePreference : std::uint8_t
 enum class BackdropPreference : std::uint8_t
 {
     acrylic,
+    aero,
     transparent,
     mica,
     micaAlt,
@@ -135,7 +136,8 @@ enum class AiProxyPreference : std::uint8_t
 struct ApplicationSettings final
 {
     double backdropOpacity = 1.0;
-    double terminalBackgroundOpacity = 1.0;
+    // Schema 37 keeps this as a readable tombstone; the window surface owns global opacity.
+    double terminalBackgroundOpacity = 0.0;
     QMap<QString, QString> shortcutOverrides;
     QString customAccent = QStringLiteral("#22C55E");
     QString uiFontFamily;
@@ -155,7 +157,7 @@ struct ApplicationSettings final
     QStringList terminalSelectionRetainActions = {QStringLiteral("ai"), QStringLiteral("search"),
                                                   QStringLiteral("highlight"), QStringLiteral("unhighlight")};
     LocalShellPreference localShell = LocalShellPreference::automatic;
-    ThemePreference theme = ThemePreference::dark;
+    ThemePreference theme = ThemePreference::system;
     BackdropPreference backdrop = BackdropPreference::acrylic;
     AccentPreference accent = AccentPreference::ztermy;
     bool showAllTerminalFonts = false;
