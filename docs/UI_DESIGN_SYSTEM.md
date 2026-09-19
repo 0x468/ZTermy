@@ -223,6 +223,12 @@ Space activate button-like controls once and ignore key auto-repeat.
   the pane title and the divider hairline. It exposes `paneId`, `paneTitle`
   and `dragAreaWidth` for the main-window drag capture and moves a detached
   window by itself.
+- `PaneFocusEdges`: the active-pane mark in a split workspace. It paints a
+  2 px accent only on the edges the pane shares with a sibling (bitmask from
+  `TerminalSplitNode.innerEdges`); a single pane and the native window edge
+  carry no highlight. Unfocused viewports do not blink their cursor.
+- `AppSplitView`: the divider is a 1 px hairline with a 7 px pointer target
+  (`containmentMask`), accent on hover and press.
 - `DragPreview` and `DropTargetIndicator`: the one drag ghost (elevation 2,
   accent hairline, icon and title) and the one drop highlight (accent insert
   bar or tinted merge area) used by tab reorder and pane drag.

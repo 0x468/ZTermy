@@ -68,8 +68,16 @@ The project has not published a release.
   window cursor over the grips and split handles.
 - Remove the accent frame around a single terminal pane and the hairline
   under the session strip so strip and terminal read as one surface; with
-  several panes the accent sits on the divider next to the active pane
-  instead of wrapping it.
+  several panes the active pane paints a 2 px accent on the edges it shares
+  with a sibling only (`PaneFocusEdges`, `TerminalSplitNode.innerEdges`), so
+  the highlight reads as that pane's own border and never touches the native
+  window edge.
+- Thin the split divider to a 1 px hairline; the pointer target stays 7 px
+  through the handle's `containmentMask`, so hover, drag, double-click reset
+  and the split cursor are unchanged.
+- Only the focused terminal viewport blinks its cursor; unfocused panes show
+  a steady cursor and refocusing restarts the blink phase (`terminal-item`
+  regression `blinksOnlyWhileFocused`).
 - Terminal benchmark against same-day `main` (Release, acrylic, 24 runs each):
   paint P50/max and heartbeat gap unchanged, completion median 1580 → 1678 ms
   (one 100 ms marker-search tick in about a quarter more runs; tier `off`

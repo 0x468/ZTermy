@@ -38,8 +38,9 @@ dropped into, and a third drag ghost next to the two in `Main.qml`.
   unchanged.
 - `SessionStatusDot` is the one session-state dot: accent while running,
   pulsing on `Motion.emphasis` while connecting, subtle ink otherwise.
-- `TerminalPaneHeader` is the pane strip. It sits inside the pane frame so
-  the active accent border wraps it, paints the divider hairline, and
+- `TerminalPaneHeader` is the pane strip. It sits inside the pane so the
+  active-pane accent edges (`PaneFocusEdges`, drawn only on edges shared with
+  a sibling pane) enclose it, paints the divider hairline, and
   exposes `paneId`, `paneTitle` and `dragAreaWidth` for the drag capture in
   `Main.qml`. In a detached window its `DragHandler` calls `startSystemMove`
   for a press left of the pane actions. The QML `DropArea` and

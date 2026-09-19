@@ -83,7 +83,15 @@ completion 被 100 ms 标记搜索量化：`main` 有 16/24 次落在 1570–159
 | 分割线上没有拉伸光标 | 全窗口窗格拖拽捕获层只是 `enabled: false`，Qt 光标查找只跳过不可见项，`MouseArea` 永远带箭头光标 | 改为 `visible` 门控；`SplitView` 把手本已带分割光标 | resize smoke 断言导航把手与两个分割把手的窗口光标，12/12 通过 |
 | 终端与工具栏割裂；单窗格有蓝紫边框；多窗格四面包边压住窗口边 | 叶子矩形画 1–2 px 边框与圆角，工具栏底部有发丝线 | 去掉边框、圆角与视口内缩，去掉发丝线；多窗格时把强调色放到活动窗格旁的分割线（`AppSplitView.emphasized`） | `review-1/ztermy-dark-single-pane.png`、`ztermy-dark-split.png` |
 
-本轮复验：Release 与 Debug 全量 CTest 各 129/129（`build/_ctest_release_r7.txt`、`build/_ctest_debug_r7.txt`），`ztermy_format_check`、`ztermy_qml_quality_check`、全量 clang-tidy（`build/_tidy_r7.log`）、代码健康门禁 PASS，隔离动态部署 smoke 通过（`build/_deploy_smoke_r7.log`）；八个真实窗口 smoke（含 resize-interactions、pane-scrollbar）退出 0（`build/_smoke7/`）。上表二进制身份已按本轮更新。多窗格强调方式的其他候选见本轮回复，等所有者定夺。
+本轮复验：Release 与 Debug 全量 CTest 各 129/129（`build/_ctest_release_r7.txt`、`build/_ctest_debug_r7.txt`），`ztermy_format_check`、`ztermy_qml_quality_check`、全量 clang-tidy（`build/_tidy_r7.log`）、代码健康门禁 PASS，隔离动态部署 smoke 通过（`build/_deploy_smoke_r7.log`）；八个真实窗口 smoke（含 resize-interactions、pane-scrollbar）退出 0（`build/_smoke7/`）。上表二进制身份已按本轮更新。
+
+## 所有者第二轮反馈的修复（2026-09-19）
+
+| 反馈 | 根因 | 修复 | 证据 |
+| --- | --- | --- | --- |
+| 高亮分割线分不清左右/上下，应是活动窗格自己的边框 | 强调色画在 `AppSplitView` 分割线上，两侧窗格共用一条线 | 新增 `PaneFocusEdges`：活动窗格只在与兄弟窗格相邻的边画 2 px 强调线；`TerminalSplitNode.innerEdges` 位掩码沿分割树递归下发（左/上子节点得右/下边，右/下子节点得左/上边），靠窗口的外边永不高亮；单窗格与分离窗口不画 | `review-2/` 截图；`--pane-scrollbar-smoke` |
+| 分割线太占空间 | handle 固定 6 px | handle 视觉 1 px 发丝线，`containmentMask` 保持 7 px 命中区，悬停/拖拽/双击复位/光标不变 | `--resize-interactions-smoke` 断言 handle 上的 `SplitHCursor`/`SplitVCursor` 与拖拽吸附 |
+| 非焦点窗格不应闪烁光标 | 每个 `TerminalItem` 的闪烁定时器与焦点无关 | 定时器只在 `hasActiveFocus()` 时翻转相位；失焦/得焦时把相位复位为“显示”并重启定时器 | ctest `terminal-item::blinksOnlyWhileFocused` |
 
 ## 所有者人工验收（未执行）
 
