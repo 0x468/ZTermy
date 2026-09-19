@@ -101,6 +101,36 @@ foreach ($relativePath in $criticalCppFiles) {
     }
 }
 
+# Source coverage: every qsTr()/tr() string in src/ must already be in the
+# catalog. lupdate writes a scratch copy and reports the entries it would
+# add as "unfinished"; committing a new string without its zh_CN translation
+# therefore fails this test instead of silently shipping English.
+$lupdate = if ($env:ZTERMY_LUPDATE) { $env:ZTERMY_LUPDATE } else { (Get-Command lupdate -ErrorAction SilentlyContinue).Source }
+if ($lupdate) {
+    $scratch = Join-Path ([System.IO.Path]::GetTempPath()) ("ztermy_translations_" + [guid]::NewGuid().ToString('N') + '.ts')
+    try {
+        Copy-Item -LiteralPath $catalogFile -Destination $scratch
+        $sources = Join-Path $sourceDirectory 'src'
+        & $lupdate -silent -no-obsolete -locations none $sources -ts $scratch 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            $errors.Add("lupdate failed with exit code $LASTEXITCODE.")
+        } else {
+            [xml] $updated = Get-Content -LiteralPath $scratch -Raw
+            foreach ($message in @($updated.SelectNodes('/TS/context/message'))) {
+                $translation = $message.SelectSingleNode('translation')
+                if ($translation.GetAttribute('type') -eq 'unfinished') {
+                    $context = $message.ParentNode.SelectSingleNode('name').InnerText
+                    $errors.Add("${context}: '$($message.SelectSingleNode('source').InnerText)' is in the sources but missing from the catalog (run lupdate and translate it).")
+                }
+            }
+        }
+    } finally {
+        Remove-Item -LiteralPath $scratch -Force -ErrorAction SilentlyContinue
+    }
+} else {
+    Write-Warning 'lupdate not found; source coverage check skipped.'
+}
+
 if ($errors.Count -ne 0) {
     $errors | ForEach-Object { Write-Error $_ }
     exit 1

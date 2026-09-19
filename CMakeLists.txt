@@ -1527,6 +1527,9 @@ if(BUILD_TESTING)
             -CatalogPath "${ZTERMY_TRANSLATION_FILES}"
             -SourceRoot "${CMAKE_CURRENT_SOURCE_DIR}"
     )
+    set_tests_properties(translation-catalog PROPERTIES
+        ENVIRONMENT "ZTERMY_LUPDATE=$<TARGET_FILE:Qt6::lupdate>"
+    )
 endif()
 
 qt_generate_foreign_qml_types(ztermy_terminal_ui ztermy)
