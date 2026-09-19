@@ -4533,6 +4533,10 @@
 <context>
     <name>ReleaseIdentityCard</name>
     <message>
+        <source>ztermy  /  %1</source>
+        <translation>ztermy  /  %1</translation>
+    </message>
+    <message>
         <location filename="../src/ui/qml/ReleaseIdentityCard.qml" line="19"/>
         <source>ztermy %1 · %2. %3</source>
         <translation>ztermy %1 · %2。%3</translation>

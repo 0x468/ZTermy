@@ -91,7 +91,7 @@ Item {
 
             Text {
                 objectName: "settingsApplicationBuildInfo"
-                text: "ztermy  /  " + card.version
+                text: qsTr("ztermy  /  %1").arg(card.version)
                 color: Theme.textMuted
                 font.family: Theme.terminalFont
                 font.pixelSize: Theme.textLabel

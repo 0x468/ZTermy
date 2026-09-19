@@ -806,15 +806,7 @@ private:
         QString workingDirectory;
     };
 
-    struct PortForwardingRuntime final
-    {
-        std::string ruleId;
-        std::unique_ptr<forwarding::PortForwardingJob> job;
-        std::mutex hostKeyMutex;
-        std::condition_variable hostKeyAvailable;
-        std::optional<ssh::UnknownHostKeyDecision> hostKeyDecision;
-        bool awaitingHostKey = false;
-    };
+    struct PortForwardingRuntime;
 
     void connectTerminalSignals(ui::TerminalItem &terminal, const QString &paneId);
     void connectLocalTabSignals(TerminalTab &tab);

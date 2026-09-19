@@ -2754,16 +2754,6 @@ terminal::TerminalCursorStyle TerminalItem::effectiveCursorStyle() const noexcep
     return m_snapshot ? m_snapshot->cursor.style : terminal::TerminalCursorStyle::block;
 }
 
-qreal TerminalItem::cellWidth() const
-{
-    return m_cellWidth;
-}
-
-qreal TerminalItem::cellHeight() const
-{
-    return m_cellHeight;
-}
-
 void TerminalItem::refreshFontMetrics()
 {
     const QFontMetricsF metrics(m_font);

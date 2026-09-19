@@ -1157,6 +1157,7 @@ set_source_files_properties(src/ui/qml/AppIconButton.qml PROPERTIES QT_RESOURCE_
 set_source_files_properties(src/ui/qml/SidePanelSurface.qml PROPERTIES QT_RESOURCE_ALIAS SidePanelSurface.qml)
 set_source_files_properties(src/ui/qml/AppSideDrawer.qml PROPERTIES QT_RESOURCE_ALIAS AppSideDrawer.qml)
 set_source_files_properties(src/ui/qml/ResizeSnap.qml PROPERTIES QT_RESOURCE_ALIAS ResizeSnap.qml)
+set_source_files_properties(src/ui/qml/PaneDragSurface.qml PROPERTIES QT_RESOURCE_ALIAS PaneDragSurface.qml)
 set_source_files_properties(src/ui/qml/ResizeGrip.qml PROPERTIES QT_RESOURCE_ALIAS ResizeGrip.qml)
 set_source_files_properties(src/ui/qml/AppSplitView.qml PROPERTIES QT_RESOURCE_ALIAS AppSplitView.qml)
 set_source_files_properties(
@@ -1390,6 +1391,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/SidePanelSurface.qml
         src/ui/qml/AppSideDrawer.qml
         src/ui/qml/ResizeSnap.qml
+        src/ui/qml/PaneDragSurface.qml
         src/ui/qml/ResizeGrip.qml
         src/ui/qml/AppSplitView.qml
         src/ui/qml/BrandIcon.qml
@@ -4632,6 +4634,13 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME window-state COMMAND ztermy_window_state_tests)
     set_tests_properties(window-state PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    if(ZTERMY_STATIC_BUILD)
+        # The offscreen platform is not a default static Qt plugin. These tests
+        # explicitly select it; otherwise Qt stops in a fatal startup dialog.
+        qt_import_plugins(ztermy_application_instance_tests INCLUDE Qt6::QOffscreenIntegrationPlugin)
+        qt_import_plugins(ztermy_window_state_tests INCLUDE Qt6::QOffscreenIntegrationPlugin)
+    endif()
+    set_tests_properties(application-instance window-state PROPERTIES TIMEOUT 60)
 
     qt_add_executable(ztermy_windows_protected_clipboard_tests
         tests/windows_protected_clipboard_tests.cpp

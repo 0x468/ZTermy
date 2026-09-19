@@ -44,6 +44,7 @@ Item {
         }
 
         AppIconButton {
+            objectName: "settingsRowReset-" + control.text
             visible: control.dirty
             focusPolicy: Qt.TabFocus
             implicitWidth: 20

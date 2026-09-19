@@ -1619,24 +1619,7 @@ struct ResizeHitRuntimeCase
                                           QQuickItem *rootObject)
 {
     const auto verifyOrder = [&window, rootObject](const auto &order) {
-        if (!focusItem(window, quickItem(rootObject, order.front()), QString::fromLatin1(order.front())))
-        {
-            return false;
-        }
-        for (std::size_t index = 1; index < order.size(); ++index)
-        {
-            sendKey(window, Qt::Key_Tab);
-            const QString expectedName = QString::fromLatin1(order[index]);
-            const QString actualName = namedFocusItem(window);
-            if (actualName != expectedName)
-            {
-                qCWarning(applicationLog)
-                    << "Settings Tab order mismatch"
-                    << "index=" << index << "expected=" << expectedName << "actual=" << actualName;
-                return false;
-            }
-        }
-        return true;
+        return ztermy::ui::verifySettingsFocusOrder(window, rootObject, order);
     };
 
     QQuickItem *appearanceCategory = quickItem(rootObject, "settingsAppearanceCategory");
@@ -1726,7 +1709,6 @@ struct ResizeHitRuntimeCase
         "settingsFontFamily",
         "settingsShowAllTerminalFonts",
         "settingsFontSize",
-        "settingsTerminalOpacity",
         "settingsLocalShell",
         "settingsLocalShellRefresh",
         "settingsCursor",
@@ -2135,7 +2117,6 @@ struct ResizeHitRuntimeCase
 
     QQuickItem *theme = quickItem(rootObject, "themeCard-ztermy-light");
     QQuickItem *accent = quickItem(rootObject, "settingsAccent");
-    QQuickItem *backdrop = quickItem(rootObject, "settingsBackdrop");
     QQuickItem *opacity = quickItem(rootObject, "settingsOpacity");
     QQuickItem *fontSize = quickItem(rootObject, "settingsFontSize");
     QQuickItem *cursorBlink = quickItem(rootObject, "settingsCursorBlink");
@@ -2143,9 +2124,9 @@ struct ResizeHitRuntimeCase
     QQuickItem *keepSelectionAfterCopy = quickItem(rootObject, "settingsKeepSelectionAfterCopy");
     QQuickItem *multilinePaste = quickItem(rootObject, "settingsMultilinePaste");
     QQuickItem *apply = quickItem(rootObject, "settingsApply");
-    if (theme == nullptr || accent == nullptr || backdrop == nullptr || opacity == nullptr || fontSize == nullptr
-        || cursorBlink == nullptr || copyOnSelect == nullptr || keepSelectionAfterCopy == nullptr
-        || multilinePaste == nullptr || apply == nullptr)
+    if (theme == nullptr || accent == nullptr || opacity == nullptr || fontSize == nullptr || cursorBlink == nullptr
+        || copyOnSelect == nullptr || keepSelectionAfterCopy == nullptr || multilinePaste == nullptr
+        || apply == nullptr)
     {
         qCWarning(applicationLog) << "Settings keyboard smoke object lookup failed";
         return false;
@@ -2172,28 +2153,8 @@ struct ResizeHitRuntimeCase
     }
     sendKey(window, Qt::Key_Down);
 
-    if (!opacity->isVisible() || !opacity->isEnabled())
-    {
-        qCWarning(applicationLog) << "Window opacity control unexpectedly unavailable"
-                                  << "category="
-                                  << (settingsPane == nullptr ? QStringLiteral("<missing>")
-                                                              : settingsPane->property("currentCategory").toString())
-                                  << "backdropIndex="
-                                  << (quickItem(rootObject, "settingsBackdrop") == nullptr
-                                          ? -1
-                                          : quickItem(rootObject, "settingsBackdrop")->property("currentIndex").toInt())
-                                  << "visible=" << opacity->isVisible() << "enabled=" << opacity->isEnabled();
+    if (!ztermy::ui::verifyBackdropOpacity(rootObject))
         return false;
-    }
-    backdrop->setProperty("currentIndex", 2);
-    processWindowEventsFor(std::chrono::milliseconds{50});
-    if (!opacity->isVisible() || !opacity->isEnabled())
-    {
-        qCWarning(applicationLog) << "Transparent backdrop lost its opacity control";
-        return false;
-    }
-    backdrop->setProperty("currentIndex", 0);
-    processWindowEventsFor(std::chrono::milliseconds{50});
     if (!focusItem(window, opacity, QStringLiteral("settingsOpacity")))
     {
         return false;

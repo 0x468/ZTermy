@@ -2769,82 +2769,13 @@ Rectangle {
         terminalArea: terminalViewport
     }
 
-    HoverHandler {
-        id: paneHeaderHover
-        blocking: false
-        property bool overHeader: false
-        onPointChanged: {
-            if (paneDragCapture.pressed)
-                return;
-            const global = root.mapToGlobal(point.position.x, point.position.y);
-            const header = root.currentPage === "terminal" && root.paneHeadersVisible ? terminalWindows.viewportAt(terminalViewport, global, "terminalPaneHeader-") : null;
-            overHeader = !!header && header.mapFromGlobal(global.x, global.y).x < header.dragAreaWidth;
-        }
-        onHoveredChanged: {
-            if (!hovered)
-                overHeader = false;
-        }
-    }
-
-    // A MouseArea always owns an arrow cursor and a disabled one still wins the
-    // cursor lookup, which masked every resize grip below this layer; hiding it
-    // keeps the grips' cursors reachable.
-    MouseArea {
+    PaneDragSurface {
         id: paneDragCapture
         anchors.fill: parent
         z: 80
-        visible: pressed || (paneHeaderHover.overHeader && root.currentPage === "terminal" && root.paneHeadersVisible)
-        acceptedButtons: Qt.LeftButton
-        preventStealing: true
-        property point pressPoint: Qt.point(0, 0)
-        property point pointerPoint: Qt.point(0, 0)
-        property string paneId: ""
-        property string paneTitle: ""
-        property bool dragging: false
-        onPressed: mouse => {
-            const global = mapToGlobal(mouse.x, mouse.y);
-            const header = root.currentPage === "terminal" ? terminalWindows.viewportAt(terminalViewport, global, "terminalPaneHeader-") : null;
-            if (!header || header.mapFromGlobal(global.x, global.y).x >= header.dragAreaWidth) {
-                mouse.accepted = false;
-                return;
-            }
-            paneId = header.paneId;
-            paneTitle = header.paneTitle;
-            pressPoint = Qt.point(mouse.x, mouse.y);
-            pointerPoint = pressPoint;
-            dragging = false;
-            terminalWindows.draggedPaneId = paneId;
-        }
-        onPositionChanged: mouse => {
-            if (!pressed || !paneId.length)
-                return;
-            pointerPoint = Qt.point(mouse.x, mouse.y);
-            if (!dragging && Math.hypot(mouse.x - pressPoint.x, mouse.y - pressPoint.y) >= 10)
-                dragging = true;
-            if (dragging)
-                terminalWindows.updateDropTarget(mapToGlobal(mouse.x, mouse.y));
-        }
-        onReleased: mouse => {
-            if (!paneId.length)
-                return;
-            const id = paneId;
-            paneId = "";
-            if (dragging) {
-                terminalWindows.finishPaneDrop(id, mouse.x < 0 || mouse.y < 0 || mouse.x > width || mouse.y > height);
-            } else {
-                terminalWindows.draggedPaneId = "";
-                if (root.controller.activateTerminalPane(id))
-                    root.focusTerminalAfterLayout();
-            }
-            dragging = false;
-        }
-        function cancelDrag() {
-            paneId = "";
-            dragging = false;
-            terminalWindows.draggedPaneId = "";
-            terminalWindows.dropTarget = ({});
-        }
-        onCanceled: cancelDrag()
+        hostRoot: root
+        coordinator: terminalWindows
+        terminalArea: terminalViewport
     }
 
     Shortcut {

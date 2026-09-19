@@ -8,6 +8,27 @@
 
 namespace ztermy::ui
 {
+[[nodiscard]] inline bool verifyBackdropOpacity(QQuickItem *root)
+{
+    auto *backdrop = quickItem(root, "settingsBackdrop");
+    auto *opacity = quickItem(root, "settingsOpacity");
+    if (!backdrop || !opacity)
+        return false;
+    const auto previous = backdrop->property("currentIndex");
+    bool passed = true;
+    for (const int index : {0, 1, 2, 5})
+    {
+        backdrop->setProperty("currentIndex", index);
+        processWindowEventsFor(std::chrono::milliseconds{50});
+        const bool adjustable = opacity->isVisible() && opacity->isEnabled();
+        passed = passed && adjustable == (index != 5);
+    }
+    backdrop->setProperty("currentIndex", previous);
+    processWindowEventsFor(std::chrono::milliseconds{50});
+    qInfo() << "Acrylic, glass and transparent opacity controls:" << passed;
+    return passed;
+}
+
 [[nodiscard]] inline bool verifyThemeSettings(NativeWindow &window, AppController &controller,
                                               const QString &outputDirectory)
 {
@@ -25,7 +46,9 @@ namespace ztermy::ui
     if (!controller.saveTerminalTheme(QStringLiteral("nord")) || !activate("settingsShortcutAction")
         || !activate("settingsAppearanceCategory"))
         return false;
-    const QColor savedChrome = rootObject->property("chromeColor").value<QColor>();
+    if (!verifyBackdropOpacity(rootObject))
+        return false;
+    const auto savedChrome = rootObject->property("chromeColor").value<QColor>();
     if (!focusItem(window, quickItem(rootObject, "themeCard-ztermy-light"), QStringLiteral("themeCard-ztermy-light")))
         return false;
     processWindowEventsFor(std::chrono::milliseconds{120});

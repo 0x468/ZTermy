@@ -7,6 +7,22 @@
 
 namespace ztermy
 {
+void AppController::emitActiveTerminalContextChanged(const bool refreshViewports)
+{
+    updateTelemetryVisibility();
+    emit activeTerminalTabChanged();
+    emit activeTerminalTabPinnedChanged();
+    emit terminalWorkspaceChanged();
+    emit remoteTelemetryChanged();
+    emit sshActiveChanged();
+    emit terminalSearchChanged();
+    emit terminalHistoryChanged();
+    emit sftpChanged();
+    emit aiConversationChanged();
+    if (refreshViewports)
+        showActiveTab();
+}
+
 bool AppController::moveTerminalTab(const QString &id, const int targetIndex)
 {
     const auto *session = findTerminalWorkspace(id) ? nullptr : findTab(id);

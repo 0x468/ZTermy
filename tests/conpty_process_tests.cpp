@@ -111,7 +111,8 @@ void ConPtyProcessTests::closingParallelConsolesEndsOwnedShellProcesses()
     {
         if (entry.th32ParentProcessID == GetCurrentProcessId() && _wcsicmp(entry.szExeFile, L"cmd.exe") == 0)
         {
-            const HANDLE handle = OpenProcess(SYNCHRONIZE | PROCESS_TERMINATE, FALSE, entry.th32ProcessID);
+            const HANDLE handle = OpenProcess(SYNCHRONIZE | PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION,
+                                              FALSE, entry.th32ProcessID);
             QVERIFY(handle != nullptr);
             children.push_back(handle);
         }
@@ -120,7 +121,12 @@ void ConPtyProcessTests::closingParallelConsolesEndsOwnedShellProcesses()
     first.close();
     second.close();
     for (const HANDLE child : children)
+    {
         QCOMPARE(WaitForSingleObject(child, 5'000), DWORD{WAIT_OBJECT_0});
+        DWORD exitCode = STILL_ACTIVE;
+        QVERIFY(GetExitCodeProcess(child, &exitCode));
+        QCOMPARE(exitCode, DWORD{ERROR_CANCELLED});
+    }
 }
 
 void ConPtyProcessTests::wakeEventInterruptsExitWait()

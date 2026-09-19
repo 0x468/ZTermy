@@ -203,11 +203,12 @@ void TerminalThemeCatalogTests::boundsImportedIdsIncludingCollisionSuffix()
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
     TerminalThemeCatalog catalog(directory.filePath(QStringLiteral("themes")));
-    auto custom = catalog.find(QStringLiteral("nord"));
-    QVERIFY(custom.has_value());
-    custom->id = QString(100, QLatin1Char('a'));
+    const auto original = catalog.find(QStringLiteral("nord"));
+    QVERIFY(original.has_value());
+    auto custom = original.value_or(ztermy::config::TerminalTheme{});
+    custom.id = QString(100, QLatin1Char('a'));
     const QString source = directory.filePath(QStringLiteral("long.json"));
-    QVERIFY(writeFile(source, QJsonDocument(ztermy::config::terminalThemeToJson(*custom)).toJson()));
+    QVERIFY(writeFile(source, QJsonDocument(ztermy::config::terminalThemeToJson(custom)).toJson()));
     const auto first = catalog.importFile(source);
     const auto second = catalog.importFile(source);
     QVERIFY(first.has_value());
@@ -223,8 +224,8 @@ void TerminalThemeCatalogTests::boundsImportedIdsIncludingCollisionSuffix()
     QVERIFY(reloaded.find(second->front()).has_value());
 
     // Truncation at a separator must not leave trailing or doubled hyphens.
-    custom->id = QString(61, QLatin1Char('b')) + QStringLiteral("-c-def");
-    QVERIFY(writeFile(source, QJsonDocument(ztermy::config::terminalThemeToJson(*custom)).toJson()));
+    custom.id = QString(61, QLatin1Char('b')) + QStringLiteral("-c-def");
+    QVERIFY(writeFile(source, QJsonDocument(ztermy::config::terminalThemeToJson(custom)).toJson()));
     const auto separated = catalog.importFile(source);
     const auto collision = catalog.importFile(source);
     QVERIFY(separated.has_value());

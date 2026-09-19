@@ -2458,6 +2458,15 @@ credentialKind(const ztermy::ssh::SshAuthenticationMethod authentication) noexce
 
 namespace ztermy
 {
+struct AppController::PortForwardingRuntime final
+{
+    std::string ruleId;
+    std::unique_ptr<forwarding::PortForwardingJob> job;
+    std::mutex hostKeyMutex;
+    std::condition_variable hostKeyAvailable;
+    std::optional<ssh::UnknownHostKeyDecision> hostKeyDecision;
+    bool awaitingHostKey = false;
+};
 
 AppController::AppController(QObject *parent)
     : AppController(applicationDataFile(QStringLiteral("profiles.json")),
@@ -16292,22 +16301,6 @@ workbench::WorkspaceState AppController::persistableWorkspaceState(const workben
             persistable.terminalWorkspaces.empty() ? std::string{} : persistable.terminalWorkspaces.front().id;
     }
     return persistable;
-}
-
-void AppController::emitActiveTerminalContextChanged(const bool refreshViewports)
-{
-    updateTelemetryVisibility();
-    emit activeTerminalTabChanged();
-    emit activeTerminalTabPinnedChanged();
-    emit terminalWorkspaceChanged();
-    emit remoteTelemetryChanged();
-    emit sshActiveChanged();
-    emit terminalSearchChanged();
-    emit terminalHistoryChanged();
-    emit sftpChanged();
-    emit aiConversationChanged();
-    if (refreshViewports)
-        showActiveTab();
 }
 
 void AppController::showActiveTab()

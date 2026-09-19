@@ -272,8 +272,8 @@ private:
     [[nodiscard]] QRectF inputCursorRectangle() const;
     void clearPreedit();
     void notifyInputMethod() const;
-    [[nodiscard]] qreal cellWidth() const;
-    [[nodiscard]] qreal cellHeight() const;
+    [[nodiscard]] qreal cellWidth() const { return m_cellWidth; }
+    [[nodiscard]] qreal cellHeight() const { return m_cellHeight; }
     void refreshFontMetrics();
     [[nodiscard]] const QFont &styledFont(std::size_t styleBits);
     void refreshKeywordStyles();

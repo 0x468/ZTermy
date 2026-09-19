@@ -168,4 +168,25 @@ inline void sendText(ztermy::NativeWindow &window, const QStringView text)
     }
     return true;
 }
+template <typename Range>
+[[nodiscard]] inline bool verifySettingsFocusOrder(NativeWindow &window, QQuickItem *root, const Range &order)
+{
+    if (!focusItem(window, quickItem(root, order.front()), QString::fromLatin1(order.front())))
+        return false;
+    for (std::size_t index = 1; index < order.size(); ++index)
+    {
+        sendKey(window, Qt::Key_Tab);
+        // A non-default row inserts its accessible reset button before its editor.
+        if (namedFocusItem(window).startsWith(QStringLiteral("settingsRowReset-")))
+            sendKey(window, Qt::Key_Tab);
+        const QString expected = QString::fromLatin1(order[index]);
+        if (const QString actual = namedFocusItem(window); actual != expected)
+        {
+            qWarning() << "Settings Tab order mismatch" << "index=" << index << "expected=" << expected
+                       << "actual=" << actual;
+            return false;
+        }
+    }
+    return true;
+}
 } // namespace ztermy::ui

@@ -14,6 +14,13 @@ The project has not published a release.
   with a half moon and a quiet waterline; hover animates the tide only when
   full motion is enabled. Display the release name and verse without prefixes
   or quotation marks.
+- Fix the static test targets' missing offscreen platform plugin and bound
+  their startup time. Restore the recursive viewport's copy-mode and scroll-position actions,
+  remove duplicate pane property assignments, and split drag/smoke helpers
+  without relaxing the code-structure budget.
+- Stop the owned local shell before tearing down ConPTY, preventing startup
+  cancellation from producing Windows `0xc0000142` dialogs. Keep cleanup off
+  the GUI thread and retain bounded waits for explicit session closure.
 
 - Make the terminal session strip, pane title and viewport one continuous
   material; add experimental WCA Glass, default new settings to follow-system

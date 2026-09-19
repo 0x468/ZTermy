@@ -166,6 +166,16 @@ selected, hovered, and destructive controls. Hover and focus may change color
 or border opacity, but must not scale, translate, or reflow surrounding
 content.
 
+Pointer hover and press use the final state color immediately; do not animate
+from transparent black to a light fill. Keep tab activation/indicator motion
+separate. Settings categories wrap `SideNavigationItem`, so workbench and
+settings navigation share the same fill, press, focus and keyboard behavior.
+Title commands retain native hit regions but use `KeyboardAction` feedback.
+
+`WheelAcceleration` applies a bounded same-direction burst multiplier to
+settings and terminal scrollback. Pixel-delta scrolling retains device inertia;
+terminal mouse reporting and alternate-screen key emulation remain unaccelerated.
+
 Mouse and keyboard activation share one action signal. Enter, Return, and
 Space activate button-like controls once and ignore key auto-repeat.
 

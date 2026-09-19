@@ -83,6 +83,11 @@ Item {
             activeViewport.startQuickSelect();
     }
 
+    function startCopyMode() {
+        if (activeViewport)
+            activeViewport.startCopyMode();
+    }
+
     function scrollLines(rows) {
         if (activeViewport)
             activeViewport.scrollLines(rows);
@@ -91,6 +96,11 @@ Item {
     function scrollPage(pages) {
         if (activeViewport)
             activeViewport.scrollPage(pages);
+    }
+
+    function scrollToFraction(fraction) {
+        if (activeViewport)
+            activeViewport.scrollToFraction(fraction);
     }
 
     function actionShortcut(actionId) {
@@ -1007,25 +1017,6 @@ Item {
                     anchors.fill: parent
                     source: Qt.resolvedUrl("TerminalSplitNode.qml")
                     onLoaded: {
-                        item.controller = root.controller;
-                        item.node = split.node.first;
-                        item.cursorBlink = root.cursorBlink;
-                        item.copyOnSelect = root.copyOnSelect;
-                        item.keepSelectionAfterCopy = root.keepSelectionAfterCopy;
-                        item.selectionActionPopupEnabled = root.selectionActionPopupEnabled;
-                        item.selectionActions = root.selectionActions;
-                        item.confirmMultilinePaste = root.confirmMultilinePaste;
-                        item.rightClickBehavior = root.rightClickBehavior;
-                        item.middleClickBehavior = root.middleClickBehavior;
-                        item.wordDelimiters = root.wordDelimiters;
-                        item.scrollRowsPerWheel = root.scrollRowsPerWheel;
-                        item.defaultFontFamily = root.defaultFontFamily;
-                        item.defaultFontSize = root.defaultFontSize;
-                        item.defaultLigatures = root.defaultLigatures;
-                        item.defaultBackgroundOpacity = root.defaultBackgroundOpacity;
-                        item.defaultCursor = root.defaultCursor;
-                        item.zoomedPaneId = root.zoomedPaneId;
-                        item.detachedPane = root.detachedPane;
                         item.paneCount = Qt.binding(() => root.paneCount);
                         item.headersVisible = Qt.binding(() => root.headersVisible);
                         item.innerEdges = Qt.binding(() => root.innerEdges | (split.orientation === Qt.Horizontal ? 4 : 8));
@@ -1191,25 +1182,6 @@ Item {
                     anchors.fill: parent
                     source: Qt.resolvedUrl("TerminalSplitNode.qml")
                     onLoaded: {
-                        item.controller = root.controller;
-                        item.node = split.node.second;
-                        item.cursorBlink = root.cursorBlink;
-                        item.copyOnSelect = root.copyOnSelect;
-                        item.keepSelectionAfterCopy = root.keepSelectionAfterCopy;
-                        item.selectionActionPopupEnabled = root.selectionActionPopupEnabled;
-                        item.selectionActions = root.selectionActions;
-                        item.confirmMultilinePaste = root.confirmMultilinePaste;
-                        item.rightClickBehavior = root.rightClickBehavior;
-                        item.middleClickBehavior = root.middleClickBehavior;
-                        item.wordDelimiters = root.wordDelimiters;
-                        item.scrollRowsPerWheel = root.scrollRowsPerWheel;
-                        item.defaultFontFamily = root.defaultFontFamily;
-                        item.defaultFontSize = root.defaultFontSize;
-                        item.defaultLigatures = root.defaultLigatures;
-                        item.defaultBackgroundOpacity = root.defaultBackgroundOpacity;
-                        item.defaultCursor = root.defaultCursor;
-                        item.zoomedPaneId = root.zoomedPaneId;
-                        item.detachedPane = root.detachedPane;
                         item.paneCount = Qt.binding(() => root.paneCount);
                         item.headersVisible = Qt.binding(() => root.headersVisible);
                         item.innerEdges = Qt.binding(() => root.innerEdges | (split.orientation === Qt.Horizontal ? 1 : 2));
