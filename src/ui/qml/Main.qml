@@ -1754,13 +1754,6 @@ Rectangle {
                         Layout.preferredHeight: 26
                         color: Theme.workspaceBackground
 
-                        Rectangle {
-                            anchors.bottom: parent.bottom
-                            width: parent.width
-                            height: 1
-                            color: root.borderColor
-                        }
-
                         RowLayout {
                             anchors.fill: parent
                             anchors.left: parent.left

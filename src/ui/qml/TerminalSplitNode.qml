@@ -352,10 +352,9 @@ Item {
                     finishSelectionAction(!!action.retainSelection, restoreFocus);
             }
 
+            // No frame: the workspace edge is the window's own edge and the
+            // active pane is marked by the split divider and header, not a box.
             color: "transparent"
-            border.color: node.active ? Theme.accent : Theme.border
-            border.width: node.active ? 2 : 1
-            radius: Theme.radiusControl
             clip: true
 
             Component.onCompleted: {
@@ -390,8 +389,8 @@ Item {
 
                 objectName: "terminalViewport-" + leaf.node.id
                 anchors.fill: parent
-                anchors.margins: leaf.node.active ? 2 : 1
-                anchors.topMargin: leaf.paneHeaderVisible ? 32 : (leaf.node.active ? 2 : 1)
+                anchors.margins: 0
+                anchors.topMargin: leaf.paneHeaderVisible ? 32 : 0
                 focus: !!leaf.node.active
                 fontFamily: leaf.tab.sessionFontFamily && leaf.tab.sessionFontFamily.length > 0 ? leaf.tab.sessionFontFamily : root.defaultFontFamily
                 fontPixelSize: leaf.tab.sessionFontSize > 0 ? leaf.tab.sessionFontSize : root.defaultFontSize
@@ -537,9 +536,6 @@ Item {
             TerminalPaneHeader {
                 id: paneHeader
 
-                // Sits inside the pane frame so the accent border wraps it.
-                readonly property int inset: leaf.node.active ? 2 : 1
-
                 paneId: leaf.node.id || ""
                 paneTitle: leaf.tab.title || leaf.tab.identity || qsTr("Terminal pane")
                 active: !!leaf.node.active
@@ -547,14 +543,11 @@ Item {
                 running: !!leaf.tab.running
                 connecting: !!leaf.tab.connecting || !!leaf.tab.reconnecting
                 actionsWidth: paneActions.visible ? paneActions.implicitWidth + 12 : 0
-                cornerRadius: Theme.radiusControl - inset
+                cornerRadius: 0
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                anchors.leftMargin: inset
-                anchors.rightMargin: inset
-                anchors.topMargin: inset
-                height: leaf.paneHeaderVisible ? 32 - inset : 0
+                height: leaf.paneHeaderVisible ? 32 : 0
                 visible: height > 0
                 z: 12
                 onActivated: {
@@ -993,6 +986,7 @@ Item {
             leadingPane: firstNode
             trailingPane: secondNode
             ratio: node.ratio
+            emphasized: root.paneCount > 1 && ((!!node.first && !!node.first.active) || (!!node.second && !!node.second.active))
             onRatioEdited: value => root.controller.setTerminalSplitRatio(node.id, value)
 
             Item {

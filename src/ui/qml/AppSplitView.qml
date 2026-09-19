@@ -7,6 +7,9 @@ SplitView {
     required property Item leadingPane
     required property Item trailingPane
     property real ratio: 0.5
+    // Marks the divider next to the active terminal pane (Windows Terminal
+    // style): the pane itself draws no frame, the shared edge carries the accent.
+    property bool emphasized: false
     signal ratioEdited(real value)
     readonly property real availableSpan: Math.max(0, (orientation === Qt.Horizontal ? width : height) - 6)
     readonly property real leadingSize: leadingPane ? (orientation === Qt.Horizontal ? leadingPane.width : leadingPane.height) : 0
@@ -90,6 +93,13 @@ SplitView {
         implicitWidth: 6
         implicitHeight: 6
         color: SplitHandle.hovered || SplitHandle.pressed ? Theme.accent : Theme.border
+        Rectangle {
+            anchors.centerIn: parent
+            width: control.orientation === Qt.Horizontal ? 2 : parent.width
+            height: control.orientation === Qt.Horizontal ? parent.height : 2
+            color: Theme.accent
+            visible: control.emphasized && !parent.SplitHandle.hovered && !parent.SplitHandle.pressed
+        }
         SplitHandleObserver {
             anchors.fill: parent
             property real initialCoordinate: 0
