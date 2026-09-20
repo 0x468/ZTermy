@@ -8,28 +8,27 @@ MouseArea {
     required property Item terminalArea
 
     HoverHandler {
-        id: paneHeaderHover
+        id: paneDragSourceHover
         // Observe the host without placing a permanently visible input layer
         // above its controls. Only the actual header drag claims the pointer.
         parent: control.parent
         blocking: false
-        property bool overHeader: false
+        property bool overDragSource: false
         onPointChanged: {
             if (control.pressed)
                 return;
             const global = control.hostRoot.mapToGlobal(point.position.x, point.position.y);
-            const header = control.hostRoot.currentPage === "terminal" && control.hostRoot.paneHeadersVisible ? control.coordinator.viewportAt(control.terminalArea, global, "terminalPaneHeader-") : null;
-            overHeader = !!header && header.mapFromGlobal(global.x, global.y).x < header.dragAreaWidth;
+            overDragSource = !!control.dragSourceAt(global);
         }
         onHoveredChanged: {
             if (!hovered)
-                overHeader = false;
+                overDragSource = false;
         }
     }
 
     anchors.fill: parent
     z: 80
-    visible: pressed || (paneHeaderHover.overHeader && control.hostRoot.currentPage === "terminal" && control.hostRoot.paneHeadersVisible)
+    visible: pressed || (paneDragSourceHover.overDragSource && control.hostRoot.currentPage === "terminal")
     acceptedButtons: Qt.LeftButton
     preventStealing: true
     property point pressPoint: Qt.point(0, 0)
@@ -37,15 +36,40 @@ MouseArea {
     property string paneId: ""
     property string paneTitle: ""
     property bool dragging: false
+    property bool toggleHeadersOnClick: false
+
+    function dragSourceAt(global) {
+        if (control.hostRoot.currentPage !== "terminal")
+            return null;
+        const handle = control.coordinator.viewportAt(control.terminalArea, global, "terminalPaneAction-headers-");
+        if (handle)
+            return {
+                "paneId": handle.dragPaneId,
+                "paneTitle": handle.dragPaneTitle,
+                "toggleHeaders": true
+            };
+        if (!control.hostRoot.paneHeadersVisible)
+            return null;
+        const header = control.coordinator.viewportAt(control.terminalArea, global, "terminalPaneHeader-");
+        if (!header || header.mapFromGlobal(global.x, global.y).x >= header.dragAreaWidth)
+            return null;
+        return {
+            "paneId": header.paneId,
+            "paneTitle": header.paneTitle,
+            "toggleHeaders": false
+        };
+    }
+
     onPressed: mouse => {
         const global = mapToGlobal(mouse.x, mouse.y);
-        const header = control.hostRoot.currentPage === "terminal" ? control.coordinator.viewportAt(control.terminalArea, global, "terminalPaneHeader-") : null;
-        if (!header || header.mapFromGlobal(global.x, global.y).x >= header.dragAreaWidth) {
+        const source = control.dragSourceAt(global);
+        if (!source) {
             mouse.accepted = false;
             return;
         }
-        paneId = header.paneId;
-        paneTitle = header.paneTitle;
+        paneId = source.paneId;
+        paneTitle = source.paneTitle;
+        toggleHeadersOnClick = source.toggleHeaders;
         pressPoint = Qt.point(mouse.x, mouse.y);
         pointerPoint = pressPoint;
         dragging = false;
@@ -69,14 +93,19 @@ MouseArea {
             control.coordinator.finishPaneDrop(id, mouse.x < 0 || mouse.y < 0 || mouse.x > width || mouse.y > height);
         } else {
             control.coordinator.draggedPaneId = "";
-            if (control.hostRoot.controller.activateTerminalPane(id))
+            if (toggleHeadersOnClick) {
+                control.hostRoot.toggleTerminalPaneHeaders();
+            } else if (control.hostRoot.controller.activateTerminalPane(id)) {
                 control.hostRoot.focusTerminalAfterLayout();
+            }
         }
         dragging = false;
+        toggleHeadersOnClick = false;
     }
     function cancelDrag() {
         paneId = "";
         dragging = false;
+        toggleHeadersOnClick = false;
         control.coordinator.draggedPaneId = "";
         control.coordinator.dropTarget = ({});
     }

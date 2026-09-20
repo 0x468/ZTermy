@@ -6,12 +6,36 @@ Release assets are published through GitHub Releases.
 
 ## Unreleased
 
+## 0.5.1 — 汐 — 2026-09-21
+
+半轮月，一道水
+
+- Reattach detached panes through the native window-drag path without treating
+  the final Windows move event as a cancelled gesture. Tab insertion and pane
+  layout targets continue to use the shared workspace-transfer resolver.
+- Release Windows 11 24H2 pseudoconsole ownership before draining and closing
+  ConPTY, preventing headless `conhost.exe` processes from surviving ztermy.
+- Refine the release card with moon glow, layered water, moving foam and lunar
+  reflections. Spring tides and pointer hover now raise a continuous waterline
+  instead of only bending several quiet strokes.
 - Added explicit terminal lifecycle preferences for automatic pane closing,
   workspace restoration, local-shell reopening, and saved SSH reconnection
   (settings schema 38).
 - Ended local and SSH panes now share a focused reopen/reconnect-or-close flow;
   the redundant host-review action was removed.
 - Removed repeated category headings and explanatory copy from settings content.
+- Hide pane titles and action toolbars by default in both embedded and detached
+  terminals. The title toggle now doubles as a 10 px drag handle while retaining
+  its click action; existing pane reorder, tab merge, detach and reattach paths
+  remain the single transfer implementation.
+- Replace the symbolic half moon with a cratered procedural lunar cycle and a
+  continuously moving waterline. New and full phases produce spring tides,
+  quarter phases produce neap tides, and hover temporarily raises the water;
+  reduced-motion and performance modes keep the scene static.
+- Restore native `HTMAXBUTTON` handling for detached panes so Windows 11 can
+  show Snap Layouts. Caption controls now share hover tooltips and the pane
+  toolbar surface, while native window dragging clears stale pressed/focus
+  feedback from the title-toggle handle.
 
 ## 0.5.0 — 汐 — 2026-09-20
 

@@ -3,6 +3,7 @@
 #include "application/AppController.h"
 #include "platform/windows/NativeWindow.h"
 #include "ui/WindowStateRuntimeSmoke.h"
+#include "ui/terminal/DetachedPaneWindowRuntimeSmoke.h"
 #include "ui/terminal/TerminalItem.h"
 
 #include <QDir>
@@ -129,68 +130,6 @@ inline bool verifyWholeTabMouseMerge(NativeWindow &window, AppController &contro
     processWindowEventsFor(std::chrono::milliseconds{250});
     return passed;
 }
-// Drives a detached window through its own QML caption buttons:
-// maximize -> minimize -> present -> restore, checking the same native state
-// the main-window smoke checks, so the WindowControl path used by detached
-// windows has the same evidence as the main title bar.
-inline bool verifyDetachedCaptionStateRoundTrip(QQuickWindow &detached, const QString &paneId,
-                                                const QString &outputDirectory)
-{
-    using namespace std::chrono_literals;
-    const auto clickCaption = [&detached, &paneId](const QString &kind) {
-        // Repeater delegates are not QObject children of the window; walk the items.
-        const QString name = QStringLiteral("detachedWindowAction-") + kind + QLatin1Char('-') + paneId;
-        auto *button = visualQuickItem(detached.contentItem(), name.toLatin1().constData());
-        if (button == nullptr)
-        {
-            qWarning() << "Detached caption button not found:" << kind;
-            return false;
-        }
-        clickMouse(detached, button->mapToScene({button->width() / 2, button->height() / 2}));
-        return true;
-    };
-    const auto handle = reinterpret_cast<HWND>(detached.winId()); // NOLINT(performance-no-int-to-ptr)
-
-    const bool maximized = clickCaption(QStringLiteral("maximize"))
-                           && settleWindowUntil(
-                               [handle] {
-                                   return IsZoomed(handle) != FALSE;
-                               },
-                               3s);
-    qInfo() << "Detached caption maximize:" << maximized;
-    const bool captured =
-        detached.grabWindow().save(QDir(outputDirectory).filePath(QStringLiteral("detached-pane-maximized.png")));
-
-    const bool minimizedKeepsMaximize = clickCaption(QStringLiteral("minimize"))
-                                        && settleWindowUntil(
-                                            [&detached, handle] {
-                                                return IsIconic(handle) != FALSE
-                                                       && detached.windowStates().testFlag(Qt::WindowMaximized)
-                                                       && restoresToMaximized(handle);
-                                            },
-                                            2s);
-    qInfo() << "Detached caption minimize keeps maximized state:" << minimizedKeepsMaximize
-            << "iconic=" << (IsIconic(handle) != FALSE) << "states=" << detached.windowStates()
-            << "restoreToMaximized=" << restoresToMaximized(handle);
-
-    // Workspace activation presents detached windows through the same owner.
-    windowing::present(detached);
-    const bool presentedMaximized = settleWindowUntil(
-        [handle] {
-            return IsIconic(handle) == FALSE && IsZoomed(handle) != FALSE;
-        },
-        2s);
-    qInfo() << "Detached present restores maximized window:" << presentedMaximized;
-
-    const bool restored = clickCaption(QStringLiteral("maximize"))
-                          && settleWindowUntil(
-                              [handle] {
-                                  return IsZoomed(handle) == FALSE && IsIconic(handle) == FALSE;
-                              },
-                              2s);
-    qInfo() << "Detached caption restore:" << restored;
-    return maximized && captured && minimizedKeepsMaximize && presentedMaximized && restored;
-}
 // creates no remote sessions or additional terminal input.
 inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppController &controller,
                                                  const QString &outputDirectory)
@@ -290,18 +229,28 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
     passed = passed && !otherId.isEmpty() && root->property("zoomedTerminalPaneId").toString().isEmpty()
              && !root->property("paneHeadersVisible").toBool();
     qInfo() << "Window transfer isolated zoom/header state:" << passed;
-    QMetaObject::invokeMethod(root, "toggleTerminalPaneHeaders");
     settle();
     const QString singlePaneId = controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString();
-    auto *singleHeader = window.findChild<QQuickItem *>(QStringLiteral("terminalPaneHeader-") + singlePaneId);
-    if (singleHeader)
+    auto *singleHandle =
+        visualQuickItem(root, (QStringLiteral("terminalPaneAction-headers-") + singlePaneId).toLatin1().constData());
+    if (singleHandle)
     {
-        const QPointF start = singleHeader->mapToScene({12, 16});
+        QPointF start = singleHandle->mapToScene({singleHandle->width() / 2, singleHandle->height() / 2});
+        clickMouse(window, start);
+        settle();
+        const bool handleShowsTitle = root->property("paneHeadersVisible").toBool();
+        start = singleHandle->mapToScene({singleHandle->width() / 2, singleHandle->height() / 2});
+        clickMouse(window, start);
+        settle();
+        const bool handleHidesTitle = !root->property("paneHeadersVisible").toBool();
+        qInfo() << "Pane handle toggles titles on click:" << handleShowsTitle << handleHidesTitle;
+        passed = passed && handleShowsTitle && handleHidesTitle;
+        start = singleHandle->mapToScene({singleHandle->width() / 2, singleHandle->height() / 2});
         const QPointF end{-30, start.y()};
         dragMouse(window, start, end, 8);
         settle();
         passed = passed && root->property("detachedTerminalPaneId").toString() == singlePaneId;
-        qInfo() << "Window transfer single-pane detach:" << passed;
+        qInfo() << "Hidden-title handle detaches a single pane:" << passed;
         QMetaObject::invokeMethod(root, "reattachTerminalPane");
         settle();
     }
@@ -330,17 +279,44 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
     if (detached)
     {
         const auto *detachedHeader = detached->findChild<QQuickItem *>(QStringLiteral("terminalPaneHeader-") + paneId);
-        const bool detachedHeaderVisible = detached->property("paneHeadersVisible").toBool() && detachedHeader
-                                           && detachedHeader->isVisible() && detachedHeader->height() >= 32;
-        qInfo() << "Detached pane title is visible by default:" << detachedHeaderVisible;
-        passed = passed && detachedHeaderVisible;
-        const auto *actions = detached->findChild<QQuickItem *>(QStringLiteral("terminalPaneActions-") + paneId);
+        const bool detachedHeaderHidden =
+            !detached->property("paneHeadersVisible").toBool() && detachedHeader && !detachedHeader->isVisible();
+        qInfo() << "Detached pane title is hidden by default:" << detachedHeaderHidden;
+        passed = passed && detachedHeaderHidden;
+        const auto handle = reinterpret_cast<HWND>(detached->winId()); // NOLINT(performance-no-int-to-ptr)
+        auto *actions = detached->findChild<QQuickItem *>(QStringLiteral("terminalPaneActions-") + paneId);
+        const bool toolbarHidden = actions && actions->opacity() < 0.01;
+        auto *maximizeAction =
+            visualQuickItem(detached->contentItem(),
+                            (QStringLiteral("detachedWindowAction-maximize-") + paneId).toLatin1().constData());
+        bool nativeSnapHit = false;
+        if (maximizeAction)
+        {
+            const QPointF center =
+                maximizeAction->mapToScene({maximizeAction->width() / 2, maximizeAction->height() / 2});
+            const QPoint screen = detached->mapToGlobal(center.toPoint());
+            const LPARAM position = MAKELPARAM(screen.x(), screen.y());
+            nativeSnapHit = SendMessageW(handle, WM_NCHITTEST, 0, position) == HTMAXBUTTON;
+        }
+        detached->setProperty("nativeMaximizeButtonHovered", true);
+        processWindowEventsFor(std::chrono::milliseconds{120});
+        const bool toolbarRevealed =
+            actions && actions->opacity() > 0.99 && detached->property("nativeMaximizeButtonHovered").toBool();
+        const auto *toolbarSurface = visualQuickItem(
+            detached->contentItem(), (QStringLiteral("terminalPaneToolbarSurface-") + paneId).toLatin1().constData());
+        const bool unifiedToolbarSurface = toolbarSurface && toolbarSurface->opacity() > 0.8;
+        detached->setProperty("nativeMaximizeButtonHovered", false);
+        processWindowEventsFor(std::chrono::milliseconds{120});
+        const bool toolbarHiddenAgain = actions && actions->opacity() < 0.01;
+        qInfo() << "Detached pane toolbar reveals only on hover:" << toolbarHidden << toolbarRevealed
+                << toolbarHiddenAgain << "surface=" << unifiedToolbarSurface << "snap=" << nativeSnapHit;
+        passed =
+            passed && toolbarHidden && toolbarRevealed && toolbarHiddenAgain && unifiedToolbarSurface && nativeSnapHit;
         const QPointF toolbarOrigin = actions ? actions->mapToScene(QPointF{}) : QPointF{-1, -1};
         const bool controlsFlush = actions && qAbs(toolbarOrigin.y()) < 1
                                    && qAbs(toolbarOrigin.x() + actions->width() - detached->width()) < 1;
         qInfo() << "Detached window controls align with top and right edges:" << controlsFlush;
         passed = passed && controlsFlush;
-        const auto handle = reinterpret_cast<HWND>(detached->winId()); // NOLINT(performance-no-int-to-ptr)
         passed = passed && GetWindow(handle, GW_OWNER) == nullptr
                  && (GetWindowLongPtrW(handle, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) == 0;
         const auto originalSize = detached->size();
@@ -356,8 +332,11 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
         passed = passed && detached->isVisible()
                  && root->property("detachedTerminalWorkspaceId").toString() == detachedWorkspaceId;
     }
-    QMetaObject::invokeMethod(root, "reattachTerminalPane");
-    qInfo() << "Window transfer native material and reattachment:" << passed;
+    auto *targetTab = visualQuickItem(root, (QStringLiteral("workspaceTitle-") + workspaceId).toLatin1().constData());
+    passed =
+        detached && targetTab
+        && verifyDetachedWindowTabMerge(window, controller, *detached, *targetTab, detachedWorkspaceId, workspaceId)
+        && passed;
     passed = verifyWholeTabMouseMerge(window, controller, workspaceId, otherId, paneId) && passed;
     passed = verifyNestedPaneEdges(window, controller, outputDirectory) && passed;
     passed = verifyDetachedCloseSelection(window, controller) && passed;

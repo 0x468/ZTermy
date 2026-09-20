@@ -11,7 +11,10 @@ Window {
     property var workspace: ({})
     property var pendingPasteViewport: null
     property int pendingPasteLineCount: 0
-    property bool paneHeadersVisible: true
+    property bool paneHeadersVisible: false
+    property bool paneDockMoveActive: false
+    property bool nativeMaximizeButtonHovered: false
+    property bool nativeMaximizeButtonPressed: false
 
     transientParent: null
     // Same native style as the main window: Windows owns maximize, minimize
@@ -43,6 +46,8 @@ Window {
         paneCount: detachedTerminalWindow.workspace.paneCount || 1
         headersVisible: detachedTerminalWindow.paneHeadersVisible
         detachedPane: true
+        nativeMaximizeButtonHovered: detachedTerminalWindow.nativeMaximizeButtonHovered
+        nativeMaximizeButtonPressed: detachedTerminalWindow.nativeMaximizeButtonPressed
         defaultFontFamily: detachedTerminalWindow.hostRoot.controller.terminalFontFamily
         defaultFontSize: detachedTerminalWindow.hostRoot.controller.terminalFontSize
         defaultLigatures: detachedTerminalWindow.hostRoot.controller.terminalLigatures

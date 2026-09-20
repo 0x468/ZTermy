@@ -8,10 +8,13 @@ RowLayout {
     id: root
     required property var controller
     required property string paneId
+    property string paneTitle: ""
     property int paneCount: 1
     property bool headersVisible: false
     property bool zoomed: false
     property bool detached: false
+    property bool nativeMaximizeButtonHovered: false
+    property bool nativeMaximizeButtonPressed: false
     property bool revealed: headersVisible || detached
     readonly property bool interactionActive: hover.hovered || activeFocus || newPaneMenu.visible
     signal zoomRequested
@@ -44,6 +47,9 @@ RowLayout {
         delegate: AppIconButton {
             id: button
             required property string modelData
+            property string dragPaneId: root.paneId
+            property string dragPaneTitle: root.paneTitle
+            property bool suppressClick: false
             objectName: "terminalPaneAction-" + modelData + "-" + root.paneId
             visible: {
                 switch (modelData) {
@@ -81,6 +87,10 @@ RowLayout {
             iconColor: selected ? Theme.accent : Theme.workspaceText
             toolTipEnabled: !newPaneMenu.visible
             onClicked: {
+                if (suppressClick) {
+                    suppressClick = false;
+                    return;
+                }
                 switch (modelData) {
                 case "headers":
                     root.toggleHeadersRequested();
@@ -103,6 +113,27 @@ RowLayout {
                     break;
                 }
             }
+            DragHandler {
+                target: null
+                acceptedButtons: Qt.LeftButton
+                dragThreshold: 10
+                enabled: button.modelData === "headers" && root.detached
+                onActiveChanged: {
+                    if (active) {
+                        button.suppressClick = true;
+                        const window = button.Window.window;
+                        window.paneDockMoveActive = true;
+                        if (!window.startSystemMove())
+                            window.paneDockMoveActive = false;
+                    } else if (button.suppressClick) {
+                        Qt.callLater(() => {
+                            button.down = false;
+                            button.focus = false;
+                            button.suppressClick = false;
+                        });
+                    }
+                }
+            }
         }
     }
     QtObject {
@@ -118,7 +149,8 @@ RowLayout {
             Layout.preferredHeight: 32
             kind: modelData
             chrome: detachedChrome
-            nativeMaximizeHandling: false
+            externallyHovered: modelData === "maximize" && root.nativeMaximizeButtonHovered
+            externallyPressed: modelData === "maximize" && root.nativeMaximizeButtonPressed
             accessibleName: modelData === "minimize" ? qsTranslate("TitleWindowActions", "Minimize") : modelData === "close" ? qsTranslate("TitleWindowActions", "Close") : detachedChrome.maximized ? qsTranslate("TitleWindowActions", "Restore") : qsTranslate("TitleWindowActions", "Maximize")
             onActivated: {
                 const window = root.Window.window;

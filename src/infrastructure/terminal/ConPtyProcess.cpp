@@ -1,10 +1,12 @@
 #include "infrastructure/terminal/ConPtyProcess.h"
 
 #include <Windows.h>
+#include <TlHelp32.h>
 
 #include <algorithm>
 #include <array>
 #include <limits>
+#include <mutex>
 #include <utility>
 #include <vector>
 
@@ -83,6 +85,12 @@ public:
 
     [[nodiscard]] HPCON release() noexcept { return std::exchange(m_handle, nullptr); }
 
+    [[nodiscard]] static bool closesAsynchronously() noexcept
+    {
+        const HMODULE kernel = GetModuleHandleW(L"kernel32.dll");
+        return kernel != nullptr && GetProcAddress(kernel, "ReleasePseudoConsole") != nullptr;
+    }
+
     void reset(const HPCON replacement = nullptr) noexcept
     {
         if (*this)
@@ -95,6 +103,20 @@ public:
 private:
     HPCON m_handle = nullptr;
 };
+
+[[nodiscard]] std::vector<DWORD> childConsoleHosts()
+{
+    std::vector<DWORD> processes;
+    const HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE)
+        return processes;
+    PROCESSENTRY32W entry{.dwSize = sizeof(PROCESSENTRY32W)};
+    for (BOOL more = Process32FirstW(snapshot, &entry); more; more = Process32NextW(snapshot, &entry))
+        if (entry.th32ParentProcessID == GetCurrentProcessId() && _wcsicmp(entry.szExeFile, L"conhost.exe") == 0)
+            processes.push_back(entry.th32ProcessID);
+    CloseHandle(snapshot);
+    return processes;
+}
 
 [[nodiscard]] std::error_code lastSystemError() noexcept
 {
@@ -126,6 +148,7 @@ struct ConPtyProcess::Impl
     UniqueHandle outputRead;
     UniqueHandle process;
     UniqueHandle processThread;
+    UniqueHandle consoleHostProcess;
     UniquePseudoConsole pseudoConsole;
 };
 
@@ -171,11 +194,23 @@ std::error_code ConPtyProcess::start(const std::wstring &applicationName, std::w
         .X = static_cast<SHORT>(size.columns),
         .Y = static_cast<SHORT>(size.rows),
     };
-    const HRESULT pseudoConsoleResult =
-        CreatePseudoConsole(consoleSize, inputRead.get(), outputWrite.get(), 0, &pseudoConsoleRaw);
-    if (FAILED(pseudoConsoleResult))
+    UniqueHandle consoleHostProcess;
     {
-        return hresultError(pseudoConsoleResult);
+        static std::mutex creationMutex;
+        std::scoped_lock creationLock(creationMutex);
+        const auto consoleHostsBefore = childConsoleHosts();
+        const HRESULT pseudoConsoleResult =
+            CreatePseudoConsole(consoleSize, inputRead.get(), outputWrite.get(), 0, &pseudoConsoleRaw);
+        if (FAILED(pseudoConsoleResult))
+            return hresultError(pseudoConsoleResult);
+        for (const DWORD processId : childConsoleHosts())
+        {
+            if (std::ranges::find(consoleHostsBefore, processId) != consoleHostsBefore.end())
+                continue;
+            consoleHostProcess.reset(
+                OpenProcess(SYNCHRONIZE | PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId));
+            break;
+        }
     }
     UniquePseudoConsole pseudoConsole(pseudoConsoleRaw);
 
@@ -249,6 +284,7 @@ std::error_code ConPtyProcess::start(const std::wstring &applicationName, std::w
     m_impl->outputRead = std::move(outputRead);
     m_impl->process = UniqueHandle(processInformation.hProcess);
     m_impl->processThread = UniqueHandle(processInformation.hThread);
+    m_impl->consoleHostProcess = std::move(consoleHostProcess);
     m_impl->pseudoConsole = std::move(pseudoConsole);
     return {};
 }
@@ -374,12 +410,39 @@ void ConPtyProcess::close() noexcept
         WaitForSingleObject(m_impl->process.get(), 5'000);
     }
     m_impl->inputWrite.reset();
+    if (m_impl->pseudoConsole.closesAsynchronously())
+    {
+        m_impl->pseudoConsole.reset();
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{1};
+        std::array<std::byte, 4096> discarded{};
+        while (m_impl->outputRead && std::chrono::steady_clock::now() < deadline)
+        {
+            DWORD available = 0;
+            if (PeekNamedPipe(m_impl->outputRead.get(), nullptr, 0, nullptr, &available, nullptr) == FALSE)
+                break;
+            if (available == 0)
+            {
+                Sleep(10);
+                continue;
+            }
+            DWORD read = 0;
+            const DWORD requested = (std::min)(available, static_cast<DWORD>(discarded.size()));
+            if (ReadFile(m_impl->outputRead.get(), discarded.data(), requested, &read, nullptr) == FALSE)
+                break;
+        }
+    }
     if (m_impl->outputRead)
     {
         CancelIoEx(m_impl->outputRead.get(), nullptr);
     }
     m_impl->outputRead.reset();
     m_impl->pseudoConsole.reset();
+    if (m_impl->consoleHostProcess && WaitForSingleObject(m_impl->consoleHostProcess.get(), 1'000) == WAIT_TIMEOUT
+        && TerminateProcess(m_impl->consoleHostProcess.get(), ERROR_CANCELLED) != FALSE)
+    {
+        WaitForSingleObject(m_impl->consoleHostProcess.get(), 1'000);
+    }
+    m_impl->consoleHostProcess.reset();
     m_impl->processThread.reset();
     m_impl->process.reset();
 }

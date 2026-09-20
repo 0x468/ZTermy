@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 project(
     ztermy
-    VERSION 0.5.0
+    VERSION 0.5.1
     DESCRIPTION "A native Windows SSH terminal"
     LANGUAGES C CXX RC
 )
@@ -979,6 +979,8 @@ qt_add_executable(ztermy WIN32
     src/core/logging/Logging.h
     src/platform/windows/CrashDiagnostics.cpp
     src/platform/windows/CrashDiagnostics.h
+    src/platform/windows/DetachedWindowNativeFrame.cpp
+    src/platform/windows/DetachedWindowNativeFrame.h
     src/platform/windows/NativeWindow.cpp
     src/platform/windows/NativeWindow.h
     src/platform/windows/WindowHitTest.cpp

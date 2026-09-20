@@ -123,8 +123,8 @@ QtObject {
 
     function updateWindowDrop(window, globalPosition) {
         movingWindow = window;
-        window.opacity = 0.72;
         updateDropTarget(globalPosition);
+        window.opacity = dropTarget.mode ? 0.72 : 1;
     }
 
     function updateDropTarget(globalPosition) {

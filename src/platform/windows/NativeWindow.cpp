@@ -3,7 +3,7 @@
 #include <QTimer>
 
 #include "core/windowing/WindowPresenter.h"
-#include "platform/windows/WindowHitTest.h"
+#include "platform/windows/DetachedWindowNativeFrame.h"
 
 #include <QCoreApplication>
 #include <QEvent>
@@ -99,38 +99,6 @@ using SetWindowCompositionAttributeFn = BOOL(WINAPI *)(HWND, WindowCompositionAt
     return applied;
 }
 
-[[nodiscard]] LRESULT toNativeHitArea(const ztermy::windowing::HitArea area) noexcept
-{
-    using enum ztermy::windowing::HitArea;
-
-    switch (area)
-    {
-        case Caption:
-            return HTCAPTION;
-        case MaximizeButton:
-            return HTMAXBUTTON;
-        case Left:
-            return HTLEFT;
-        case Top:
-            return HTTOP;
-        case Right:
-            return HTRIGHT;
-        case Bottom:
-            return HTBOTTOM;
-        case TopLeft:
-            return HTTOPLEFT;
-        case TopRight:
-            return HTTOPRIGHT;
-        case BottomLeft:
-            return HTBOTTOMLEFT;
-        case BottomRight:
-            return HTBOTTOMRIGHT;
-        case Client:
-        default:
-            return HTCLIENT;
-    }
-}
-
 } // namespace
 
 namespace ztermy
@@ -174,6 +142,12 @@ NativeWindow::NativeWindow(const bool performanceMode, const bool opaqueSurface,
 NativeWindow::~NativeWindow()
 {
     QCoreApplication::instance()->removeNativeEventFilter(this);
+    for (auto iterator = m_detachedWindows.cbegin(); iterator != m_detachedWindows.cend(); ++iterator)
+    {
+        if (iterator.value())
+            QObject::disconnect(iterator.value(), nullptr, this, nullptr);
+    }
+    m_detachedWindows.clear();
     removeTrayIcon();
     uninstallWindowProcedure();
 }
@@ -652,29 +626,6 @@ LRESULT CALLBACK NativeWindow::windowProcedure(const HWND windowHandle, const UI
     return CallWindowProcW(window->m_originalWindowProcedure, windowHandle, message, wParam, lParam);
 }
 
-namespace
-{
-
-// WM_NCHITTEST arrives on every pointer move over the frame; the resize
-// border only changes with the window DPI, so the system metrics are
-// looked up once per DPI instead of twice per message.
-[[nodiscard]] int resizeBorderForWindow(const HWND windowHandle)
-{
-    static thread_local UINT cachedDpi = 0;
-    static thread_local int cachedBorder = 1;
-    const UINT dpi = GetDpiForWindow(windowHandle);
-    if (dpi != cachedDpi)
-    {
-        const int frame = GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi);
-        const int padding = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
-        cachedBorder = std::max(frame + padding, 1);
-        cachedDpi = dpi;
-    }
-    return cachedBorder;
-}
-
-} // namespace
-
 LRESULT NativeWindow::nativeHitTest(const HWND windowHandle, const LPARAM lParam) const
 {
     POINT clientPoint{
@@ -686,7 +637,7 @@ LRESULT NativeWindow::nativeHitTest(const HWND windowHandle, const LPARAM lParam
     RECT clientRect{};
     GetClientRect(windowHandle, &clientRect);
 
-    const int resizeBorder = resizeBorderForWindow(windowHandle);
+    const int resizeBorder = windowing::resizeBorderForWindow(windowHandle);
     const qreal scale = devicePixelRatio();
 
     const windowing::HitTestMetrics metrics{
@@ -719,7 +670,7 @@ LRESULT NativeWindow::nativeHitTest(const HWND windowHandle, const LPARAM lParam
                            << metrics.maximizeButton.width << metrics.maximizeButton.height;
     }
 
-    return toNativeHitArea(area);
+    return windowing::toNativeHitArea(area);
 }
 
 bool NativeWindow::handleWindowProcedureMessage(const HWND windowHandle, const UINT message, const WPARAM wParam,
@@ -992,44 +943,15 @@ bool NativeWindow::nativeEventFilter(const QByteArray &, void *message, qintptr 
     const auto window = m_detachedWindows.value(reinterpret_cast<WId>(native->hwnd));
     if (!window)
         return false;
-    if (native->message == WM_ENTERSIZEMOVE)
-        window->setProperty("transferStartPosition", window->position());
-    if (native->message == WM_MOVING)
+    const bool paneDockMoveActive = window->property("paneDockMoveActive").toBool();
+    if (paneDockMoveActive && (native->message == WM_MOVING || native->message == WM_MOVE))
         emit detachedWindowMoving(window, QCursor::pos());
-    if (native->message == WM_EXITSIZEMOVE)
-        emit detachedWindowMoved(window, QCursor::pos(),
-                                 GetAsyncKeyState(VK_ESCAPE) < 0
-                                     || window->property("transferStartPosition").toPoint() == window->position());
-    if (native->message == WM_NCCALCSIZE && native->wParam != FALSE)
+    if (paneDockMoveActive && native->message == WM_EXITSIZEMOVE)
     {
-        if (IsZoomed(native->hwnd) != FALSE)
-        {
-            MONITORINFO monitor{.cbSize = sizeof(MONITORINFO)};
-            if (GetMonitorInfoW(MonitorFromWindow(native->hwnd, MONITOR_DEFAULTTONEAREST), &monitor) != FALSE)
-            {
-                auto *parameters =
-                    reinterpret_cast<NCCALCSIZE_PARAMS *>(native->lParam); // NOLINT(performance-no-int-to-ptr)
-                parameters->rgrc[0] = monitor.rcWork;
-            }
-        }
-        *result = 0;
-        return true;
+        window->setProperty("paneDockMoveActive", false);
+        emit detachedWindowMoved(window, QCursor::pos(), GetAsyncKeyState(VK_ESCAPE) < 0);
     }
-    if (native->message == WM_NCHITTEST)
-    {
-        RECT bounds{};
-        if (GetWindowRect(native->hwnd, &bounds) == FALSE)
-            return false;
-        const windowing::HitTestMetrics metrics{.resizeBorder = resizeBorderForWindow(native->hwnd),
-                                                .caption = {},
-                                                .maximizeButton = {}};
-        *result = toNativeHitArea(windowing::classifyHitTest(
-            {.x = GET_X_LPARAM(native->lParam) - bounds.left, .y = GET_Y_LPARAM(native->lParam) - bounds.top},
-            {.width = bounds.right - bounds.left, .height = bounds.bottom - bounds.top}, metrics,
-            IsZoomed(native->hwnd) != FALSE));
-        return true;
-    }
-    return false;
+    return windowing::handleDetachedWindowFrameMessage(*window, *native, result);
 }
 
 bool NativeWindow::configureDetachedWindow(QQuickWindow *window)
@@ -1037,6 +959,8 @@ bool NativeWindow::configureDetachedWindow(QQuickWindow *window)
     if (!window)
         return false;
     window->setIcon(icon());
+    window->setProperty("nativeMaximizeButtonHovered", false);
+    window->setProperty("nativeMaximizeButtonPressed", false);
     const WId id = window->winId();
     if (!m_detachedWindows.contains(id))
     {

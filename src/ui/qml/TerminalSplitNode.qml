@@ -26,6 +26,8 @@ Item {
     property string defaultCursor: "terminal"
     property string zoomedPaneId: ""
     property bool detachedPane: false
+    property bool nativeMaximizeButtonHovered: false
+    property bool nativeMaximizeButtonPressed: false
     property int paneCount: 1
     property bool headersVisible: false
     // Bitmask of the edges this node shares with a sibling pane (1 left, 2 top,
@@ -889,6 +891,7 @@ Item {
             }
 
             Rectangle {
+                objectName: "terminalPaneToolbarSurface-" + leaf.node.id
                 anchors.top: paneActions.top
                 anchors.right: paneActions.right
                 anchors.topMargin: -4
@@ -897,7 +900,7 @@ Item {
                 height: paneActions.height + 8
                 radius: Theme.radiusControl
                 color: Theme.floatingBackground
-                opacity: !leaf.paneHeaderVisible && !root.detachedPane ? paneActions.opacity * 0.82 : 0
+                opacity: !leaf.paneHeaderVisible ? paneActions.opacity * 0.82 : 0
                 visible: opacity > 0
                 z: 12
             }
@@ -907,11 +910,14 @@ Item {
                 objectName: "terminalPaneActions-" + leaf.node.id
                 controller: root.controller
                 paneId: leaf.node.id
+                paneTitle: leaf.tab.title || leaf.tab.identity || qsTr("Terminal pane")
                 paneCount: root.paneCount
                 headersVisible: leaf.paneHeaderVisible
                 zoomed: root.zoomedPaneId === leaf.node.id
                 detached: root.detachedPane
-                revealed: root.detachedPane || leaf.paneHeaderVisible || paneActionRevealHover.hovered || interactionActive
+                nativeMaximizeButtonHovered: root.nativeMaximizeButtonHovered
+                nativeMaximizeButtonPressed: root.nativeMaximizeButtonPressed
+                revealed: root.nativeMaximizeButtonHovered || paneActionRevealHover.hovered || interactionActive
                 anchors.top: parent.top
                 anchors.right: parent.right
                 anchors.topMargin: root.detachedPane ? 0 : leaf.paneHeaderVisible ? 2 : 8

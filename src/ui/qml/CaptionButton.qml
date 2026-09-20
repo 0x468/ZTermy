@@ -63,6 +63,13 @@ Control {
         color: control.closeHighlighted ? Theme.dangerSurfaceText : Theme.text
     }
 
+    AppToolTip {
+        objectName: "captionButtonToolTip"
+        hoverTarget: control
+        text: control.accessibleName
+        visible: control.effectiveHovered && text.length > 0
+    }
+
     MouseArea {
         id: mouseArea
         anchors.fill: parent

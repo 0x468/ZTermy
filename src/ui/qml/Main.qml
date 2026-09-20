@@ -2763,6 +2763,7 @@ Rectangle {
 
     TerminalWindowCoordinator {
         id: terminalWindows
+        objectName: "terminalWindowCoordinator"
         hostRoot: root
         titleTabs: titleTerminalTabs
         newTabButton: titleNewTabContainer

@@ -98,26 +98,41 @@ void ConPtyProcessTests::closingParallelConsolesEndsOwnedShellProcesses()
         CloseHandle(snapshot);
     });
     std::vector<HANDLE> children;
-    const auto cleanup = qScopeGuard([&children] {
+    std::vector<HANDLE> hosts;
+    const auto cleanup = qScopeGuard([&children, &hosts] {
         for (const HANDLE child : children)
         {
             if (WaitForSingleObject(child, 0) == WAIT_TIMEOUT)
                 TerminateProcess(child, ERROR_CANCELLED);
             CloseHandle(child);
         }
+        for (const HANDLE host : hosts)
+        {
+            if (WaitForSingleObject(host, 0) == WAIT_TIMEOUT)
+                TerminateProcess(host, ERROR_CANCELLED);
+            CloseHandle(host);
+        }
     });
     PROCESSENTRY32W entry{.dwSize = sizeof(PROCESSENTRY32W)};
     for (BOOL more = Process32FirstW(snapshot, &entry); more; more = Process32NextW(snapshot, &entry))
     {
-        if (entry.th32ParentProcessID == GetCurrentProcessId() && _wcsicmp(entry.szExeFile, L"cmd.exe") == 0)
+        if (entry.th32ParentProcessID != GetCurrentProcessId())
+            continue;
+        std::vector<HANDLE> *owned = nullptr;
+        if (_wcsicmp(entry.szExeFile, L"cmd.exe") == 0)
+            owned = &children;
+        else if (_wcsicmp(entry.szExeFile, L"conhost.exe") == 0)
+            owned = &hosts;
+        if (owned != nullptr)
         {
             const HANDLE handle = OpenProcess(SYNCHRONIZE | PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION,
                                               FALSE, entry.th32ProcessID);
             QVERIFY(handle != nullptr);
-            children.push_back(handle);
+            owned->push_back(handle);
         }
     }
     QCOMPARE(children.size(), std::size_t{2});
+    QCOMPARE(hosts.size(), std::size_t{2});
     first.close();
     second.close();
     for (const HANDLE child : children)
@@ -127,6 +142,8 @@ void ConPtyProcessTests::closingParallelConsolesEndsOwnedShellProcesses()
         QVERIFY(GetExitCodeProcess(child, &exitCode));
         QCOMPARE(exitCode, DWORD{ERROR_CANCELLED});
     }
+    for (const HANDLE host : hosts)
+        QCOMPARE(WaitForSingleObject(host, 5'000), DWORD{WAIT_OBJECT_0});
 }
 
 void ConPtyProcessTests::wakeEventInterruptsExitWait()
