@@ -42,6 +42,10 @@ QVariantMap AppController::applicationSettingsDefaults() const
         {QStringLiteral("terminalScrollRows"), defaults.terminalScrollRows},
         {QStringLiteral("sftpShowHiddenFiles"), defaults.sftpShowHiddenFiles},
         {QStringLiteral("sftpConfirmDelete"), defaults.sftpConfirmDelete},
+        {QStringLiteral("closePaneOnSessionEnd"), defaults.closePaneOnSessionEnd},
+        {QStringLiteral("preserveTerminalSessions"), defaults.preserveTerminalSessions},
+        {QStringLiteral("reopenLocalSessions"), defaults.reopenLocalSessions},
+        {QStringLiteral("reconnectRemoteSessions"), defaults.reconnectRemoteSessions},
     };
 }
 

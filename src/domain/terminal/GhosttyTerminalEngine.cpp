@@ -56,6 +56,48 @@ public:
     return std::make_error_code(std::errc::invalid_argument);
 }
 
+[[nodiscard]] std::optional<std::string> normalizeSemanticPromptMarks(const std::span<const std::byte> bytes,
+                                                                      std::string &pending)
+{
+    constexpr std::string_view freshLinePrompt{"\x1b]133;A"};
+    const std::string_view incoming(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+    std::size_t trailingPrefixLength = 0;
+    for (std::size_t length = std::min(incoming.size(), freshLinePrompt.size() - 1); length > 0; --length)
+    {
+        if (incoming.ends_with(freshLinePrompt.substr(0, length)))
+        {
+            trailingPrefixLength = length;
+            break;
+        }
+    }
+    if (pending.empty() && !incoming.contains(freshLinePrompt) && trailingPrefixLength == 0)
+    {
+        return std::nullopt;
+    }
+
+    std::string normalized = std::move(pending);
+    normalized.append(incoming);
+    pending.clear();
+    for (std::size_t length = std::min(normalized.size(), freshLinePrompt.size() - 1); length > 0; --length)
+    {
+        if (std::string_view(normalized).ends_with(freshLinePrompt.substr(0, length)))
+        {
+            pending.assign(normalized.end() - static_cast<std::ptrdiff_t>(length), normalized.end());
+            normalized.resize(normalized.size() - length);
+            break;
+        }
+    }
+    for (std::size_t position = 0; (position = normalized.find(freshLinePrompt, position)) != std::string::npos;
+         position += freshLinePrompt.size())
+    {
+        // Windows shells use OSC 133 A as a prompt mark and position the
+        // cursor themselves. Ghostty's Kitty interpretation also inserts a
+        // fresh line, which makes Nushell scroll twice per Enter.
+        normalized[position + freshLinePrompt.size() - 1] = 'P';
+    }
+    return normalized;
+}
+
 template <typename Encoder>
 [[nodiscard]] std::expected<std::vector<std::byte>, std::error_code> encodeTerminalEvent(Encoder &&encoder)
 {
@@ -574,6 +616,7 @@ struct GhosttyTerminalEngine::Impl
     GhosttyMouseEvent mouseEvent = nullptr;
     std::string lastSearchQuery;
     std::optional<std::string> pendingClipboardWrite;
+    std::string pendingSemanticPromptPrefix;
     CopyModeGranularity copyModeGranularity = CopyModeGranularity::character;
     bool copyModeActive = false;
     bool copyModeSelecting = false;
@@ -712,7 +755,10 @@ std::error_code GhosttyTerminalEngine::feed(const std::span<const std::byte> byt
 {
     if (!bytes.empty())
     {
-        ghostty_terminal_vt_write(m_impl->terminal, reinterpret_cast<const std::uint8_t *>(bytes.data()), bytes.size());
+        const auto normalized = normalizeSemanticPromptMarks(bytes, m_impl->pendingSemanticPromptPrefix);
+        const auto content = normalized ? std::as_bytes(std::span(*normalized)) : bytes;
+        ghostty_terminal_vt_write(m_impl->terminal, reinterpret_cast<const std::uint8_t *>(content.data()),
+                                  content.size());
     }
     return {};
 }

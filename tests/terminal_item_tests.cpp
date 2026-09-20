@@ -7,6 +7,7 @@
 
 #include <QColor>
 #include <QDropEvent>
+#include <QFontMetricsF>
 #include <QGuiApplication>
 #include <QHoverEvent>
 #include <QImage>
@@ -101,6 +102,7 @@ private slots:
     void accumulatesWheelDeltasIntoScrollRows();
     void routesTrackedMouseAndWheelToTerminal();
     void exposesScrollbarAndRequestsAbsoluteScroll();
+    void preservesNativeMonospaceCellAdvance();
     void rendersStyledWideCellsAndCursorPixels();
     void keepsBaseTextureDuringCursorBlink();
     void blinksOnlyWhileFocused();
@@ -1305,6 +1307,27 @@ void TerminalItemTests::exposesScrollbarAndRequestsAbsoluteScroll()
     QCOMPARE(scrollSpy.at(2).at(0).toInt(), -1);
     QCOMPARE(scrollSpy.at(3).at(0).toInt(), -40);
     QCOMPARE(scrollSpy.at(4).at(0).toInt(), 40);
+}
+
+void TerminalItemTests::preservesNativeMonospaceCellAdvance()
+{
+    TestableTerminalItem item;
+    item.setFontFamily(QStringLiteral("Cascadia Mono"));
+    item.setFontPixelSize(14);
+    item.setSnapshot(snapshotAt(0, 0));
+    const QRectF originRect = item.inputMethodQuery(Qt::ImCursorRectangle).toRectF();
+    item.setSnapshot(snapshotAt(1, 0));
+
+    QFont font;
+    font.setFamilies({QStringLiteral("Cascadia Mono"), QStringLiteral("Consolas")});
+    font.setPixelSize(14);
+    font.setStyleHint(QFont::Monospace);
+    font.setFixedPitch(true);
+    const qreal nativeAdvance = QFontMetricsF(font).horizontalAdvance(QLatin1Char('M'));
+    const QRectF cursorRect = item.inputMethodQuery(Qt::ImCursorRectangle).toRectF();
+
+    QCOMPARE(cursorRect.x() - originRect.x(), nativeAdvance);
+    QCOMPARE(cursorRect.width(), nativeAdvance);
 }
 
 void TerminalItemTests::rendersStyledWideCellsAndCursorPixels()

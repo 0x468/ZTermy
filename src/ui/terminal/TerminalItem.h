@@ -144,6 +144,7 @@ public:
     void setPerformanceMetricsEnabled(bool enabled) noexcept;
     void resetPerformanceMetrics() noexcept;
     [[nodiscard]] TerminalRenderMetricsSnapshot performanceMetrics() const noexcept;
+    [[nodiscard]] terminal::TerminalGeometry currentTerminalGeometry() const noexcept;
 
 public slots:
     void setSnapshot(ztermy::terminal::TerminalSnapshotPtr snapshot);

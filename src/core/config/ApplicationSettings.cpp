@@ -73,7 +73,9 @@ constexpr qint64 terminalThemeSchemaVersion = 35;
 constexpr qint64 unifiedThemeSchemaVersion = 36;
 // Version 37 adds Aero and retires the second global terminal-opacity layer.
 constexpr qint64 unifiedMaterialSchemaVersion = 37;
-constexpr qint64 currentSchemaVersion = unifiedMaterialSchemaVersion;
+// Version 38 makes pane-exit and startup session restoration behavior explicit.
+constexpr qint64 sessionLifecycleSchemaVersion = 38;
+constexpr qint64 currentSchemaVersion = sessionLifecycleSchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -247,6 +249,10 @@ using ztermy::config::ThemePreference;
     const QJsonValue closeToTrayValue = root.value(QStringLiteral("closeToTray"));
     const QJsonValue performanceModeValue = root.value(QStringLiteral("performanceMode"));
     const QJsonValue connectionHistoryValue = root.value(QStringLiteral("connectionHistoryEnabled"));
+    const QJsonValue closePaneOnSessionEndValue = root.value(QStringLiteral("closePaneOnSessionEnd"));
+    const QJsonValue preserveTerminalSessionsValue = root.value(QStringLiteral("preserveTerminalSessions"));
+    const QJsonValue reopenLocalSessionsValue = root.value(QStringLiteral("reopenLocalSessions"));
+    const QJsonValue reconnectRemoteSessionsValue = root.value(QStringLiteral("reconnectRemoteSessions"));
     const QJsonValue effectsTierValue = root.value(QStringLiteral("effectsTier"));
     const QJsonValue terminalThemeValue = root.value(QStringLiteral("terminalTheme"));
     const QJsonValue lightThemeValue = root.value(QStringLiteral("lightTheme"));
@@ -306,6 +312,9 @@ using ztermy::config::ThemePreference;
     if ((version >= closeToTraySchemaVersion && !closeToTrayValue.isBool())
         || (version >= performanceModeSchemaVersion && !performanceModeValue.isBool())
         || (version >= connectionHistorySchemaVersion && !connectionHistoryValue.isBool())
+        || (version >= sessionLifecycleSchemaVersion
+            && (!closePaneOnSessionEndValue.isBool() || !preserveTerminalSessionsValue.isBool()
+                || !reopenLocalSessionsValue.isBool() || !reconnectRemoteSessionsValue.isBool()))
         || (version >= effectsTierSchemaVersion && !effectsTierValue.isString())
         || (version >= unifiedThemeSchemaVersion && (!lightThemeValue.isString() || !darkThemeValue.isString()))
         || (version >= terminalThemeSchemaVersion
@@ -493,6 +502,10 @@ using ztermy::config::ThemePreference;
         .closeToTray = version >= closeToTraySchemaVersion && closeToTrayValue.toBool(),
         .performanceMode = version >= performanceModeSchemaVersion && performanceModeValue.toBool(),
         .connectionHistoryEnabled = version < connectionHistorySchemaVersion || connectionHistoryValue.toBool(),
+        .closePaneOnSessionEnd = version >= sessionLifecycleSchemaVersion && closePaneOnSessionEndValue.toBool(),
+        .preserveTerminalSessions = version < sessionLifecycleSchemaVersion || preserveTerminalSessionsValue.toBool(),
+        .reopenLocalSessions = version < sessionLifecycleSchemaVersion || reopenLocalSessionsValue.toBool(),
+        .reconnectRemoteSessions = version >= sessionLifecycleSchemaVersion && reconnectRemoteSessionsValue.toBool(),
         .effectsTier = *effectsTier,
         .terminalTheme = version >= terminalThemeSchemaVersion ? terminalThemeValue.toString().trimmed()
                                                                : QStringLiteral("ztermy-dark"),
@@ -632,6 +645,10 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
     const QJsonObject root{
         {QStringLiteral("version"), currentSchemaVersion},
         {QStringLiteral("connectionHistoryEnabled"), settings.connectionHistoryEnabled},
+        {QStringLiteral("closePaneOnSessionEnd"), settings.closePaneOnSessionEnd},
+        {QStringLiteral("preserveTerminalSessions"), settings.preserveTerminalSessions},
+        {QStringLiteral("reopenLocalSessions"), settings.reopenLocalSessions},
+        {QStringLiteral("reconnectRemoteSessions"), settings.reconnectRemoteSessions},
         {QStringLiteral("windowInteraction"), settings.windowInteraction.toJson()},
         {QStringLiteral("theme"), themePreferenceToken(settings.theme)},
         {QStringLiteral("backdropOpacity"), settings.backdropOpacity},

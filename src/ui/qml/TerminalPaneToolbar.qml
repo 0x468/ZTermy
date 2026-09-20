@@ -12,35 +12,23 @@ RowLayout {
     property bool headersVisible: false
     property bool zoomed: false
     property bool detached: false
-    property bool dimmed: false
+    property bool revealed: headersVisible || detached
+    readonly property bool interactionActive: hover.hovered || activeFocus || newPaneMenu.visible
     signal zoomRequested
     signal detachRequested
     signal toggleHeadersRequested
     spacing: detached ? 0 : 2
-    opacity: headersVisible || hover.hovered || activeFocus || newPaneMenu.visible || !dimmed ? 1 : detached ? 0 : 0.18
+    opacity: revealed ? 1 : 0
+    enabled: revealed
 
     Behavior on opacity {
-        MotionFeedback {}
+        NumberAnimation {
+            duration: Motion.enabled ? 70 : 0
+            easing.type: Easing.OutQuad
+        }
     }
     HoverHandler {
         id: hover
-        onHoveredChanged: {
-            if (hovered) {
-                root.dimmed = false;
-                idle.stop();
-            } else
-                idle.restart();
-        }
-    }
-    Timer {
-        id: idle
-        interval: 2200
-        running: true
-        onTriggered: root.dimmed = true
-    }
-    onVisibleChanged: {
-        dimmed = false;
-        idle.restart();
     }
 
     function createPane(profile, shell, copy) {

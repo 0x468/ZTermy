@@ -555,6 +555,10 @@ Rectangle {
         sftpShowHiddenSwitch.checked = controller.sftpShowHiddenFiles;
         sftpConfirmDeleteSwitch.checked = controller.sftpConfirmDelete;
         windowBehavior.closeToTray = controller.closeToTray;
+        windowBehavior.closePaneOnSessionEnd = controller.closePaneOnSessionEnd;
+        windowBehavior.preserveTerminalSessions = controller.preserveTerminalSessions;
+        windowBehavior.reopenLocalSessions = controller.reopenLocalSessions;
+        windowBehavior.reconnectRemoteSessions = controller.reconnectRemoteSessions;
         windowBehavior.singleInstance = controller.windowInteractionSettings.singleInstance;
         windowBehavior.tabDoubleClickIndex = ["rename", "close", "none"].indexOf(controller.windowInteractionSettings.tabDoubleClick);
         windowBehavior.tabCloseButtonIndex = ["always", "hover", "hidden"].indexOf(controller.windowInteractionSettings.tabCloseButton);
@@ -595,7 +599,8 @@ Rectangle {
         const terminalThemeSaved = effectsSaved && themeEditor.save();
         const shellSaved = terminalThemeSaved && controller.saveLocalShellPreference(localShellTokens[Math.max(0, localShellBox.currentIndex)] || "automatic");
         const selectionSaved = shellSaved && controller.saveTerminalSelectionPopupSettings(selectionPopupSwitch.checked, selectionActionDraftValues());
-        const saved = selectionSaved && controller.saveWindowInteractionSettings({
+        const lifecycleSaved = selectionSaved && controller.saveSessionLifecycleSettings(windowBehavior.closePaneOnSessionEnd, windowBehavior.preserveTerminalSessions, windowBehavior.reopenLocalSessions, windowBehavior.reconnectRemoteSessions);
+        const saved = lifecycleSaved && controller.saveWindowInteractionSettings({
             singleInstance: windowBehavior.singleInstance,
             tabDoubleClick: ["rename", "close", "none"][windowBehavior.tabDoubleClickIndex],
             tabCloseButton: ["always", "hover", "hidden"][windowBehavior.tabCloseButtonIndex]
@@ -727,24 +732,6 @@ Rectangle {
             width: Math.max(0, Math.min(1040, scrollView.availableWidth - (pane.contentInset * 2)))
             spacing: 10
             opacity: pane.contentReveal
-
-            Text {
-                text: pane.currentCategory === "application" ? qsTr("Application") : pane.currentCategory === "appearance" ? qsTr("Appearance") : pane.currentCategory === "terminal" ? qsTr("Terminal") : pane.currentCategory === "shortcuts" ? qsTr("Shortcuts") : pane.currentCategory === "sftp" ? qsTr("SFTP") : pane.currentCategory === "ai" ? qsTr("AI") : pane.currentCategory === "about" ? qsTr("About") : qsTr("Security")
-                color: Theme.text
-                font.family: Theme.uiFont
-                font.pixelSize: 18
-                font.weight: Font.DemiBold
-            }
-
-            Text {
-                Layout.fillWidth: true
-                visible: true
-                text: pane.currentCategory === "application" ? qsTr("Choose how the ztermy window behaves when you close it.") : pane.currentCategory === "appearance" ? qsTr("Choose the language, interface font, theme, and Windows backdrop used across ztermy.") : pane.currentCategory === "terminal" ? qsTr("Configure the global terminal font, background, cursor, selection, and paste behavior.") : pane.currentCategory === "shortcuts" ? qsTr("Search, record, unbind, and reset keyboard shortcuts for registered ztermy actions.") : pane.currentCategory === "sftp" ? qsTr("Choose the defaults applied when an SSH session opens its integrated file browser.") : pane.currentCategory === "ai" ? qsTr("Configure the model provider and the local privacy boundary used by the terminal assistant.") : pane.currentCategory === "about" ? qsTr("View ztermy identity, release information, and diagnostics.") : qsTr("Choose where SSH passwords and key passphrases are stored, unlock the portable vault, or migrate credentials safely.")
-                color: Theme.textMuted
-                wrapMode: Text.WordWrap
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.textLabel
-            }
 
             ShortcutSettings {
                 id: shortcutSettings

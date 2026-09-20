@@ -62,6 +62,7 @@ struct FakeLocalSessionState final
     bool searchBackwards = false;
     bool searchCaseSensitive = false;
     std::error_code startError;
+    std::vector<ztermy::terminal::TerminalGeometry> startGeometries;
     int colorSchemes = 0;
 };
 
@@ -74,9 +75,10 @@ public:
         m_state->launchSpecs.push_back(spec);
     }
 
-    [[nodiscard]] std::error_code start(const ztermy::terminal::TerminalGeometry) override
+    [[nodiscard]] std::error_code start(const ztermy::terminal::TerminalGeometry geometry) override
     {
         ++m_state->starts;
+        m_state->startGeometries.push_back(geometry);
         if (m_state->startError)
             return m_state->startError;
         m_running = true;
@@ -93,6 +95,15 @@ public:
         }
         m_running = false;
         ++m_state->stops;
+        emit runningChanged(false);
+    }
+
+    void finish()
+    {
+        if (!m_running)
+            return;
+        m_running = false;
+        emit statusChanged(QStringLiteral("Fake local terminal ended"));
         emit runningChanged(false);
     }
 
@@ -252,6 +263,8 @@ private slots:
     void retriesProviderResponseWithoutRepeatingCompletedTool();
     void compactsConversationContextWithoutDeletingTranscript();
     void managesMultipleLocalTerminalTabs();
+    void usesUnnumberedLocalShellTitles();
+    void managesTerminalSessionLifecyclePreferences();
     void unifiesThemePolicyAndSystemAppearance();
     void closesMultipleWorkspacesWithReentrantObservers();
     void tracksTemporaryTerminalWorkspacePins();
@@ -266,6 +279,7 @@ private slots:
     void resolvesWorkspaceIdsAfterOriginalSessionMoves();
     void importsExportsAndQuarantinesFailedWorkspaceRestore();
     void importsOpenSshProfilesAndJumpRoutes();
+    void restoresSavedLocalShellProfile();
     void restoresSavedSshWorkspaceWithoutConnecting();
     void managesSessionAppearanceAndStructuredRecording();
     void orderlyShutdownStopsAllLocalTabsOnce();
@@ -2145,6 +2159,71 @@ void AppControllerTests::unifiesThemePolicyAndSystemAppearance()
     QCOMPARE(controller.themePolicy().value(QStringLiteral("light")).toString(), QStringLiteral("solarized-light"));
 }
 
+void AppControllerTests::usesUnnumberedLocalShellTitles()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const auto state = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")), [state] {
+                                         return std::make_unique<FakeLocalTerminalSession>(state);
+                                     });
+
+    const QString first = controller.startLocalTerminalWithShell(QStringLiteral("commandPrompt"));
+    const QString second = controller.startLocalTerminalWithShell(QStringLiteral("commandPrompt"));
+    QVERIFY(!first.isEmpty());
+    QVERIFY(!second.isEmpty());
+    QCOMPARE(controller.terminalTabs().at(0).toMap().value(QStringLiteral("title")).toString(),
+             QStringLiteral("Command Prompt"));
+    QCOMPARE(controller.terminalTabs().at(1).toMap().value(QStringLiteral("title")).toString(),
+             QStringLiteral("Command Prompt"));
+
+    QVERIFY(controller.closeTerminalTab(first));
+    QVERIFY(controller.closeTerminalTab(second));
+    QVERIFY(controller.terminalTabs().isEmpty());
+    QVERIFY(!controller.startLocalTerminalWithShell(QStringLiteral("commandPrompt")).isEmpty());
+    QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("title")).toString(),
+             QStringLiteral("Command Prompt"));
+}
+
+void AppControllerTests::managesTerminalSessionLifecyclePreferences()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString profilesPath = directory.filePath(QStringLiteral("profiles.json"));
+    const QString settingsPath = directory.filePath(QStringLiteral("settings.json"));
+    QList<FakeLocalTerminalSession *> sessions;
+    const auto state = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController controller(profilesPath, directory.filePath(QStringLiteral("known_hosts.json")), settingsPath,
+                                     [&sessions, state] {
+                                         auto session = std::make_unique<FakeLocalTerminalSession>(state);
+                                         sessions.push_back(session.get());
+                                         return session;
+                                     });
+
+    QVERIFY(controller.saveSessionLifecycleSettings(false, true, true, false));
+    QVERIFY(controller.preserveTerminalSessions());
+    QVERIFY(controller.reopenLocalSessions());
+    QVERIFY(!controller.reconnectRemoteSessions());
+    const QString tabId = controller.startLocalTerminal();
+    QVERIFY(!tabId.isEmpty());
+    QCOMPARE(state->starts, 1);
+    QCOMPARE(sessions.size(), 1);
+
+    sessions.constFirst()->finish();
+    QTRY_VERIFY(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("canReopen")).toBool());
+    QVERIFY(controller.reopenLocalTerminalTab(tabId));
+    QCOMPARE(state->starts, 2);
+
+    QVERIFY(controller.saveSessionLifecycleSettings(true, false, false, true));
+    QVERIFY(controller.closePaneOnSessionEnd());
+    QVERIFY(!controller.preserveTerminalSessions());
+    QVERIFY(!controller.reopenLocalSessions());
+    QVERIFY(controller.reconnectRemoteSessions());
+    sessions.constFirst()->finish();
+    QTRY_VERIFY(controller.terminalTabs().isEmpty());
+}
+
 void AppControllerTests::managesMultipleLocalTerminalTabs()
 {
     QTemporaryDir directory;
@@ -2977,6 +3056,86 @@ void AppControllerTests::transfersTerminalTreesWithoutRestartingSessions()
     QCOMPARE(controller.terminalWorkspace(orphan), beforeFailedSave);
 }
 
+void AppControllerTests::restoresSavedLocalShellProfile()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString profilesPath = directory.filePath(QStringLiteral("profiles.json"));
+    const QString knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json"));
+    const QString settingsPath = directory.filePath(QStringLiteral("settings.json"));
+    const QString workspacePath = directory.filePath(QStringLiteral("workspace_state.json"));
+
+    {
+        const auto state = std::make_shared<FakeLocalSessionState>();
+        ztermy::AppController controller(profilesPath, knownHostsPath, settingsPath, [state] {
+            return std::make_unique<FakeLocalTerminalSession>(state);
+        });
+        QVERIFY(!controller.startLocalTerminalWithShell(QStringLiteral("commandPrompt")).isEmpty());
+        QCOMPARE(state->launchSpecs.constLast().id, QStringLiteral("commandPrompt"));
+    }
+
+    const auto persisted = ztermy::workbench::WorkspaceStateStore(workspacePath).load();
+    QVERIFY(persisted.has_value());
+    QCOMPARE(persisted->terminalWorkspaces.front().restoreIntents.front().profileId, std::string("commandPrompt"));
+
+    const auto restoredState = std::make_shared<FakeLocalSessionState>();
+    {
+        ztermy::AppController restored(profilesPath, knownHostsPath, settingsPath, [restoredState] {
+            return std::make_unique<FakeLocalTerminalSession>(restoredState);
+        });
+        QCOMPARE(restoredState->starts, 1);
+        QCOMPARE(restoredState->launchSpecs.size(), 1);
+        QCOMPARE(restoredState->launchSpecs.constFirst().id, QStringLiteral("commandPrompt"));
+    }
+
+    auto settings = ztermy::config::ApplicationSettingsStore(settingsPath).load();
+    QVERIFY(settings);
+    settings->reopenLocalSessions = false;
+    QVERIFY(ztermy::config::ApplicationSettingsStore(settingsPath).save(*settings));
+    const auto pausedState = std::make_shared<FakeLocalSessionState>();
+    {
+        ztermy::AppController paused(profilesPath, knownHostsPath, settingsPath, [pausedState] {
+            return std::make_unique<FakeLocalTerminalSession>(pausedState);
+        });
+        QCOMPARE(pausedState->starts, 0);
+        QVERIFY(paused.terminalTabs().constFirst().toMap().value(QStringLiteral("canReopen")).toBool());
+        QVERIFY(paused.reopenLocalTerminalTab(
+            paused.terminalTabs().constFirst().toMap().value(QStringLiteral("sessionId")).toString()));
+        QCOMPARE(pausedState->starts, 1);
+    }
+    settings->reopenLocalSessions = true;
+    QVERIFY(ztermy::config::ApplicationSettingsStore(settingsPath).save(*settings));
+
+    ztermy::workbench::WorkspaceState legacy;
+    legacy.terminalWorkspaces.push_back(ztermy::workbench::makeSinglePaneTerminalWorkspace(
+        "legacy-workspace", "legacy-pane",
+        {.id = "legacy-intent", .title = "Command Prompt 9", .kind = ztermy::workbench::TerminalRestoreKind::Local}));
+    legacy.activeTerminalWorkspaceId = "legacy-workspace";
+    QVERIFY(ztermy::workbench::WorkspaceStateStore(workspacePath).save(legacy));
+
+    const auto legacyState = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController restoredLegacy(profilesPath, knownHostsPath, settingsPath, [legacyState] {
+        return std::make_unique<FakeLocalTerminalSession>(legacyState);
+    });
+    QCOMPARE(legacyState->starts, 1);
+    QCOMPARE(legacyState->launchSpecs.constFirst().id, QStringLiteral("commandPrompt"));
+    const auto migrated = ztermy::workbench::WorkspaceStateStore(workspacePath).load();
+    QVERIFY(migrated.has_value());
+    QCOMPARE(migrated->terminalWorkspaces.front().restoreIntents.front().profileId, std::string("commandPrompt"));
+
+    settings->preserveTerminalSessions = false;
+    QVERIFY(ztermy::config::ApplicationSettingsStore(settingsPath).save(*settings));
+    const auto discardedState = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController discarded(profilesPath, knownHostsPath, settingsPath, [discardedState] {
+        return std::make_unique<FakeLocalTerminalSession>(discardedState);
+    });
+    QVERIFY(discarded.terminalTabs().isEmpty());
+    QCOMPARE(discardedState->starts, 0);
+    const auto discardedWorkspace = ztermy::workbench::WorkspaceStateStore(workspacePath).load();
+    QVERIFY(discardedWorkspace);
+    QVERIFY(discardedWorkspace->terminalWorkspaces.empty());
+}
+
 void AppControllerTests::restoresSavedSshWorkspaceWithoutConnecting()
 {
     QTemporaryDir directory;
@@ -3045,7 +3204,7 @@ void AppControllerTests::restoresSavedSshWorkspaceWithoutConnecting()
     QSignalSpy workspaceChanged(&controller, &ztermy::AppController::terminalWorkspaceChanged);
     QVERIFY(!controller.startLocalTerminal().isEmpty());
     QVERIFY(workspaceChanged.count() >= 1);
-    QCOMPARE(localState->starts, 1);
+    QTRY_COMPARE(localState->starts, 1);
 }
 
 void AppControllerTests::scopesTabCommandsToTheirOwningWindow()

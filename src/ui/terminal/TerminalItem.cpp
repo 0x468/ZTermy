@@ -2464,12 +2464,9 @@ void TerminalItem::dropEvent(QDropEvent *event)
 
 void TerminalItem::reportTerminalSize()
 {
-    const qreal availableWidth = std::max(0.0, width() - (horizontalPadding * 2.0));
-    const qreal availableHeight = std::max(0.0, height() - (verticalPadding * 2.0));
-    const auto columns = static_cast<quint16>(std::clamp(std::floor(availableWidth / cellWidth()), 1.0,
-                                                         static_cast<double>(std::numeric_limits<quint16>::max())));
-    const auto rows = static_cast<quint16>(std::clamp(std::floor(availableHeight / cellHeight()), 1.0,
-                                                      static_cast<double>(std::numeric_limits<quint16>::max())));
+    const terminal::TerminalGeometry geometry = currentTerminalGeometry();
+    const quint16 columns = geometry.columns;
+    const quint16 rows = geometry.rows;
     if (columns == m_reportedColumns && rows == m_reportedRows)
     {
         return;
@@ -2477,8 +2474,21 @@ void TerminalItem::reportTerminalSize()
 
     m_reportedColumns = columns;
     m_reportedRows = rows;
-    emit sizeRequested(columns, rows, static_cast<quint32>(std::ceil(cellWidth())),
-                       static_cast<quint32>(std::ceil(cellHeight())));
+    emit sizeRequested(columns, rows, geometry.cellWidthPixels, geometry.cellHeightPixels);
+}
+
+terminal::TerminalGeometry TerminalItem::currentTerminalGeometry() const noexcept
+{
+    const qreal availableWidth = std::max(0.0, width() - (horizontalPadding * 2.0));
+    const qreal availableHeight = std::max(0.0, height() - (verticalPadding * 2.0));
+    const auto columns = static_cast<quint16>(std::clamp(std::floor(availableWidth / cellWidth()), 1.0,
+                                                         static_cast<double>(std::numeric_limits<quint16>::max())));
+    const auto rows = static_cast<quint16>(std::clamp(std::floor(availableHeight / cellHeight()), 1.0,
+                                                      static_cast<double>(std::numeric_limits<quint16>::max())));
+    return {.columns = columns,
+            .rows = rows,
+            .cellWidthPixels = static_cast<quint32>(std::ceil(cellWidth())),
+            .cellHeightPixels = static_cast<quint32>(std::ceil(cellHeight()))};
 }
 
 std::optional<terminal::TerminalPoint> TerminalItem::terminalPoint(const QPointF &position) const
@@ -2757,7 +2767,7 @@ terminal::TerminalCursorStyle TerminalItem::effectiveCursorStyle() const noexcep
 void TerminalItem::refreshFontMetrics()
 {
     const QFontMetricsF metrics(m_font);
-    m_cellWidth = std::ceil(metrics.horizontalAdvance(QLatin1Char('M')));
+    m_cellWidth = metrics.horizontalAdvance(QLatin1Char('M'));
     m_cellHeight = std::ceil(metrics.height());
     m_fontAscent = metrics.ascent();
     m_styledFontsReady.reset();

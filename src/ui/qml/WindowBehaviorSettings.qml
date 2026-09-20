@@ -6,6 +6,10 @@ import QtQuick.Layouts
 SectionCard {
     id: settings
     property alias closeToTray: closeToTraySwitch.checked
+    property alias closePaneOnSessionEnd: closePaneOnSessionEndSwitch.checked
+    property alias preserveTerminalSessions: preserveTerminalSessionsSwitch.checked
+    property alias reopenLocalSessions: reopenLocalSessionsSwitch.checked
+    property alias reconnectRemoteSessions: reconnectRemoteSessionsSwitch.checked
     property alias performanceMode: performanceModeSwitch.checked
     property alias singleInstance: singleInstanceSwitch.checked
     property alias tabDoubleClickIndex: tabDoubleClickBox.currentIndex
@@ -36,6 +40,46 @@ SectionCard {
             wrapMode: Text.WordWrap
             font.family: Theme.uiFont
             font.pixelSize: Theme.textLabel
+        }
+
+        AppSwitch {
+            id: closePaneOnSessionEndSwitch
+
+            objectName: "settingsClosePaneOnSessionEndSwitch"
+            Layout.fillWidth: true
+            text: qsTr("Close a pane automatically when its shell exits or SSH session disconnects")
+            accessibleName: text
+        }
+
+        AppSwitch {
+            id: preserveTerminalSessionsSwitch
+
+            objectName: "settingsPreserveTerminalSessionsSwitch"
+            Layout.fillWidth: true
+            text: qsTr("Restore terminal tabs and pane layouts on the next launch")
+            accessibleName: text
+        }
+
+        AppSwitch {
+            id: reopenLocalSessionsSwitch
+
+            objectName: "settingsReopenLocalSessionsSwitch"
+            Layout.fillWidth: true
+            leftPadding: 24
+            enabled: preserveTerminalSessionsSwitch.checked
+            text: qsTr("Open restored local terminals automatically")
+            accessibleName: text
+        }
+
+        AppSwitch {
+            id: reconnectRemoteSessionsSwitch
+
+            objectName: "settingsReconnectRemoteSessionsSwitch"
+            Layout.fillWidth: true
+            leftPadding: 24
+            enabled: preserveTerminalSessionsSwitch.checked
+            text: qsTr("Reconnect restored SSH sessions automatically")
+            accessibleName: text
         }
 
         AppSwitch {

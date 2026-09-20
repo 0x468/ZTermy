@@ -195,6 +195,7 @@ struct TerminalSessionState final
     bool aiLastWebSearchEnabled = false;
     bool workbenchOpen = false;
     bool composerOpen = false;
+    bool localStartPending = false;
     bool running = false;
     bool recentConnectionRecorded = false;
     bool reconnectPending = false;

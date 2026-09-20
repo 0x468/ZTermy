@@ -215,16 +215,20 @@ void LocalTerminalSessionTests::keepsNushellPromptsOnAdjacentRows()
             [&snapshot](ztermy::terminal::TerminalSnapshotPtr next) {
                 snapshot = std::move(next);
             });
-    QVERIFY(!session.start({.columns = 100, .rows = 40}));
+    QVERIFY(!session.start({.columns = 140, .rows = 42}));
     QTRY_VERIFY_WITH_TIMEOUT(output->bytes().size() >= 900, 5000);
     QTest::qWait(250);
-    QTRY_VERIFY_WITH_TIMEOUT(snapshot && snapshot->cursor.visible, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(snapshot && snapshot->cursor.visible && snapshot->columns == 140 && snapshot->rows == 42,
+                             5000);
+    QVERIFY(snapshot->scrollbar.total <= snapshot->scrollbar.visible + 1);
     quint16 previousRow = snapshot->cursor.row;
     for (int index = 0; index < 4; ++index)
     {
         session.queueInput(QByteArrayLiteral("\r"));
         QTRY_VERIFY_WITH_TIMEOUT(snapshot && snapshot->cursor.row != previousRow, 3000);
+        QTest::qWait(50);
         QCOMPARE(snapshot->cursor.row, static_cast<quint16>(previousRow + 1));
+        QVERIFY(snapshot->scrollbar.total <= snapshot->scrollbar.visible + 1);
         previousRow = snapshot->cursor.row;
     }
     session.stop();

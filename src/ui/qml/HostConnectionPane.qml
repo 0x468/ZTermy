@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 
 Rectangle {
@@ -68,6 +69,14 @@ Rectangle {
         return Number(portField.text);
     }
 
+    function localPath(fileUrl) {
+        const value = decodeURIComponent(fileUrl.toString());
+        if (value.startsWith("file:///")) {
+            return value.substring(8);
+        }
+        return value.startsWith("file://") ? "//" + value.substring(7) : value;
+    }
+
     function authenticationToken() {
         if (authenticationBox.currentIndex === 0) {
             return "private-key";
@@ -124,6 +133,19 @@ Rectangle {
             return qsTr("Private-key authentication");
         }
         return authenticationBox.currentIndex === 1 ? qsTr("Password authentication") : qsTr("SSH agent authentication");
+    }
+
+    function identityAuthenticationLabel(authentication) {
+        if (authentication === "certificate") {
+            return qsTr("Certificate");
+        }
+        if (authentication === "private-key") {
+            return qsTr("Key");
+        }
+        if (authentication === "agent") {
+            return qsTr("SSH agent");
+        }
+        return qsTr("Password");
     }
 
     function pendingCredentialTitle() {
@@ -336,7 +358,7 @@ Rectangle {
         quickConnectMessage = "";
         quickConnectMessageIsError = false;
         quickAuthentication.currentIndex = 1;
-        quickKeyPath.text = controller.defaultPrivateKeyPath;
+        quickKeyPath.text = "";
         quickPassphraseRequired.checked = false;
         quickCredential.text = "";
         quickSaveProfile.checked = false;
@@ -428,7 +450,7 @@ Rectangle {
         portField.text = "22";
         usernameField.text = "root";
         authenticationBox.currentIndex = 1;
-        keyPathField.text = controller.defaultPrivateKeyPath;
+        keyPathField.text = "";
         passphraseRequiredBox.checked = false;
         credentialField.text = "";
         credentialField.passwordVisible = false;
@@ -1453,7 +1475,7 @@ Rectangle {
                                 }
 
                                 Label {
-                                    text: qsTr("Identity")
+                                    text: qsTr("Saved identity")
                                     color: pane.textColor
                                 }
                                 AppComboBox {
@@ -1462,7 +1484,7 @@ Rectangle {
                                     Layout.fillWidth: true
                                     readonly property var identityItems: pane.controller.keychain ? pane.controller.keychain.identities : []
                                     model: [""].concat(identityItems.map(identity => identity.id))
-                                    displayTextModel: [qsTr("Use profile fields")].concat(identityItems.map(identity => identity.label + " · " + identity.username))
+                                    displayTextModel: [qsTr("Use profile fields")].concat(identityItems.map(identity => identity.label + " · " + identity.username + " · " + pane.identityAuthenticationLabel(identity.authentication)))
                                     accessibleName: qsTr("SSH identity")
                                     onActivated: index => {
                                         pane.selectedIdentityId = model[index] || "";
@@ -1521,14 +1543,25 @@ Rectangle {
                                     color: pane.textColor
                                     visible: pane.selectedIdentityId.length === 0 && authenticationBox.currentIndex === 0
                                 }
-                                AppTextField {
-                                    id: keyPathField
-                                    objectName: "hostKeyPath"
+                                RowLayout {
                                     Layout.fillWidth: true
                                     visible: pane.selectedIdentityId.length === 0 && authenticationBox.currentIndex === 0
-                                    text: pane.controller.defaultPrivateKeyPath
-                                    accessibleName: qsTr("Private-key file path")
-                                    selectByMouse: true
+                                    spacing: Theme.spacingControl
+
+                                    AppTextField {
+                                        id: keyPathField
+                                        objectName: "hostKeyPath"
+                                        Layout.fillWidth: true
+                                        placeholderText: pane.controller.defaultPrivateKeyPath
+                                        accessibleName: qsTr("Private-key file path")
+                                        selectByMouse: true
+                                    }
+
+                                    ActionButton {
+                                        iconName: "folder"
+                                        accessibleName: qsTr("Browse for a private-key file")
+                                        onClicked: hostKeyFileDialog.open()
+                                    }
                                 }
 
                                 Item {
@@ -2397,15 +2430,26 @@ Rectangle {
                     font.pixelSize: Theme.textLabel
                 }
 
-                AppTextField {
-                    id: quickKeyPath
-
-                    objectName: "quickKeyPath"
+                RowLayout {
                     Layout.fillWidth: true
                     visible: quickAuthentication.currentIndex === 0
-                    placeholderText: qsTr("Private-key file")
-                    accessibleName: qsTr("Quick connect private-key file")
-                    selectByMouse: true
+                    spacing: Theme.spacingControl
+
+                    AppTextField {
+                        id: quickKeyPath
+
+                        objectName: "quickKeyPath"
+                        Layout.fillWidth: true
+                        placeholderText: pane.controller.defaultPrivateKeyPath
+                        accessibleName: qsTr("Quick connect private-key file")
+                        selectByMouse: true
+                    }
+
+                    ActionButton {
+                        iconName: "folder"
+                        accessibleName: qsTr("Browse for a private-key file")
+                        onClicked: quickKeyFileDialog.open()
+                    }
                 }
 
                 AppCheckBox {
@@ -2799,6 +2843,22 @@ Rectangle {
                 }
             }
         }
+    }
+
+    FileDialog {
+        id: hostKeyFileDialog
+
+        title: qsTr("Choose a private-key file")
+        fileMode: FileDialog.OpenFile
+        onAccepted: keyPathField.text = pane.localPath(selectedFile)
+    }
+
+    FileDialog {
+        id: quickKeyFileDialog
+
+        title: qsTr("Choose a private-key file")
+        fileMode: FileDialog.OpenFile
+        onAccepted: quickKeyPath.text = pane.localPath(selectedFile)
     }
 
     ConfirmationDialog {

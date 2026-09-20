@@ -70,7 +70,7 @@ bool validRestoreIntent(const TerminalRestoreIntent &intent) noexcept
     {
         return !intent.profileId.empty();
     }
-    return intent.profileId.empty();
+    return intent.kind == TerminalRestoreKind::Local || intent.profileId.empty();
 }
 
 bool uniqueTerminalIds(const TerminalWorkspaceLayout &layout) noexcept

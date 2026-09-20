@@ -37,6 +37,7 @@ private slots:
     void searchesAcrossScrollbackAndWrappedLines();
     void encodesPasteForTerminalMode();
     void encodesKeysFromLiveTerminalModes();
+    void doesNotScrollWhenNushellClearsToViewportBottom();
     void encodesMouseAndFocusEventsFromLiveTerminalModes();
     void reportsAlternateScrollMode();
     void exposesShellWorkingDirectorySequences();
@@ -46,6 +47,21 @@ private slots:
     void pagesThroughScrollback();
     void quotesDroppedPathsForShellDialects();
 };
+
+void TerminalEngineTests::doesNotScrollWhenNushellClearsToViewportBottom()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 10, .rows = 3});
+    QVERIFY(result);
+    auto &engine = **result;
+    constexpr std::string_view first = "\x1b[1;1Hold\x1b[3;10H\x1b]133;";
+    constexpr std::string_view second = "A;k=i\x1b\\\x1b[2;1Hnew";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(first))));
+    QVERIFY(!engine.feed(std::as_bytes(std::span(second))));
+    const auto snapshot = engine.snapshot();
+    QCOMPARE(snapshot->cell(0, 0).grapheme, std::u32string{U"o"});
+    QCOMPARE(snapshot->cell(0, 1).grapheme, std::u32string{U"n"});
+    QCOMPARE(snapshot->scrollbar.total, snapshot->scrollbar.visible);
+}
 
 void TerminalEngineTests::quotesDroppedPathsForShellDialects()
 {

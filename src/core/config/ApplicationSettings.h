@@ -175,6 +175,10 @@ struct ApplicationSettings final
     bool closeToTray = false;
     bool performanceMode = false;
     bool connectionHistoryEnabled = true;
+    bool closePaneOnSessionEnd = false;
+    bool preserveTerminalSessions = true;
+    bool reopenLocalSessions = true;
+    bool reconnectRemoteSessions = false;
     EffectsTier effectsTier = EffectsTier::full;
     // Id of a TerminalThemeCatalog theme; unknown ids resolve to the built-in default.
     QString terminalTheme = QStringLiteral("ztermy-dark");

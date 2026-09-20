@@ -911,13 +911,16 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
         }
 
         const auto geometry = std::get<TerminalGeometry>(command);
-        if (const std::error_code resizeError = m_process->resize({.columns = geometry.columns, .rows = geometry.rows}))
-        {
-            postStatus(tr("Terminal resize failed: %1").arg(QString::fromStdString(resizeError.message())));
-            continue;
-        }
         {
             std::scoped_lock lock(m_engineMutex);
+            // Keep ConPTY and the parser on one geometry boundary. Otherwise
+            // resize-triggered shell output can be parsed against the old grid.
+            if (const std::error_code resizeError =
+                    m_process->resize({.columns = geometry.columns, .rows = geometry.rows}))
+            {
+                postStatus(tr("Terminal resize failed: %1").arg(QString::fromStdString(resizeError.message())));
+                continue;
+            }
             if (const std::error_code resizeError = m_engine->resize(geometry))
             {
                 postStatus(tr("Terminal state resize failed: %1").arg(QString::fromStdString(resizeError.message())));

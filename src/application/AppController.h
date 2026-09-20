@@ -192,6 +192,10 @@ class AppController final : public QObject
     Q_PROPERTY(bool sftpShowHiddenFiles READ sftpShowHiddenFiles NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool sftpConfirmDelete READ sftpConfirmDelete NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool closeToTray READ closeToTray NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(bool closePaneOnSessionEnd READ closePaneOnSessionEnd NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(bool preserveTerminalSessions READ preserveTerminalSessions NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(bool reopenLocalSessions READ reopenLocalSessions NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(bool reconnectRemoteSessions READ reconnectRemoteSessions NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QVariantMap windowInteractionSettings READ windowInteractionSettings NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool performanceMode READ performanceMode NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString languagePreference READ languagePreference NOTIFY applicationSettingsChanged)
@@ -367,6 +371,12 @@ public:
     [[nodiscard]] bool sftpShowHiddenFiles() const noexcept;
     [[nodiscard]] bool sftpConfirmDelete() const noexcept;
     [[nodiscard]] bool closeToTray() const noexcept;
+    [[nodiscard]] bool closePaneOnSessionEnd() const noexcept;
+    [[nodiscard]] bool preserveTerminalSessions() const noexcept;
+    [[nodiscard]] bool reopenLocalSessions() const noexcept;
+    [[nodiscard]] bool reconnectRemoteSessions() const noexcept;
+    Q_INVOKABLE bool saveSessionLifecycleSettings(bool closePaneOnEnd, bool preserveSessions, bool reopenLocal,
+                                                  bool reconnectRemote);
     [[nodiscard]] QVariantMap windowInteractionSettings() const;
     Q_INVOKABLE bool saveWindowInteractionSettings(const QVariantMap &changes);
     [[nodiscard]] bool performanceMode() const noexcept;
@@ -628,6 +638,7 @@ public:
     [[nodiscard]] Q_INVOKABLE QString readProxyCredential(const QString &id);
     Q_INVOKABLE bool connectHostProfile(const QString &id, const QString &secret, const QString &proxySecret = {});
     Q_INVOKABLE bool reconnectTerminalTab(const QString &id);
+    Q_INVOKABLE bool reopenLocalTerminalTab(const QString &id);
     Q_INVOKABLE bool cancelTerminalReconnect(const QString &id);
     [[nodiscard]] Q_INVOKABLE QVariantMap parseQuickConnectTarget(const QString &target) const;
     Q_INVOKABLE bool connectQuick(const QString &target, const QString &authentication, const QString &privateKeyPath,
@@ -881,6 +892,7 @@ private:
     void observeUserInput(TerminalTab &tab, const QByteArray &bytes);
     [[nodiscard]] bool aiUserHasPendingLine(const TerminalTab &tab) const;
     void appendCapturedHistory(TerminalTab &tab, const QString &command);
+    void startPendingLocalTerminal(const QString &tabId);
     void requestResize(quint16 columns, quint16 rows, quint32 cellWidthPixels, quint32 cellHeightPixels);
     void requestScroll(int rows);
     void requestSelection(quint16 startColumn, quint16 startRow, quint16 endColumn, quint16 endRow, bool rectangular);
@@ -951,6 +963,7 @@ private:
     [[nodiscard]] QString startLocalTerminalAt(const QString &workingDirectory, const QString &preferredTitle = {},
                                                const QString &shellPreference = {});
     [[nodiscard]] bool closeTerminalTabInternal(const QString &id, bool recordClosed, const QString &successorId = {});
+    [[nodiscard]] bool closeTerminalPane(const QString &paneId);
     void recordClosedTerminal(const QString &workspaceId);
     [[nodiscard]] bool startSshConnection(ssh::SshConnectionRequest request, QString sourceProfileId = {});
     [[nodiscard]] std::optional<ssh::SshConnectionRequest> connectionRequestForProfile(const ssh::SshProfile &profile,
@@ -1113,7 +1126,6 @@ private:
     QString m_hostKeyEndpoint;
     QString m_hostKeyAlgorithm;
     QString m_hostKeyFingerprint;
-    std::uint32_t m_nextLocalTabNumber = 1;
     bool m_hostKeyPromptVisible = false;
     bool m_hostKeyChangedWarning = false;
     bool m_hostKeyForSftp = false;

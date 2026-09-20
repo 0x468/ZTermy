@@ -1481,6 +1481,8 @@ qt_add_translations(ztermy
         ztermy
         ztermy_application_controller
         ztermy_known_hosts_application
+        ztermy_keychain_application
+        ztermy_session_logging
         ztermy_terminal_session
         ztermy_ssh_session
         ztermy_terminal_ui

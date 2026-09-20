@@ -6,6 +6,13 @@ Release assets are published through GitHub Releases.
 
 ## Unreleased
 
+- Added explicit terminal lifecycle preferences for automatic pane closing,
+  workspace restoration, local-shell reopening, and saved SSH reconnection
+  (settings schema 38).
+- Ended local and SSH panes now share a focused reopen/reconnect-or-close flow;
+  the redundant host-review action was removed.
+- Removed repeated category headings and explanatory copy from settings content.
+
 ## 0.5.0 — 汐 — 2026-09-20
 
 半轮月，一道水

@@ -429,6 +429,7 @@ Item {
                         root.controller.activateTerminalPane(leaf.node.id);
                     }
                 }
+                onScrollRequested: rows => paneScrollbar.showForInteraction()
                 onMultilinePasteConfirmationRequested: lineCount => root.multilinePasteConfirmationRequested(viewport, lineCount)
                 onContextMenuRequested: (menuX, menuY) => {
                     terminalContextMenu.x = viewport.x + Math.max(0, Math.min(menuX, viewport.width - terminalContextMenu.width));
@@ -464,7 +465,7 @@ Item {
                 anchors.top: viewport.top
                 anchors.right: viewport.right
                 anchors.bottom: viewport.bottom
-                anchors.topMargin: !leaf.paneHeaderVisible && paneActions.visible ? paneActions.height + 12 : 6
+                anchors.topMargin: !leaf.paneHeaderVisible && paneActions.revealed ? paneActions.height + 12 : 6
                 anchors.rightMargin: 6
                 anchors.bottomMargin: 6
                 width: 12
@@ -482,12 +483,9 @@ Item {
                     onTriggered: paneScrollbar.recentlyScrolled = false
                 }
 
-                Connections {
-                    target: viewport
-                    function onScrollbarChanged() {
-                        paneScrollbar.recentlyScrolled = true;
-                        scrollbarIdle.restart();
-                    }
+                function showForInteraction() {
+                    recentlyScrolled = true;
+                    scrollbarIdle.restart();
                 }
 
                 Rectangle {
@@ -875,6 +873,35 @@ Item {
                 }
             }
 
+            Item {
+                id: paneActionRevealZone
+
+                anchors.top: parent.top
+                anchors.right: parent.right
+                width: Math.max(40, paneActions.implicitWidth + 16)
+                height: leaf.paneHeaderVisible ? 32 : 40
+                z: 11
+
+                HoverHandler {
+                    id: paneActionRevealHover
+                    acceptedDevices: PointerDevice.Mouse
+                }
+            }
+
+            Rectangle {
+                anchors.top: paneActions.top
+                anchors.right: paneActions.right
+                anchors.topMargin: -4
+                anchors.rightMargin: -4
+                width: paneActions.width + 8
+                height: paneActions.height + 8
+                radius: Theme.radiusControl
+                color: Theme.floatingBackground
+                opacity: !leaf.paneHeaderVisible && !root.detachedPane ? paneActions.opacity * 0.82 : 0
+                visible: opacity > 0
+                z: 12
+            }
+
             TerminalPaneToolbar {
                 id: paneActions
                 objectName: "terminalPaneActions-" + leaf.node.id
@@ -884,11 +911,12 @@ Item {
                 headersVisible: leaf.paneHeaderVisible
                 zoomed: root.zoomedPaneId === leaf.node.id
                 detached: root.detachedPane
+                revealed: root.detachedPane || leaf.paneHeaderVisible || paneActionRevealHover.hovered || interactionActive
                 anchors.top: parent.top
                 anchors.right: parent.right
                 anchors.topMargin: root.detachedPane ? 0 : leaf.paneHeaderVisible ? 2 : 8
                 anchors.rightMargin: root.detachedPane ? 0 : leaf.paneHeaderVisible ? 4 : 8
-                visible: (!!leaf.node.active || root.detachedPane) && !!root.controller
+                visible: !!root.controller
                 z: 13
                 onZoomRequested: root.zoomPaneRequested(leaf.node.id)
                 onDetachRequested: root.detachedPane ? root.detachPaneRequested("") : root.detachPaneRequested(leaf.node.id)
