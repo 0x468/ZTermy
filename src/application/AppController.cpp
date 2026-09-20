@@ -4889,9 +4889,9 @@ bool AppController::activateTerminalTab(const QString &id)
     return true;
 }
 
-bool AppController::closeTerminalTab(const QString &id)
+bool AppController::closeTerminalTab(const QString &id, const QString &successorId)
 {
-    return closeTerminalTabInternal(id, true);
+    return closeTerminalTabInternal(id, true, successorId);
 }
 
 void AppController::recordClosedTerminal(const QString &workspaceId)
@@ -4922,7 +4922,7 @@ void AppController::recordClosedTerminal(const QString &workspaceId)
     }
 }
 
-bool AppController::closeTerminalTabInternal(const QString &id, const bool recordClosed)
+bool AppController::closeTerminalTabInternal(const QString &id, const bool recordClosed, const QString &successorId)
 {
     TabLifecycleTiming timing("close");
     QString workspaceId = id;
@@ -4968,10 +4968,14 @@ bool AppController::closeTerminalTabInternal(const QString &id, const bool recor
         }
         else
         {
-            const std::size_t nextIndex = std::min(workspaceIndex, m_workspaceState.terminalWorkspaces.size() - 1U);
+            const auto *preferred = findTerminalWorkspace(successorId);
+            const auto &next = preferred && preferred->windowId == "main"
+                                   ? *preferred
+                                   : m_workspaceState.terminalWorkspaces[std::min(
+                                         workspaceIndex, m_workspaceState.terminalWorkspaces.size() - 1U)];
             m_activeTabId.clear();
-            m_workspaceState.activeTerminalWorkspaceId = m_workspaceState.terminalWorkspaces[nextIndex].id;
-            activateTerminalTab(utf8QString(m_workspaceState.terminalWorkspaces[nextIndex].id));
+            m_workspaceState.activeTerminalWorkspaceId = next.id;
+            activateTerminalTab(utf8QString(next.id));
         }
     }
     timing.mark("active-changed");

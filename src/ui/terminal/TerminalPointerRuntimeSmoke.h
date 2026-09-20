@@ -91,6 +91,50 @@ inline bool verifyInactivePaneSelection(NativeWindow &window, AppController &con
             << "actions=" << targetPane->selectionActionVisible();
     return inactivePaneSelectionPreserved;
 }
+inline bool verifyDetachedCloseSelection(NativeWindow &window, AppController &controller)
+{
+    const QString previous = controller.activeTerminalTabId();
+    const auto a = controller.startLocalTerminalWithShell(QStringLiteral("commandPrompt"));
+    const auto b = controller.startLocalTerminalWithShell(QStringLiteral("commandPrompt"));
+    const bool split = controller.splitActiveTerminal(QStringLiteral("horizontal"), true);
+    const auto c = controller.startLocalTerminalWithShell(QStringLiteral("commandPrompt"));
+    auto *root = window.rootObject();
+    bool passed = split && !a.isEmpty() && !b.isEmpty() && !c.isEmpty();
+    for (const auto &selected : {b, a})
+    {
+        controller.activateTerminalTab(b);
+        passed = controller.splitActiveTerminal(QStringLiteral("horizontal"), true) && passed;
+        const auto pane = controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString();
+        QMetaObject::invokeMethod(root, "activateMainTerminal", Q_ARG(QVariant, selected));
+        processWindowEventsFor(std::chrono::milliseconds{150});
+        const auto detachedId = controller.detachTerminalPane(pane);
+        processWindowEventsFor(std::chrono::milliseconds{250});
+        QQuickWindow *detached = nullptr;
+        for (auto *candidate : QGuiApplication::allWindows())
+            if (candidate->property("workspaceId").toString() == detachedId)
+                detached = qobject_cast<QQuickWindow *>(candidate);
+        if (!detached || detachedId.isEmpty())
+        {
+            passed = false;
+            continue;
+        }
+        windowing::present(*detached);
+        processWindowEventsFor(std::chrono::milliseconds{150});
+        passed = controller.activeTerminalTabId() == detachedId && passed;
+        detached->close(); // Exercise the native window's QML closing handler.
+        processWindowEventsFor(std::chrono::milliseconds{350});
+        const bool preserved = controller.activeTerminalTabId() == selected
+                               && root->property("mainWorkspaceId").toString() == selected
+                               && controller.terminalWorkspace(detachedId).isEmpty();
+        qInfo() << "Closing detached pane preserves displayed main tab:" << preserved;
+        passed = preserved && passed;
+    }
+    for (const auto &id : {a, b, c})
+        controller.closeTerminalTab(id);
+    QMetaObject::invokeMethod(root, "activateMainTerminal", Q_ARG(QVariant, previous));
+    return passed;
+}
+
 inline bool verifyNestedPaneEdges(NativeWindow &window, AppController &controller, const QString &outputDirectory)
 {
     const QString previous = controller.activeTerminalTabId();

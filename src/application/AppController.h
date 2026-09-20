@@ -452,7 +452,7 @@ public:
     Q_INVOKABLE QString startLocalTerminal();
     Q_INVOKABLE QString startLocalTerminalWithShell(const QString &shellId);
     Q_INVOKABLE bool activateTerminalTab(const QString &id);
-    Q_INVOKABLE bool closeTerminalTab(const QString &id);
+    Q_INVOKABLE bool closeTerminalTab(const QString &id, const QString &successorId = {});
     Q_INVOKABLE bool duplicateTerminalTab(const QString &id);
     Q_INVOKABLE bool reopenLastClosedTerminalTab();
     Q_INVOKABLE bool closeOtherTerminalTabs(const QString &id);
@@ -950,7 +950,7 @@ private:
     void setCredentialOperationError(QString message);
     [[nodiscard]] QString startLocalTerminalAt(const QString &workingDirectory, const QString &preferredTitle = {},
                                                const QString &shellPreference = {});
-    [[nodiscard]] bool closeTerminalTabInternal(const QString &id, bool recordClosed);
+    [[nodiscard]] bool closeTerminalTabInternal(const QString &id, bool recordClosed, const QString &successorId = {});
     void recordClosedTerminal(const QString &workspaceId);
     [[nodiscard]] bool startSshConnection(ssh::SshConnectionRequest request, QString sourceProfileId = {});
     [[nodiscard]] std::optional<ssh::SshConnectionRequest> connectionRequestForProfile(const ssh::SshProfile &profile,

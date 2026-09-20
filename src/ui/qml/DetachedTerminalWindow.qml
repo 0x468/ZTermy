@@ -32,7 +32,7 @@ Window {
     color: Theme.workspaceBackground
     onClosing: close => {
         close.accepted = false;
-        Qt.callLater(() => hostRoot.controller.closeTerminalTab(workspaceId));
+        Qt.callLater(() => hostRoot.controller.closeTerminalTab(workspaceId, hostRoot.requestedMainWorkspaceId));
     }
 
     TerminalSplitNode {

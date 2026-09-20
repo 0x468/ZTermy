@@ -2,7 +2,7 @@
 
 All notable changes will be documented in this file.
 
-The project has not published a release.
+Release assets are published through GitHub Releases.
 
 ## Unreleased
 
@@ -10,6 +10,8 @@ The project has not published a release.
 
 半轮月，一道水
 
+- Preserve the main window's selected tab when closing an active detached pane,
+  instead of selecting a neighbor from the combined main/detached workspace list.
 - Merge the UI V2 and unified-theme work into main. Refresh the version card
   with a half moon and a quiet waterline; hover animates the tide only when
   full motion is enabled. Display the release name and verse without prefixes

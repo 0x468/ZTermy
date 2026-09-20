@@ -261,6 +261,7 @@ private slots:
     void managesPersistentTerminalWorkspaceSplits();
     void preservesSessionRoutingForNoOpPaneMove();
     void transfersTerminalTreesWithoutRestartingSessions();
+    void closingDetachedWorkspacePreservesMainSelection();
     void scopesTabCommandsToTheirOwningWindow();
     void resolvesWorkspaceIdsAfterOriginalSessionMoves();
     void importsExportsAndQuarantinesFailedWorkspaceRestore();
@@ -2866,6 +2867,40 @@ void AppControllerTests::resolvesWorkspaceIdsAfterOriginalSessionMoves()
     QVERIFY(controller.closeTerminalTab(original));
     QVERIFY(controller.terminalWorkspace(original).isEmpty());
     QVERIFY(!controller.terminalWorkspace(detached).isEmpty());
+}
+
+void AppControllerTests::closingDetachedWorkspacePreservesMainSelection()
+{
+    QTemporaryDir directory;
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")), [] {
+                                         return std::make_unique<FakeLocalTerminalSession>(
+                                             std::make_shared<FakeLocalSessionState>());
+                                     });
+    const auto a = controller.startLocalTerminal();
+    const auto b = controller.startLocalTerminal();
+    QVERIFY(controller.splitActiveTerminal(QStringLiteral("horizontal"), true));
+    const auto c = controller.startLocalTerminal();
+    for (const auto &selected : {b, a})
+    {
+        QVERIFY(controller.activateTerminalTab(b));
+        QVERIFY(controller.splitActiveTerminal(QStringLiteral("horizontal"), true));
+        const auto pane = controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString();
+        const auto detached = controller.detachTerminalPane(pane);
+        QVERIFY(!detached.isEmpty());
+        QVERIFY(controller.activateTerminalTab(detached));
+        QSignalSpy changes(&controller, &ztermy::AppController::activeTerminalTabChanged);
+        QVERIFY(controller.closeTerminalTab(detached, selected));
+        QCOMPARE(controller.activeTerminalTabId(), selected);
+        QCOMPARE(changes.count(), 1);
+        QCOMPARE(controller.terminalTabs().size(), 3);
+        QCOMPARE(controller.terminalWorkspace(b).value(QStringLiteral("paneCount")).toInt(), 2);
+    }
+    QVERIFY(controller.activateTerminalTab(a));
+    QVERIFY(controller.closeTerminalTab(c, b));
+    QCOMPARE(controller.activeTerminalTabId(), a); // Closing an inactive workspace must not change focus.
+    QVERIFY(controller.closeTerminalTab(a, QStringLiteral("missing")));
+    QCOMPARE(controller.activeTerminalTabId(), b);
 }
 
 void AppControllerTests::transfersTerminalTreesWithoutRestartingSessions()

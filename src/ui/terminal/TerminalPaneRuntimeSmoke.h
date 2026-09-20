@@ -360,6 +360,7 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
     qInfo() << "Window transfer native material and reattachment:" << passed;
     passed = verifyWholeTabMouseMerge(window, controller, workspaceId, otherId, paneId) && passed;
     passed = verifyNestedPaneEdges(window, controller, outputDirectory) && passed;
+    passed = verifyDetachedCloseSelection(window, controller) && passed;
     qInfo() << "Pane headers, per-workspace zoom, detached taskbar/resize regression:" << passed;
     return passed;
 }
