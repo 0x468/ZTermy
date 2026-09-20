@@ -9,9 +9,11 @@
    `ui/v2-design-system` 快进合入 `main`。
 3. `a5fc187`：版本更新至 0.5.0，版本卡改为半月与水纹，悬停时轻微起伏；
    减少动画、关闭动画及性能模式不播放该效果。
-4. 本记录所在提交：修复完整回归发现的问题并保存验证证据。
+4. `eb287f1`：修复完整回归发现的问题并保存验证证据。
+5. `c580efb`：关闭独立窗格时保留主窗口选择，补上多窗格 B 及切到 A 后关闭的回归。
 
-未推送、未打标签、未发布安装包。用户已有的 `CMakePresets.json` 改动不纳入提交。
+首轮回归完成时尚未推送或打标签；后续所有者要求发布 `0.5.0`，见文末发布前复核。
+用户已有的 `CMakePresets.json` 改动不纳入提交。
 
 ## 问题、原因与修复
 
@@ -48,8 +50,8 @@ ConPTY 的初始化错误机制有 [Microsoft 文档](https://learn.microsoft.co
 - 静态 Release 全量 clang-tidy：302 个翻译单元通过；C++ 格式、90 个 QML 文件格式、
   QML 检查与结构门禁通过，见 `build/v05-quality-final.log`。
 - 翻译目录、图标/元数据等 CTest 门禁包括在上述 129 项内，`git diff --check` 通过。
-- 最终二进制：`build/msvc-static-release/ztermy.exe`，文件版本 0.5.0。
-- 二进制 SHA-256：`8849c41903f0a45952a0be3bb49f6477ef7c83a4581da2f800e0a163030e95cb`。
+- 首轮回归二进制：`build/msvc-static-release/ztermy.exe`，文件版本 0.5.0。
+- 首轮二进制 SHA-256：`8849c41903f0a45952a0be3bb49f6477ef7c83a4581da2f800e0a163030e95cb`。
 - 测试数据隔离在 `build/test-data/`，不使用用户的主机、密钥和历史数据。
 
 ### 运行时证据
@@ -95,4 +97,25 @@ ConPTY 的初始化错误机制有 [Microsoft 文档](https://learn.microsoft.co
   CTest 通过不等于真实 SSH、SFTP 和代理主机验收通过。
 - 运行时检查使用本机实际窗口，但仍是合成输入；用户真实设备上的手感、
   IME、跨显示器混合 DPI、长时间远端终端会话需要人工验收。
-- 本次不制作 MSI，不发布远端版本，不把本记录视为用户手动验收确认。
+- 首轮回归未发布远端版本；不把自动检查记录视为用户手动验收确认。
+
+## 0.5.0 发布前复核
+
+所有者明确要求标签 `0.5.0`、推送 GitHub，并仅发布静态单 EXE。
+因此本次不构建/上传 MSI 或 ZIP，不将其验收计为通过。
+目标仓库为 `0x468/ZTermy`，分支为 `main`。
+
+- 修复源提交：`c580efb`；后续文档提交不改变二进制源码。
+- Debug CTest：129/129，41.47 秒；静态 Release CTest：129/129，41.24 秒。
+  日志：`build/release-050-debug.log`、`build/release-050-static.log`。
+- 静态 Release 的发布静态分析日志：`build/release-050-quality.log`。
+- 最新窗格关闭运行时检查退出 0，两次记录
+  `Closing detached pane preserves displayed main tab: true`；
+  数据在 `build/test-data/v05-detached-close-terminal-render/`。
+- 上传候选：`build/release-0.5.0/ztermy-0.5.0-windows-x64-static.exe`，50,997,760 字节。
+  FileVersion / ProductVersion 均为 0.5.0。
+- SHA-256：`c6fd81da5ac6474c1761710849d2ca93841a093d98e701c93588307c5f71d9b1`。
+- PE 导入检查仅见 Windows 系统 DLL，无外部 Qt/MSVC 运行库 DLL 依赖。
+  在仅放置此 EXE 的目录中正常启动 `--window-runtime-smoke`，退出 0；
+  数据隔离在 `build/test-data/release-050-single-exe/`。
+- 前述真实主机、混合 DPI 及长期使用的人工验收边界仍然有效。
