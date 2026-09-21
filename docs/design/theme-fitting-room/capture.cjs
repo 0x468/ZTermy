@@ -8,7 +8,7 @@ const { pathToFileURL } = require('node:url');
   const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  const output = path.join(__dirname, 'previews-v2');
+  const output = path.resolve(__dirname, '../../../build/theme-fitting-room-previews');
   fs.mkdirSync(output, { recursive: true });
   await page.goto(pathToFileURL(path.join(__dirname, 'index.html')).href);
   await page.locator('#systemState').selectOption('dark');

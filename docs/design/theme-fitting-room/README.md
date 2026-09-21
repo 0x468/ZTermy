@@ -22,9 +22,12 @@
 
 ## 截图与检查
 
-`capture.cjs` 使用本地 Playwright + Edge 无头渲染，第二版截图位于 `previews-v2/`，`previews/` 保留第一版截图。可通过 `PLAYWRIGHT_MODULE` 指定 Playwright 模块路径。截图脚本只检查此网页，不运行 ztermy 的编译和测试。
+`capture.cjs` 使用本地 Playwright + Edge 无头渲染，截图输出到仓库根目录的
+`build/theme-fitting-room-previews/`，不进入版本控制。可通过
+`PLAYWRIGHT_MODULE` 指定 Playwright 模块路径。截图脚本只检查此网页，不运行
+ztermy 的编译和测试。
 
-第二版检查覆盖 10 套主题 × 3 个场景，以及浅/深槽位、悬停不改草稿、放弃/应用、键盘选择、系统切换、固定主题、对照、区域调色、两种导出和窄屏布局。
+检查覆盖 10 套主题 × 3 个场景，以及浅/深槽位、悬停不改草稿、放弃/应用、键盘选择、系统切换、固定主题、对照、区域调色、两种导出和窄屏布局。
 
 第一轮修正了浅色次要文字对比度，以及窄屏主题导航过长的问题。预览按纯色校样；Acrylic、Mica、终端透明合成和 Windows 字体效果，需候选获选后回到原生应用验证。
 
