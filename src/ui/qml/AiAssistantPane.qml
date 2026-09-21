@@ -9,6 +9,7 @@ Rectangle {
     id: pane
 
     objectName: "aiAssistantPane"
+    property var memoryDiagnostics: null
     required property var controller
     required property var activeTab
     readonly property bool busy: controller.activeAiState === "starting" || controller.activeAiState === "retrying" || controller.activeAiState === "streaming" || controller.activeAiState === "cancelling"
@@ -1729,8 +1730,16 @@ Rectangle {
                     readonly property bool reasoningActive: state === "streaming" && reasoning.length > 0 && text.length === 0
                     readonly property bool recoveryActive: messageRole === "assistant" && (state === "failed" || state === "cancelled") && index === conversationList.count - 1
                     readonly property var recovery: recoveryActive ? pane.controller.activeAiErrorRecovery : ({})
-                    width: ListView.view.width
+                    width: conversationList.width
                     height: messageBubble.implicitHeight
+                    Component.onCompleted: {
+                        if (pane.memoryDiagnostics)
+                            pane.memoryDiagnostics.track("delegate", messageItem, index);
+                    }
+                    Component.onDestruction: {
+                        if (pane.memoryDiagnostics)
+                            pane.memoryDiagnostics.recordEvent("delegate-dispose", index);
+                    }
 
                     Rectangle {
                         id: messageBubble
@@ -1794,6 +1803,8 @@ Rectangle {
                             }
 
                             MarkdownMessage {
+                                memoryDiagnostics: pane.memoryDiagnostics
+                                diagnosticRow: messageItem.index
                                 Layout.fillWidth: true
                                 visible: reasoningToggle.visible && reasoningToggle.expanded
                                 source: messageItem.reasoning
@@ -2154,6 +2165,9 @@ Rectangle {
 
                             MarkdownMessage {
                                 id: messageText
+
+                                memoryDiagnostics: pane.memoryDiagnostics
+                                diagnosticRow: messageItem.index
 
                                 Layout.fillWidth: true
                                 source: messageItem.text.length > 0 ? messageItem.text : messageItem.state === "streaming" ? qsTr("Thinking…") : ""

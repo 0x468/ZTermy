@@ -971,6 +971,7 @@ endif()
 
 qt_add_executable(ztermy WIN32
     src/main.cpp
+    src/ui/AiMemoryDiagnostics.h
     src/application/FontCatalog.cpp
     src/application/FontCatalog.h
     src/application/LocalizationManager.cpp

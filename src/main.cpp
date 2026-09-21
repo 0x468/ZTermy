@@ -9,6 +9,7 @@
 #include "core/windowing/WindowPresenter.h"
 #include "platform/windows/CrashDiagnostics.h"
 #include "platform/windows/NativeWindow.h"
+#include "ui/AiMemoryDiagnostics.h"
 #include "ui/RuntimeSmokeItems.h"
 #include "ui/ThemeSettingsRuntimeSmoke.h"
 #include "ui/WindowStateRuntimeSmoke.h"
@@ -32,17 +33,21 @@
 #include <QHostAddress>
 #include <QIcon>
 #include <QImage>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
 #include <QMetaType>
 #include <QMimeData>
+#include <QPointer>
 #include <QQmlEngine>
+#include <QQmlProperty>
 #include <QQuickItem>
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
 #include <QSaveFile>
+#include <QScopeGuard>
 #include <QSet>
 #include <QStandardPaths>
 #include <QSysInfo>
@@ -4098,6 +4103,173 @@ struct ResizeHitRuntimeCase
     return baselinePassed && splitWorkspacePassed && reportSaved;
 }
 
+// Opt-in, synthetic-only memory experiment. Stage markers contain counts, never message content.
+[[nodiscard]] bool runMemoryStages(ztermy::NativeWindow &window, ztermy::AppController &controller,
+                                   const QString &outputDirectory)
+{
+    QJsonArray stages;
+    auto *diagnostics = new ztermy::ui::AiMemoryDiagnostics(
+        QDir(outputDirectory).filePath(QStringLiteral("ai-objects.jsonl")), &window);
+    QPointer<QObject> diagnosticPane;
+    const auto cleanupDiagnostics = qScopeGuard([&] {
+        if (diagnosticPane)
+            diagnosticPane->setProperty("memoryDiagnostics", QVariant::fromValue<QObject *>(nullptr));
+        diagnostics->finish();
+    });
+    const auto stage = [&](const QString &name) {
+        QQuickItem *root = window.rootObject();
+        const QString startedUtc = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
+        qint64 maximumHeartbeatGap = 0;
+        QElapsedTimer gap;
+        gap.start();
+        QTimer heartbeat;
+        heartbeat.setInterval(10);
+        QObject::connect(&heartbeat, &QTimer::timeout, &window, [&] {
+            maximumHeartbeatGap = std::max(maximumHeartbeatGap, gap.restart());
+        });
+        heartbeat.start();
+        processWindowEventsFor(std::chrono::seconds{10});
+        heartbeat.stop();
+        const QJsonObject marker{
+            {QStringLiteral("name"), name},
+            {QStringLiteral("utc"), startedUtc},
+            {QStringLiteral("endUtc"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
+            {QStringLiteral("maximumHeartbeatGapMs"), maximumHeartbeatGap},
+            {QStringLiteral("objects"), root->findChildren<QObject *>().size() + 1},
+            {QStringLiteral("quickItems"), root->findChildren<QQuickItem *>().size() + 1},
+            {QStringLiteral("terminalItems"), window.findChildren<ztermy::ui::TerminalItem *>().size()},
+        };
+        stages.append(marker);
+        QSaveFile file(QDir(outputDirectory).filePath(QStringLiteral("memory-stages.json")));
+        const QByteArray bytes = QJsonDocument(stages).toJson();
+        if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit())
+            return false;
+        return true;
+    };
+    if (!stage(QStringLiteral("empty-idle")))
+        return false;
+    const QString terminalId = controller.startLocalTerminal();
+    window.rootObject()->setProperty("currentPage", QStringLiteral("terminal"));
+    if (terminalId.isEmpty()
+        || !processWindowEventsUntil(
+            [&controller] {
+                return !controller.terminalTabs().isEmpty()
+                       && controller.terminalTabs().front().toMap().value(QStringLiteral("running")).toBool();
+            },
+            std::chrono::seconds{10})
+        || !stage(QStringLiteral("terminal-idle")))
+        return false;
+    if (!controller.toggleTerminalWorkbench(QStringLiteral("ai")))
+        return false;
+    processWindowEventsFor(std::chrono::milliseconds{500});
+    auto *conversation = qobject_cast<ztermy::ai::AiConversationModel *>(controller.activeAiConversation());
+    if (conversation == nullptr || !stage(QStringLiteral("ai-open-empty")))
+        return false;
+    auto *assistantPane = window.rootObject()->findChild<QObject *>(QStringLiteral("aiAssistantPane"));
+    diagnosticPane = assistantPane;
+    if (assistantPane == nullptr
+        || !assistantPane->setProperty("memoryDiagnostics", QVariant::fromValue<QObject *>(diagnostics)))
+        return false;
+    if (qEnvironmentVariableIntValue("ZTERMY_MEMORY_DETACH_SCROLLBAR") == 1)
+    {
+        auto *list = window.rootObject()->findChild<QObject *>(QStringLiteral("aiConversationList"));
+        if (list == nullptr
+            || !QQmlProperty(list, QStringLiteral("ScrollBar.vertical"), qmlContext(list))
+                    .write(QVariant::fromValue<QObject *>(nullptr)))
+            return false;
+    }
+    if (qEnvironmentVariableIntValue("ZTERMY_MEMORY_NO_AI_DELEGATES") == 1)
+    {
+        auto *list = window.rootObject()->findChild<QObject *>(QStringLiteral("aiConversationList"));
+        if (list == nullptr || !list->setProperty("model", QVariant::fromValue<QObject *>(nullptr)))
+            return false;
+    }
+    const QString chunk = QStringLiteral(
+        "- Inspect **service health**, compare `current` with `expected`, and preserve the diagnostic evidence.\n");
+    bool validChunks = false;
+    const int requestedChunks = qEnvironmentVariableIntValue("ZTERMY_UI_BENCHMARK_CHUNKS", &validChunks);
+    const int chunks = validChunks ? std::clamp(requestedChunks, 0, 2'000) : 240;
+    const bool interactionChecks = qEnvironmentVariableIntValue("ZTERMY_MEMORY_INTERACTIONS") == 1;
+    for (int turn = 1; turn <= 3; ++turn)
+    {
+        if (!stage(QStringLiteral("turn-%1-start").arg(turn)))
+            return false;
+        if (conversation->appendUserMessage(QStringLiteral("Synthetic memory workload.")) == 0)
+            return false;
+        const auto messageId = conversation->beginAssistantMessage();
+        for (int index = 0; index < chunks; ++index)
+        {
+            if (!conversation->appendAssistantDelta(messageId, chunk))
+                return false;
+            processWindowEventsFor(std::chrono::milliseconds{8});
+            if (interactionChecks && index == chunks / 2)
+            {
+                auto *text = diagnostics->textItem(turn * 2 - 1, QStringLiteral("streamingText"));
+                if (text == nullptr || !QMetaObject::invokeMethod(text, "select", Q_ARG(int, 0), Q_ARG(int, 16)))
+                    return false;
+            }
+        }
+        if (!conversation->completeAssistantMessage(messageId) || !stage(QStringLiteral("turn-%1-complete").arg(turn)))
+            return false;
+        if (interactionChecks)
+        {
+            auto *text = diagnostics->textItem(turn * 2 - 1, QStringLiteral("streamingText"));
+            if (text == nullptr || text->property("selectedText").toString().size() != 16
+                || !QMetaObject::invokeMethod(text, "deselect"))
+                return false;
+            processWindowEventsFor(std::chrono::milliseconds{100});
+            auto *prose = diagnostics->textItem(turn * 2 - 1, QStringLiteral("markdown"));
+            if (prose == nullptr || prose->width() < 100 || prose->height() <= 0)
+                return false;
+            auto *document = prose->property("textDocument").value<QQuickTextDocument *>();
+            if (document == nullptr || document->textDocument() == nullptr)
+                return false;
+            const QStringList lines = document->textDocument()->toPlainText().split(u'\n', Qt::SkipEmptyParts);
+            if (lines.size() != chunks || !std::ranges::all_of(lines, [](const QString &line) {
+                    return line.trimmed()
+                           == QStringLiteral("Inspect service health, compare current with expected, and preserve the "
+                                             "diagnostic evidence.");
+                }))
+                return false;
+            diagnostics->recordEvent(QStringLiteral("selection-and-content-checked"), turn * 2 - 1, chunks);
+        }
+    }
+    if (interactionChecks)
+    {
+        auto *list = window.rootObject()->findChild<QObject *>(QStringLiteral("aiConversationList"));
+        const qreal before = list->property("contentY").toReal();
+        if (!QMetaObject::invokeMethod(list, "scrollByWheel", Q_ARG(QVariant, QVariant{600})))
+            return false;
+        processWindowEventsFor(std::chrono::milliseconds{100});
+        if (list->property("contentY").toReal() >= before)
+            return false;
+        if (!QMetaObject::invokeMethod(list, "positionViewAtBeginning"))
+            return false;
+        processWindowEventsFor(std::chrono::milliseconds{100});
+        list->setProperty("stickToBottom", true);
+        if (!QMetaObject::invokeMethod(list, "positionViewAtEnd"))
+            return false;
+        window.resize(QSize{920, 800});
+        processWindowEventsFor(std::chrono::milliseconds{100});
+        window.resize(QSize{1120, 800});
+        processWindowEventsFor(std::chrono::milliseconds{100});
+        if (!list->property("atYEnd").toBool())
+            return false;
+        diagnostics->recordEvent(QStringLiteral("scroll-and-resize-checked"), -1);
+    }
+    controller.closeTerminalWorkbench();
+    if (!stage(QStringLiteral("ai-hidden-retained")))
+        return false;
+    if (!controller.toggleTerminalWorkbench(QStringLiteral("ai")))
+        return false;
+    conversation->clear();
+    if (!stage(QStringLiteral("ai-cleared")))
+        return false;
+    if (!controller.closeTerminalTab(terminalId) || !stage(QStringLiteral("tab-closed")))
+        return false;
+    return true;
+}
+
 [[nodiscard]] bool runUiPerformanceBenchmark(ztermy::NativeWindow &window, ztermy::AppController &controller,
                                              const QString &outputDirectory, const qint64 qmlLoadMilliseconds)
 {
@@ -4120,6 +4292,8 @@ struct ResizeHitRuntimeCase
     {
         return false;
     }
+    if (qEnvironmentVariableIntValue("ZTERMY_MEMORY_STAGES") == 1)
+        return runMemoryStages(window, controller, outputDirectory);
     const auto objectCount = [rootObject] {
         return rootObject->findChildren<QObject *>().size() + 1;
     };

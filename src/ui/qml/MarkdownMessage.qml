@@ -17,6 +17,8 @@ Item {
     property int textFormat: TextEdit.MarkdownText
     property string renderedSource: ""
     property bool selectionHold: false
+    property var memoryDiagnostics: null
+    property int diagnosticRow: -1
 
     readonly property var blocks: splitBlocks(renderedSource, textFormat)
     readonly property bool useStreamingRenderer: streaming || selectionHold
@@ -30,11 +32,18 @@ Item {
     Accessible.name: qsTr("Rendered Markdown message")
 
     Component.onCompleted: {
+        if (memoryDiagnostics) {
+            memoryDiagnostics.track("markdown", markdown, diagnosticRow);
+            memoryDiagnostics.track("streamingText", streamingText, diagnosticRow);
+            memoryDiagnostics.track("column", contentColumn, diagnosticRow);
+        }
         renderedSource = source;
         streamingText.text = source;
     }
 
     onSourceChanged: {
+        if (memoryDiagnostics)
+            memoryDiagnostics.recordEvent("source-update", diagnosticRow, source.length);
         if (!streaming) {
             renderTimer.stop();
             renderedSource = source;
@@ -57,6 +66,8 @@ Item {
     }
 
     function updateStreamingText() {
+        if (memoryDiagnostics)
+            memoryDiagnostics.recordEvent("stream-render", diagnosticRow, source.length);
         const selectionStart = streamingText.selectionStart;
         const selectionEnd = streamingText.selectionEnd;
         const cursorPosition = streamingText.cursorPosition;
@@ -210,7 +221,7 @@ Item {
         return result;
     }
 
-    ColumnLayout {
+    Column {
         id: contentColumn
 
         anchors.left: parent.left
@@ -225,10 +236,19 @@ Item {
                 id: blockLoader
 
                 required property var modelData
-                Layout.fillWidth: true
-                Layout.minimumWidth: 0
+                width: contentColumn.width
+                // A zero-width rich-text layout can report an enormous height while a
+                // ListView delegate is being recreated. Let the layout assign width first.
+                active: width > 0
                 sourceComponent: modelData.kind === "code" ? codeBlock : modelData.kind === "table" ? tableBlock : proseBlock
-                onLoaded: item.blockData = blockLoader.modelData
+                onLoaded: {
+                    if (markdown.memoryDiagnostics) {
+                        markdown.memoryDiagnostics.track("blockLoader", blockLoader, markdown.diagnosticRow);
+                        markdown.memoryDiagnostics.track(modelData.kind, item, markdown.diagnosticRow);
+                    }
+                    item.blockData = blockLoader.modelData;
+                    contentColumn.forceLayout();
+                }
             }
         }
     }
