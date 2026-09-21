@@ -74,6 +74,7 @@ FetchContent_Declare(
 )
 
 function(ztermy_add_libssh2)
+    set(CMAKE_POLICY_VERSION_MINIMUM 3.10)
     set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
     set(CMAKE_POLICY_DEFAULT_CMP0126 NEW)
     set(CMAKE_EXPORT_NO_PACKAGE_REGISTRY ON)
@@ -88,7 +89,7 @@ endfunction()
 
 ztermy_add_libssh2()
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui LinguistTools Network Quick QuickControls2 Svg)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui LinguistTools Network Quick Quick3D QuickControls2 Svg)
 
 get_target_property(ZTERMY_QT_CORE_TARGET_TYPE Qt6::Core TYPE)
 if(ZTERMY_STATIC_BUILD AND NOT ZTERMY_QT_CORE_TARGET_TYPE STREQUAL "STATIC_LIBRARY")
@@ -1020,6 +1021,16 @@ qt_add_resources(ztermy ztermy_branding
         resources/branding/ztermy-lockup-about.svg
 )
 
+set_source_files_properties(
+    resources/textures/moon_1024.jpg
+    PROPERTIES QT_RESOURCE_ALIAS moon-1024.jpg
+)
+qt_add_resources(ztermy ztermy_release_assets
+    PREFIX "/ztermy/release"
+    FILES
+        resources/textures/moon_1024.jpg
+)
+
 set(ZTERMY_INTERFACE_ICON_FILES
     resources/icons/appearance.svg
     resources/icons/bookmark.svg
@@ -1382,7 +1393,6 @@ qt_add_qml_module(ztermy
     VERSION 1.0
     DEPENDENCIES
         QtQuick
-        QtQuick.Effects
     QML_FILES
         src/ui/qml/ActionButton.qml
         src/ui/qml/AiAssistantPane.qml
@@ -1592,6 +1602,7 @@ target_link_libraries(ztermy PRIVATE
     Qt6::Core
     Qt6::Gui
     Qt6::Quick
+    Qt6::Quick3D
     Qt6::QuickControls2
     Qt6::Svg
     dbghelp
@@ -2073,6 +2084,8 @@ if(MSVC)
         /utf-8
         /W4
         /Zc:__cplusplus
+        # Qt's generated QML cache instantiates unreachable fallback branches in Qt headers.
+        /wd4702
     )
 endif()
 
