@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Effects
-import QtQuick3D
 
 Item {
     id: card
@@ -16,13 +15,13 @@ Item {
     readonly property color skyBottom: Theme.dark ? "#292038" : "#EBD8C5"
     readonly property color waterTop: Theme.dark ? "#8265A2" : "#BD7548"
     readonly property color waterBottom: Theme.dark ? "#17131F" : "#6A4532"
+    readonly property color moonColor: Theme.dark ? "#F3E7C1" : "#F0D7A8"
+    readonly property color moonShadow: Theme.dark ? "#17151D" : "#766A61"
     readonly property real moonPhase: Motion.enabled && !Motion.reduced ? animatedMoonPhase : 0.25
-    readonly property real moonRotation: Motion.enabled && !Motion.reduced ? animatedMoonRotation : 0
     readonly property real wavePhase: Motion.enabled && !Motion.reduced ? animatedWavePhase : 0
     readonly property real springTide: 0.35 + 0.65 * Math.abs(Math.cos(moonPhase * Math.PI * 2))
     property real hoverTide: hover.hovered && Motion.enabled && !Motion.reduced ? 1 : 0
     property real animatedMoonPhase
-    property real animatedMoonRotation
     property real animatedWavePhase
 
     implicitHeight: compact ? 176 : 210
@@ -44,20 +43,23 @@ Item {
         running: Motion.enabled && !Motion.reduced
     }
 
-    NumberAnimation on animatedMoonRotation {
-        from: 0
-        to: 360
-        duration: hover.hovered ? 60000 : 120000
-        loops: Animation.Infinite
-        running: Motion.enabled && !Motion.reduced
-    }
-
     NumberAnimation on animatedWavePhase {
         from: 0
         to: Math.PI * 2
         duration: hover.hovered ? 2500 : 5200
         loops: Animation.Infinite
         running: Motion.enabled && !Motion.reduced
+    }
+
+    function traceMoon(ctx, phase, x, y, radius) {
+        const waxing = phase <= 0.5;
+        const terminator = Math.cos(phase * Math.PI * 2) * radius * 4 / 3;
+        ctx.beginPath();
+        ctx.moveTo(x, y - radius);
+        ctx.arc(x, y, radius, -Math.PI / 2, Math.PI / 2, !waxing);
+        const controlX = x + (waxing ? terminator : -terminator);
+        ctx.bezierCurveTo(controlX, y + radius, controlX, y - radius, x, y - radius);
+        ctx.closePath();
     }
 
     Rectangle {
@@ -247,7 +249,7 @@ Item {
         }
     }
 
-    View3D {
+    Canvas {
         id: moon
 
         readonly property real restingSize: Math.max(0, card.height - (card.compact ? 14 : 22))
@@ -259,44 +261,66 @@ Item {
         transformOrigin: Item.Center
         z: 6
 
-        environment: SceneEnvironment {
-            backgroundMode: SceneEnvironment.Transparent
-            antialiasingMode: SceneEnvironment.MSAA
-            antialiasingQuality: SceneEnvironment.High
+        antialiasing: true
+        onWidthChanged: requestPaint()
+        onHeightChanged: requestPaint()
+        onPaint: {
+            const ctx = getContext("2d");
+            ctx.reset();
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const radius = Math.min(width, height) * 0.46;
+
+            ctx.fillStyle = card.moonShadow;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.save();
+            card.traceMoon(ctx, card.moonPhase, centerX, centerY, radius);
+            const surface = ctx.createRadialGradient(centerX - radius * 0.32, centerY - radius * 0.34, radius * 0.08, centerX, centerY, radius);
+            surface.addColorStop(0, Theme.dark ? "#FFF8DE" : "#FFF1C9");
+            surface.addColorStop(0.72, card.moonColor);
+            surface.addColorStop(1, Theme.dark ? "#B6A77D" : "#B99A69");
+            ctx.fillStyle = surface;
+            ctx.fill();
+            ctx.clip();
+
+            const craters = [[-0.34, -0.24, 0.16], [0.26, -0.33, 0.11], [0.36, 0.18, 0.19], [-0.18, 0.36, 0.1], [0.02, -0.02, 0.075], [-0.42, 0.12, 0.07], [0.16, 0.42, 0.06]];
+            for (const crater of craters) {
+                ctx.save();
+                ctx.translate(centerX + crater[0] * radius, centerY + crater[1] * radius);
+                ctx.scale(1, 0.72);
+                ctx.beginPath();
+                ctx.arc(0, 0, crater[2] * radius, 0, Math.PI * 2);
+                ctx.fillStyle = Theme.dark ? "rgba(91, 80, 58, 0.3)" : "rgba(112, 82, 48, 0.24)";
+                ctx.fill();
+                ctx.lineWidth = 1;
+                ctx.strokeStyle = Theme.dark ? "rgba(255, 248, 220, 0.22)" : "rgba(255, 246, 218, 0.58)";
+                ctx.stroke();
+                ctx.restore();
+            }
+            ctx.restore();
+
+            ctx.globalAlpha = 0.34;
+            ctx.strokeStyle = card.moonColor;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
         }
 
-        PerspectiveCamera {
-            z: 205
-        }
-
-        DirectionalLight {
-            eulerRotation.x: -18
-            eulerRotation.y: card.moonPhase * 360
-            color: "#FFF0CE"
-            ambientColor: Theme.dark ? "#272331" : "#57505E"
-            brightness: 3.4
-        }
-
-        Texture {
-            id: moonTexture
-
-            source: "qrc:/ztermy/release/moon-1024.jpg"
-            generateMipmaps: true
-        }
-
-        Model {
-            source: "#Sphere"
-            scale: Qt.vector3d(2, 2, 2)
-            eulerRotation.x: 4
-            eulerRotation.y: 98 + card.moonRotation
-            eulerRotation.z: -2
-            materials: PrincipledMaterial {
-                baseColor: Theme.dark ? "#F0E8D5" : "#F3E5C4"
-                baseColorMap: moonTexture
-                heightMap: moonTexture
-                heightAmount: 0.055
-                metalness: 0
-                roughness: 0.96
+        Connections {
+            target: card
+            function onMoonPhaseChanged() {
+                moon.requestPaint();
+            }
+            function onMoonColorChanged() {
+                moon.requestPaint();
+            }
+            function onMoonShadowChanged() {
+                moon.requestPaint();
             }
         }
 
