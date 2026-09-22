@@ -4,7 +4,9 @@
 #include "platform/windows/NativeWindow.h"
 #include "ui/WindowStateRuntimeSmoke.h"
 
+#include <QCursor>
 #include <QDir>
+#include <QPointer>
 #include <QQuickItem>
 #include <vector>
 
@@ -90,26 +92,33 @@ inline bool verifyDetachedWindowTabMerge(NativeWindow &window, AppController &co
                                          QQuickItem &targetTab, const QString &detachedWorkspaceId,
                                          const QString &targetWorkspaceId)
 {
+    QPointer<QQuickWindow> detachedGuard{&detached};
     const QPointF targetScene = targetTab.mapToScene({targetTab.width() / 2, targetTab.height() / 2});
     const QPoint targetGlobal = window.mapToGlobal(targetScene.toPoint());
     const auto detachedHandle = reinterpret_cast<HWND>(detached.winId()); // NOLINT(performance-no-int-to-ptr)
     detached.setProperty("paneDockMoveActive", true);
     SetCursorPos(targetGlobal.x(), targetGlobal.y());
-    SendMessageW(detachedHandle, WM_MOVE, 0, 0);
+    const bool cursorWarped = (QCursor::pos() - targetGlobal).manhattanLength() <= 2;
+    if (cursorWarped)
+        SendMessageW(detachedHandle, WM_MOVE, 0, 0);
+    else
+        emit window.detachedWindowMoving(&detached, targetGlobal);
     processWindowEventsFor(std::chrono::milliseconds{250});
     const auto *coordinator = window.rootObject()->findChild<QObject *>(QStringLiteral("terminalWindowCoordinator"));
     const QString targetMode =
         coordinator ? coordinator->property("dropTarget").toMap().value(QStringLiteral("mode")).toString() : QString{};
     const bool moveForwarded = coordinator && coordinator->property("movingWindow").value<QObject *>() == &detached;
     const bool dockPreviewVisible = qFuzzyCompare(detached.opacity(), 0.72);
-    qInfo() << "Native detached-window drag resolves tab target:" << targetMode << "moveForwarded=" << moveForwarded;
+    qInfo() << "Native detached-window drag resolves tab target:" << targetMode << "moveForwarded=" << moveForwarded
+            << "cursorWarped=" << cursorWarped;
     SendMessageW(detachedHandle, WM_EXITSIZEMOVE, 0, 0);
+    const bool moveFinished = !detached.property("paneDockMoveActive").toBool();
     processWindowEventsFor(std::chrono::milliseconds{250});
     const bool merged =
         controller.terminalWorkspace(detachedWorkspaceId).isEmpty()
         && controller.terminalWorkspace(targetWorkspaceId).value(QStringLiteral("paneCount")).toInt() == 2;
     qInfo() << "Native detached-window drag merges into a tab:" << merged;
-    return targetMode == QStringLiteral("merge") && moveForwarded && dockPreviewVisible && merged
-           && !detached.property("paneDockMoveActive").toBool();
+    return targetMode == QStringLiteral("merge") && moveForwarded && dockPreviewVisible && merged && moveFinished
+           && detachedGuard.isNull();
 }
 } // namespace ztermy::ui

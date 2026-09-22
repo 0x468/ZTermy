@@ -10,6 +10,7 @@
 #include "platform/windows/CrashDiagnostics.h"
 #include "platform/windows/NativeWindow.h"
 #include "ui/AiMemoryDiagnostics.h"
+#include "ui/MemoryLifecycleRuntimeSmoke.h"
 #include "ui/RuntimeSmokeItems.h"
 #include "ui/ThemeSettingsRuntimeSmoke.h"
 #include "ui/WindowStateRuntimeSmoke.h"
@@ -4116,7 +4117,7 @@ struct ResizeHitRuntimeCase
             diagnosticPane->setProperty("memoryDiagnostics", QVariant::fromValue<QObject *>(nullptr));
         diagnostics->finish();
     });
-    const auto stage = [&](const QString &name) {
+    const auto stage = [&](const QString &name, const std::chrono::seconds duration = std::chrono::seconds{10}) {
         QQuickItem *root = window.rootObject();
         const QString startedUtc = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
         qint64 maximumHeartbeatGap = 0;
@@ -4128,7 +4129,7 @@ struct ResizeHitRuntimeCase
             maximumHeartbeatGap = std::max(maximumHeartbeatGap, gap.restart());
         });
         heartbeat.start();
-        processWindowEventsFor(std::chrono::seconds{10});
+        processWindowEventsFor(duration);
         heartbeat.stop();
         const QJsonObject marker{
             {QStringLiteral("name"), name},
@@ -4159,6 +4160,8 @@ struct ResizeHitRuntimeCase
             std::chrono::seconds{10})
         || !stage(QStringLiteral("terminal-idle")))
         return false;
+    if (qEnvironmentVariableIntValue("ZTERMY_MEMORY_LIFECYCLE") == 1)
+        return ztermy::ui::runMemoryLifecycleStages(controller, terminalId, stage);
     if (!controller.toggleTerminalWorkbench(QStringLiteral("ai")))
         return false;
     processWindowEventsFor(std::chrono::milliseconds{500});

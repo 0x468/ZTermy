@@ -12,6 +12,8 @@ param(
     [switch]$MemoryStages,
     [switch]$DetachScrollBar,
     [switch]$NoAiDelegates,
+    [switch]$Lifecycle,
+    [ValidateRange(1, 5)][int]$LifecycleCycles = 1,
     [switch]$Interactions,
     [switch]$SelfTest
 )
@@ -21,6 +23,8 @@ if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'Use PowerShell 7.' }
 if ([IntPtr]::Size -ne 8) { throw 'The native memory probe requires 64-bit PowerShell.' }
 if (($MemoryStages -or $DetachScrollBar -or $NoAiDelegates) -and $Scenario -ne 'ui') { throw 'Memory diagnostics require Scenario ui.' }
 if (($DetachScrollBar -or $NoAiDelegates) -and -not $MemoryStages) { throw 'Diagnostic controls require MemoryStages.' }
+if ($Lifecycle -and (-not $MemoryStages -or $Interactions -or $DetachScrollBar -or $NoAiDelegates)) { throw 'Lifecycle requires plain MemoryStages.' }
+if (-not $Lifecycle -and $LifecycleCycles -ne 1) { throw 'LifecycleCycles requires Lifecycle.' }
 if ($Interactions -and (-not $MemoryStages -or $NoAiDelegates -or $DetachScrollBar -or $Chunks -lt 3)) { throw 'Interactions require displayed MemoryStages with at least 3 chunks.' }
 if ($Scenario -eq 'idle' -and $IdleSeconds -ge $TimeoutSeconds) { throw 'TimeoutSeconds must exceed IdleSeconds.' }
 Add-Type -TypeDefinition @'
@@ -87,6 +91,8 @@ $environment = [ordered]@{
     chunks = $Chunks; backdrop = $Backdrop; memoryStages = [bool]$MemoryStages; requestedScaleFactor = 1; requestedRhi = 'd3d11'
     detachScrollBar = [bool]$DetachScrollBar
     noAiDelegates = [bool]$NoAiDelegates
+    lifecycle = [bool]$Lifecycle
+    lifecycleCycles = $LifecycleCycles
     interactions = [bool]$Interactions
     timeoutSeconds = $TimeoutSeconds
     coldWarm = 'First observed launch then warm OS caches; fresh data directory each run. No cache flushing.'
@@ -128,6 +134,8 @@ for ($run = 1; $run -le $Repetitions; $run++) {
     $start.Environment['ZTERMY_MEMORY_STAGES'] = if ($MemoryStages) { '1' } else { '0' }
     $start.Environment['ZTERMY_MEMORY_DETACH_SCROLLBAR'] = if ($DetachScrollBar) { '1' } else { '0' }
     $start.Environment['ZTERMY_MEMORY_NO_AI_DELEGATES'] = if ($NoAiDelegates) { '1' } else { '0' }
+    $start.Environment['ZTERMY_MEMORY_LIFECYCLE'] = if ($Lifecycle) { '1' } else { '0' }
+    $start.Environment['ZTERMY_MEMORY_LIFECYCLE_CYCLES'] = "$LifecycleCycles"
     $start.Environment['ZTERMY_MEMORY_INTERACTIONS'] = if ($Interactions) { '1' } else { '0' }
     $process = [Diagnostics.Process]::Start($start)
     $watch = [Diagnostics.Stopwatch]::StartNew()

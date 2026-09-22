@@ -6,6 +6,16 @@ Release assets are published through GitHub Releases.
 
 ## Unreleased
 
+- Make the detached-window merge runtime check destruction-safe. The previous
+  harness dereferenced its QML window after a successful merge had destroyed
+  it, producing `0xC0000409` after the success log even though the product
+  transfer completed.
+- Extend the opt-in memory benchmark with reproducible 1/2/4/8-pane and
+  eight-tab lifecycle stages, including repeated close/reopen cycles. Normal
+  application startup and runtime behavior are unchanged.
+- Refresh the source-size ratchet to the accepted post-V5 tree and keep the new
+  lifecycle benchmark in a dedicated sub-400-line runtime-smoke header.
+
 ## 0.5.1 — 汐 — 2026-09-21
 
 半轮月，一道水
