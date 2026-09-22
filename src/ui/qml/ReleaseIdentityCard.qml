@@ -17,7 +17,7 @@ Item {
     readonly property color waterBottom: Theme.dark ? "#17131F" : "#6A4532"
     readonly property color moonColor: Theme.dark ? "#F3E7C1" : "#F0D7A8"
     readonly property color moonShadow: Theme.dark ? "#17151D" : "#766A61"
-    readonly property real moonPhase: Motion.enabled && !Motion.reduced ? animatedMoonPhase : 0.25
+    readonly property real moonPhase: Motion.enabled && !Motion.reduced ? animatedMoonPhase % 1 : 0.1
     readonly property real wavePhase: Motion.enabled && !Motion.reduced ? animatedWavePhase : 0
     readonly property real springTide: 0.35 + 0.65 * Math.abs(Math.cos(moonPhase * Math.PI * 2))
     property real hoverTide: hover.hovered && Motion.enabled && !Motion.reduced ? 1 : 0
@@ -36,8 +36,8 @@ Item {
     }
 
     NumberAnimation on animatedMoonPhase {
-        from: 0
-        to: 1
+        from: 0.1
+        to: 1.1
         duration: hover.hovered ? 11000 : 32000
         loops: Animation.Infinite
         running: Motion.enabled && !Motion.reduced
@@ -85,6 +85,20 @@ Item {
                 onPaint: {
                     const ctx = getContext("2d");
                     ctx.reset();
+                    const radius = Theme.radiusPanel;
+                    const curve = radius * 0.55228475;
+                    ctx.beginPath();
+                    ctx.moveTo(radius, 0);
+                    ctx.lineTo(width - radius, 0);
+                    ctx.bezierCurveTo(width - radius + curve, 0, width, radius - curve, width, radius);
+                    ctx.lineTo(width, height - radius);
+                    ctx.bezierCurveTo(width, height - radius + curve, width - radius + curve, height, width - radius, height);
+                    ctx.lineTo(radius, height);
+                    ctx.bezierCurveTo(radius - curve, height, 0, height - radius + curve, 0, height - radius);
+                    ctx.lineTo(0, radius);
+                    ctx.bezierCurveTo(0, radius - curve, radius - curve, 0, radius, 0);
+                    ctx.closePath();
+                    ctx.clip();
                     const sky = ctx.createLinearGradient(0, 0, width, height);
                     sky.addColorStop(0, card.skyTop);
                     sky.addColorStop(1, card.skyBottom);
