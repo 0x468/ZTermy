@@ -44,6 +44,7 @@ private slots:
     void exposesExplicitOsc8Hyperlinks();
     void detectsAutomaticHttpLinksWithoutOverridingOsc8();
     void drainsBoundedOsc52ClipboardWrites();
+    void returnsTerminalQueryResponses();
     void pagesThroughScrollback();
     void quotesDroppedPathsForShellDialects();
 };
@@ -94,6 +95,23 @@ void TerminalEngineTests::drainsBoundedOsc52ClipboardWrites()
     constexpr std::string_view superseded = "\x1b]52;c;V29ybGQ=\x07\x1b]52;c;IQ==\x07";
     QVERIFY(!engine.feed(std::as_bytes(std::span(superseded))));
     QCOMPARE(engine.takeClipboardWrite(), std::optional<std::string>{"!"});
+}
+
+void TerminalEngineTests::returnsTerminalQueryResponses()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 20, .rows = 3});
+    QVERIFY(result.has_value());
+    auto &engine = **result;
+
+    const auto initial = engine.snapshot();
+    QVERIFY(initial.has_value());
+    QCOMPARE(initial->cursor.style, ztermy::terminal::TerminalCursorStyle::bar);
+
+    constexpr std::string_view query = "\x1b[2;4H\x1b[6n";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(query))));
+    const auto response = engine.takePtyWrite();
+    QCOMPARE(std::string(reinterpret_cast<const char *>(response.data()), response.size()), std::string("\x1b[2;4R"));
+    QVERIFY(engine.takePtyWrite().empty());
 }
 
 void TerminalEngineTests::exposesExplicitOsc8Hyperlinks()

@@ -38,6 +38,7 @@ public:
     [[nodiscard]] std::expected<std::vector<std::byte>, std::error_code>
     encodeMouse(const TerminalMouseEvent &event) override;
     [[nodiscard]] std::expected<std::vector<std::byte>, std::error_code> encodeFocus(bool focused) const override;
+    [[nodiscard]] std::vector<std::byte> takePtyWrite() override;
     [[nodiscard]] std::optional<std::string> takeClipboardWrite() override;
     [[nodiscard]] std::expected<std::string, std::error_code> plainText() const override;
     [[nodiscard]] std::expected<TerminalScrollbackPage, std::error_code>

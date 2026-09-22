@@ -252,6 +252,7 @@ private:
     std::atomic_bool m_stopFinished = true;
 
     std::mutex m_engineMutex;
+    std::mutex m_processWriteMutex;
     std::mutex m_commandMutex;
     std::condition_variable_any m_commandAvailable;
     std::deque<Command> m_commands;

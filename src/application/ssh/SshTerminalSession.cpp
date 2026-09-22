@@ -1372,6 +1372,16 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
             finishFailure(SshFailureKind::ProtocolError, tr("SSH terminal parser failed"));
             return;
         }
+        const std::vector<std::byte> ptyWrite = m_engine->takePtyWrite();
+        if (!ptyWrite.empty())
+        {
+            const auto response = std::span(reinterpret_cast<const char *>(ptyWrite.data()), ptyWrite.size());
+            if (auto written = session->writeTerminal(*transport, response, 10s, stopToken); !written)
+            {
+                finishFailure(sshFailureFromTransport(written.error()));
+                return;
+            }
+        }
         if (std::optional<std::string> clipboardWrite = m_engine->takeClipboardWrite())
         {
             emit clipboardTextReady(QString::fromUtf8(*clipboardWrite));

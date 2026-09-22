@@ -407,7 +407,7 @@ Item {
                 selectionBackground: Theme.terminalSelectionBackground
                 selectionForeground: Theme.terminalSelectionForeground
                 cursorBlink: root.cursorBlink
-                terminalCursorVisible: !!leaf.node.active
+                terminalCursorVisible: !!leaf.node.active && activeFocus && leaf.Window.window !== null && leaf.Window.window.active
                 copyOnSelect: root.copyOnSelect
                 keepSelectionAfterCopy: root.keepSelectionAfterCopy
                 confirmMultilinePaste: root.confirmMultilinePaste

@@ -569,6 +569,7 @@ void LocalTerminalSession::readLoop(const std::stop_token &stopToken)
             m_outputSink->append(std::span(buffer).first(*readResult));
         }
 
+        std::vector<std::byte> ptyWrite;
         std::optional<std::string> clipboardWrite;
         {
             std::scoped_lock lock(m_engineMutex);
@@ -578,7 +579,12 @@ void LocalTerminalSession::readLoop(const std::stop_token &stopToken)
                 postStatus(tr("Terminal parser failed: %1").arg(QString::fromStdString(feedError.message())));
                 break;
             }
+            ptyWrite = m_engine->takePtyWrite();
             clipboardWrite = m_engine->takeClipboardWrite();
+        }
+        if (!ptyWrite.empty() && !writeToProcess(ptyWrite))
+        {
+            break;
         }
         if (clipboardWrite)
         {
@@ -961,6 +967,7 @@ void LocalTerminalSession::monitorProcessExit(const std::stop_token &stopToken)
 
 bool LocalTerminalSession::writeToProcess(const std::span<const std::byte> bytes)
 {
+    std::scoped_lock lock(m_processWriteMutex);
     if (const std::error_code writeError = m_process->write(bytes))
     {
         postStatus(tr("Terminal write failed: %1").arg(QString::fromStdString(writeError.message())));

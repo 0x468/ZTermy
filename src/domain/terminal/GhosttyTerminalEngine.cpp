@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <new>
 #include <string_view>
 #include <utility>
 
@@ -524,6 +525,7 @@ struct GhosttyTerminalEngine::Impl
     };
 
     static constexpr std::size_t maximumClipboardWriteBytes = std::size_t{8} * 1024U * 1024U;
+    static constexpr std::size_t maximumPtyWriteBytes = std::size_t{64} * 1024U;
 
     Impl(const GhosttyTerminal terminalHandle, const GhosttyRenderState renderStateHandle,
          const GhosttyRenderStateRowIterator rowIteratorHandle,
@@ -601,6 +603,25 @@ struct GhosttyTerminalEngine::Impl
         return GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED;
     }
 
+    static void writePty(GhosttyTerminal, void *userdata, const std::uint8_t *data, const std::size_t size) noexcept
+    {
+        auto *self = static_cast<Impl *>(userdata);
+        if (self == nullptr || data == nullptr || size == 0
+            || size > maximumPtyWriteBytes - std::min(self->pendingPtyWrite.size(), maximumPtyWriteBytes))
+        {
+            return;
+        }
+        try
+        {
+            const auto bytes = std::as_bytes(std::span(data, size));
+            self->pendingPtyWrite.insert(self->pendingPtyWrite.end(), bytes.begin(), bytes.end());
+        }
+        catch (const std::bad_alloc &)
+        {
+            self->pendingPtyWrite.clear();
+        }
+    }
+
     GhosttyTerminal terminal = nullptr;
     GhosttyRenderState renderState = nullptr;
     GhosttyRenderStateRowIterator rowIterator = nullptr;
@@ -615,6 +636,7 @@ struct GhosttyTerminalEngine::Impl
     GhosttyMouseEncoder mouseEncoder = nullptr;
     GhosttyMouseEvent mouseEvent = nullptr;
     std::string lastSearchQuery;
+    std::vector<std::byte> pendingPtyWrite;
     std::optional<std::string> pendingClipboardWrite;
     std::string pendingSemanticPromptPrefix;
     CopyModeGranularity copyModeGranularity = CopyModeGranularity::character;
@@ -677,6 +699,13 @@ GhosttyTerminalEngine::create(const TerminalGeometry geometry)
     {
         return std::unexpected(ghosttyError(userdataResult));
     }
+    if (const GhosttyResult writeResult =
+            ghostty_terminal_set(engine->m_impl->terminal, GHOSTTY_TERMINAL_OPT_WRITE_PTY,
+                                 reinterpret_cast<const void *>(&GhosttyTerminalEngine::Impl::writePty));
+        writeResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(writeResult));
+    }
     if (const GhosttyResult clipboardResult =
             ghostty_terminal_set(engine->m_impl->terminal, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE,
                                  reinterpret_cast<const void *>(&GhosttyTerminalEngine::Impl::clipboardWrite));
@@ -736,6 +765,13 @@ GhosttyTerminalEngine::create(const TerminalGeometry geometry)
         eventResult != GHOSTTY_SUCCESS)
     {
         return std::unexpected(ghosttyError(eventResult));
+    }
+    const GhosttyTerminalCursorStyle defaultCursorStyle = GHOSTTY_TERMINAL_CURSOR_STYLE_BAR;
+    if (const GhosttyResult cursorResult = ghostty_terminal_set(
+            engine->m_impl->terminal, GHOSTTY_TERMINAL_OPT_DEFAULT_CURSOR_STYLE, &defaultCursorStyle);
+        cursorResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(cursorResult));
     }
     const bool trackLastCell = true;
     ghostty_mouse_encoder_setopt(engine->m_impl->mouseEncoder, GHOSTTY_MOUSE_ENCODER_OPT_TRACK_LAST_CELL,
@@ -1777,6 +1813,11 @@ std::expected<std::vector<std::byte>, std::error_code> GhosttyTerminalEngine::en
 std::optional<std::string> GhosttyTerminalEngine::takeClipboardWrite()
 {
     return std::exchange(m_impl->pendingClipboardWrite, std::nullopt);
+}
+
+std::vector<std::byte> GhosttyTerminalEngine::takePtyWrite()
+{
+    return std::exchange(m_impl->pendingPtyWrite, {});
 }
 
 std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot()
