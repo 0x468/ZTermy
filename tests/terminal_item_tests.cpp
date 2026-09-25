@@ -1,3 +1,4 @@
+#include "domain/terminal/GhosttyTerminalEngine.h"
 #include "platform/windows/WindowsTerminalInput.h"
 #include "ui/terminal/TerminalItem.h"
 #include "ui/terminal/TerminalKeywordHighlighter.h"
@@ -24,6 +25,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <vector>
 
@@ -74,6 +76,9 @@ class TerminalItemTests final : public QObject
     Q_OBJECT
 
 private slots:
+    void rendersKittyProtocolSnapshot();
+    void rendersImageLayersAndReclaimsOverlay_data();
+    void rendersImageLayersAndReclaimsOverlay();
     void reportsOptInFullPaintProfile();
     void blinksOnlyUnselectedInkWithoutTextureUploads_data();
     void blinksOnlyUnselectedInkWithoutTextureUploads();
@@ -119,6 +124,150 @@ private slots:
     void recordsOptInRenderMetrics();
     void analyzesTerminalRowReuse();
 };
+
+void TerminalItemTests::rendersKittyProtocolSnapshot()
+{
+    QQuickWindow window;
+    auto *item = new TestableTerminalItem(window.contentItem());
+    item->setFontPixelSize(24);
+    item->setTerminalCursorVisible(false);
+    item->setSnapshot(snapshotAt(0, 0));
+    const auto cell = item->inputMethodQuery(Qt::ImCursorRectangle).toRectF();
+    auto created = ztermy::terminal::GhosttyTerminalEngine::create(
+        {.columns = 10,
+         .rows = 3,
+         .cellWidthPixels = static_cast<std::uint32_t>(qRound(cell.width())),
+         .cellHeightPixels = static_cast<std::uint32_t>(qRound(cell.height()))});
+    QVERIFY(created);
+    auto &engine = **created;
+    const auto feed = [&](std::string_view text) {
+        return !engine.feed(std::as_bytes(std::span(text)));
+    };
+    QVERIFY(feed("\x1b[2;4H\x1b_Ga=T,f=24,s=1,v=1,i=73,c=2,r=1,C=1;/wAA\x1b\\"));
+    auto result = engine.snapshot();
+    QVERIFY(result);
+    QCOMPARE(result->images.size(), std::size_t{1});
+    item->setSnapshot(std::make_shared<ztermy::terminal::TerminalSnapshot>(*result));
+    window.resize(240, 140);
+    item->setSize(window.size());
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    const auto capture = [&]() -> QImage {
+        const auto grab = item->grabToImage();
+        if (!grab)
+            return {};
+        QSignalSpy ready(grab.data(), &QQuickItemGrabResult::ready);
+        if (grab->image().isNull() && !ready.wait(3000))
+            return {};
+        return grab->image();
+    };
+    const auto rendered = capture();
+    QVERIFY(!rendered.isNull());
+    const QPoint sample(qRound((cell.left() + 4 * cell.width()) * rendered.devicePixelRatio()),
+                        qRound((cell.top() + 1.5 * cell.height()) * rendered.devicePixelRatio()));
+    QCOMPARE(rendered.pixelColor(sample), QColor(Qt::red));
+    QVERIFY(feed("\x1b_Ga=d,d=A;\x1b\\"));
+    result = engine.snapshot();
+    QVERIFY(result);
+    item->setSnapshot(std::make_shared<ztermy::terminal::TerminalSnapshot>(*result));
+    const auto cleared = capture();
+    QVERIFY(!cleared.isNull());
+    QVERIFY(cleared.pixelColor(sample) != QColor(Qt::red));
+}
+
+void TerminalItemTests::rendersImageLayersAndReclaimsOverlay_data()
+{
+    QTest::addColumn<int>("z");
+    QTest::newRow("below-explicit-background") << std::numeric_limits<int>::min();
+    QTest::newRow("below-text") << -1;
+    QTest::newRow("above-blinking-text") << 0;
+}
+
+void TerminalItemTests::rendersImageLayersAndReclaimsOverlay()
+{
+    QFETCH(int, z);
+    QQuickWindow window;
+    auto *item = new TestableTerminalItem(window.contentItem());
+    item->setFontPixelSize(24);
+    item->setTerminalCursorVisible(false);
+    item->setTextBlinkEnabled(false);
+    auto snapshot = snapshotAt(0, 0);
+    snapshot->columns = 10;
+    snapshot->rows = 3;
+    snapshot->cells.assign(30, {});
+    snapshot->defaultBackground = {.red = 0, .green = 0, .blue = 0};
+    snapshot->defaultForeground = {.red = 255, .green = 255, .blue = 255};
+    snapshot->cells[0].explicitBackground = true;
+    snapshot->cells[0].background = {.red = 0, .green = 255, .blue = 0};
+    snapshot->cells[1].grapheme = U"W";
+    snapshot->cells[1].foreground = snapshot->defaultForeground;
+    snapshot->cells[1].blink = true;
+    item->setSnapshot(snapshot);
+    const QRectF cell = item->inputMethodQuery(Qt::ImCursorRectangle).toRectF();
+    auto pixels = std::make_shared<ztermy::terminal::TerminalImage>();
+    pixels->width = 2;
+    pixels->height = 1;
+    pixels->pixels = {255, 0, 0, 255, 0, 0, 255, 255};
+    // Crop away the blue half. Cover three cells, including the W's right-hand overhang.
+    snapshot->images.push_back({.image = pixels,
+                                .z = z,
+                                .width = static_cast<std::uint32_t>(qCeil(cell.width() * 3)),
+                                .height = static_cast<std::uint32_t>(qCeil(cell.height())),
+                                .sourceWidth = 1,
+                                .sourceHeight = 1});
+    item->setSnapshot(std::make_shared<ztermy::terminal::TerminalSnapshot>(*snapshot));
+    window.resize(240, 110);
+    item->setSize(window.size());
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    const auto capture = [&]() -> QImage {
+        const auto grab = item->grabToImage();
+        if (!grab)
+            return {};
+        QSignalSpy ready(grab.data(), &QQuickItemGrabResult::ready);
+        if (grab->image().isNull() && !ready.wait(3000))
+            return {};
+        return grab->image();
+    };
+    const auto rendered = capture();
+    QVERIFY(!rendered.isNull());
+    const qreal scale = rendered.devicePixelRatio();
+    const auto pixel = [&](qreal x, qreal y) {
+        return rendered.pixelColor(qRound(x * scale), qRound(y * scale));
+    };
+    QCOMPARE(pixel(cell.center().x(), cell.center().y()),
+             z == std::numeric_limits<int>::min() ? QColor(Qt::green) : QColor(Qt::red));
+    int whitePixels = 0;
+    for (int y = qCeil(cell.top() * scale); y < qFloor(cell.bottom() * scale); ++y)
+        for (int x = qCeil(cell.right() * scale); x < qFloor((cell.right() + cell.width()) * scale); ++x)
+        {
+            const auto value = rendered.pixelColor(x, y);
+            whitePixels += value.red() > 200 && value.green() > 200 && value.blue() > 200;
+        }
+    QCOMPARE(whitePixels > 0, z < 0);
+    QCOMPARE(pixel(cell.left() - 2, cell.top() + 2), QColor(Qt::black));
+    if (z >= 0)
+    {
+        item->setPerformanceMetricsEnabled(true);
+        item->resetPerformanceMetrics();
+        item->setTextBlinkEnabled(true);
+        QTest::qWait(650);
+        const auto blinkFrame = capture();
+        QCOMPARE(blinkFrame, rendered); // Hidden text blinking must never punch through an image.
+        QCOMPARE(item->performanceMetrics().uploadedBytes, std::uint64_t{0});
+        item->setTextBlinkEnabled(false);
+    }
+    auto cleared = std::make_shared<ztermy::terminal::TerminalSnapshot>(*snapshot);
+    cleared->images.clear();
+    item->setSnapshot(cleared);
+    const auto withoutImage = capture();
+    QVERIFY(!withoutImage.isNull());
+    QCOMPARE(withoutImage.pixelColor(qRound(cell.center().x() * scale), qRound(cell.center().y() * scale)),
+             QColor(Qt::green));
+    // The former image behind the second cell must not survive as a cached overlay.
+    QCOMPARE(withoutImage.pixelColor(qRound((cell.right() + 2) * scale), qRound((cell.bottom() - 2) * scale)),
+             QColor(Qt::black));
+}
 
 void TerminalItemTests::labelsQuickSelectTargetsWithoutPrefixes()
 {

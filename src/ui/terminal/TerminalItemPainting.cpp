@@ -1,3 +1,4 @@
+#include "ui/terminal/TerminalImagePainter.h"
 #include "ui/terminal/TerminalItem.h"
 #include "ui/terminal/TerminalLayoutMetrics.h"
 #include "ui/terminal/TerminalQuickSelect.h"
@@ -74,6 +75,7 @@ public:
     QRectF cursorRect;
     QSGSimpleTextureNode *blinkNode = nullptr;
     QRectF blinkRect;
+    QSGSimpleTextureNode *imageOverlayNode = nullptr;
 
 private:
 #if !defined(NDEBUG)
@@ -328,6 +330,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
     QPicture blinkInk;
     QPainter blinkPainter(&blinkInk);
     blinkPainter.setRenderHint(QPainter::TextAntialiasing);
+    TerminalImageOverlay imageOverlay;
 
     if (m_snapshot)
     {
@@ -335,6 +338,15 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         painter.setRenderHint(QPainter::TextAntialiasing);
         const qreal cellWidthValue = cellWidth();
         const qreal cellHeightValue = cellHeight();
+        const QSizeF imageCell(cellWidthValue, cellHeightValue);
+        const QPointF imageOrigin(horizontalPadding, verticalPadding);
+        const QRectF imageViewport =
+            QRectF(imageOrigin, QSizeF(m_snapshot->columns * cellWidthValue, m_snapshot->rows * cellHeightValue))
+                .intersected(boundingRect());
+        paintTerminalImages(painter, m_snapshot->images, TerminalImageLayer::belowBackground, imageCell, imageOrigin,
+                            imageViewport);
+        imageOverlay =
+            renderTerminalImageOverlay(m_snapshot->images, imageCell, imageOrigin, imageViewport, devicePixelRatio);
         const qreal ascent = m_fontAscent;
         const std::vector<PreeditCluster> preeditClusters = layoutPreeditText(m_preeditText, m_font, cellWidthValue);
         const int insertedColumns = preeditColumnCount(preeditClusters);
@@ -435,6 +447,8 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
             phaseMarkNanoseconds = now;
         }
 
+        paintTerminalImages(painter, m_snapshot->images, TerminalImageLayer::belowText, imageCell, imageOrigin,
+                            imageViewport);
         std::size_t activeStyleBits = std::numeric_limits<std::size_t>::max();
         QColor activePen;
         // The default pane is transparent, so use its palette RGB as the contrast reference even without a fill.
@@ -875,6 +889,29 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         }
     }
 
+    std::uint64_t imageOverlayPixels = 0;
+    if (!imageOverlay.image.isNull())
+    {
+        if (!node->imageOverlayNode)
+        {
+            node->imageOverlayNode = new QSGSimpleTextureNode;
+            node->imageOverlayNode->setOwnsTexture(true);
+            node->imageOverlayNode->setFiltering(QSGTexture::Nearest);
+            if (node->cursorNode)
+                node->insertChildNodeBefore(node->imageOverlayNode, node->cursorNode);
+            else
+                node->appendChildNode(node->imageOverlayNode);
+        }
+        node->imageOverlayNode->setTexture(window()->createTextureFromImage(imageOverlay.image));
+        node->imageOverlayNode->setRect(imageOverlay.rectangle);
+        imageOverlayPixels = static_cast<std::uint64_t>(imageOverlay.image.width()) * imageOverlay.image.height();
+    }
+    else if (node->imageOverlayNode)
+    {
+        node->removeChildNode(node->imageOverlayNode);
+        delete node->imageOverlayNode;
+        node->imageOverlayNode = nullptr;
+    }
     blinkPainter.end();
     const QRect blinkBounds = blinkInk.boundingRect().intersected(boundingRect().toAlignedRect());
     std::uint64_t blinkPixels = 0;
@@ -934,8 +971,8 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         const auto pixelCount =
             static_cast<std::uint64_t>(pixelSize.width()) * static_cast<std::uint64_t>(pixelSize.height());
         m_renderMetrics.recordFrame(std::chrono::nanoseconds{paintNanoseconds},
-                                    std::chrono::nanoseconds{textureNanoseconds}, pixelCount + blinkPixels, damage,
-                                    damagedRowCount);
+                                    std::chrono::nanoseconds{textureNanoseconds},
+                                    pixelCount + blinkPixels + imageOverlayPixels, damage, damagedRowCount);
     }
 #if !defined(NDEBUG)
     node->recordTiming(paintNanoseconds, textureNanoseconds, pixelSize, damage, damagedRowCount);

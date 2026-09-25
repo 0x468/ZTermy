@@ -7,6 +7,7 @@
 #include "core/config/ApplicationPaths.h"
 #include "core/logging/Logging.h"
 #include "core/windowing/WindowPresenter.h"
+#include "infrastructure/terminal/TerminalPngDecoder.h"
 #include "platform/windows/CrashDiagnostics.h"
 #include "platform/windows/NativeWindow.h"
 #include "ui/AiMemoryDiagnostics.h"
@@ -4468,6 +4469,8 @@ int main(int argc, char *argv[])
     const bool opaquePerformanceSurface =
         rawPerformanceBenchmark && requestedPerformanceBackdrop() == QStringLiteral("opaque");
     QGuiApplication application(argc, argv);
+    if (!ztermy::terminal::installTerminalPngDecoder())
+        return EXIT_FAILURE;
     QGuiApplication::setApplicationDisplayName(QStringLiteral("ztermy"));
     QGuiApplication::setApplicationName(QStringLiteral("ztermy"));
     QGuiApplication::setApplicationVersion(QStringLiteral(ZTERMY_VERSION_STRING));

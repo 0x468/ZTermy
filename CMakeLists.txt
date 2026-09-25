@@ -502,6 +502,13 @@ add_library(ztermy_terminal_engine STATIC
     src/domain/terminal/CommandBlockStore.h
     src/domain/terminal/GhosttyTerminalEngine.cpp
     src/domain/terminal/GhosttyInputMapping.cpp
+    src/domain/terminal/GhosttyImageSnapshot.cpp
+    src/domain/terminal/GhosttyImageSnapshot.h
+    src/domain/terminal/SixelDecoder.cpp
+    src/domain/terminal/SixelDecoder.h
+    src/domain/terminal/TerminalGraphicsStream.cpp
+    src/domain/terminal/TerminalGraphicsStream.h
+    src/domain/terminal/TerminalImage.h
     src/domain/terminal/GhosttyTerminalEngine.h
     src/domain/terminal/TerminalLinkDetector.cpp
     src/domain/terminal/TerminalLinkDetector.h
@@ -743,6 +750,14 @@ target_compile_features(ztermy_terminal_engine PUBLIC cxx_std_23)
 target_include_directories(ztermy_terminal_engine PUBLIC src)
 target_link_libraries(ztermy_terminal_engine PRIVATE ghostty-vt-static)
 
+add_library(ztermy_terminal_image_codec STATIC
+    src/infrastructure/terminal/TerminalPngDecoder.cpp
+    src/infrastructure/terminal/TerminalPngDecoder.h
+)
+target_compile_features(ztermy_terminal_image_codec PUBLIC cxx_std_23)
+target_include_directories(ztermy_terminal_image_codec PUBLIC src)
+target_link_libraries(ztermy_terminal_image_codec PUBLIC Qt6::Gui PRIVATE ghostty-vt-static)
+
 add_library(ztermy_terminal_session STATIC
     src/application/terminal/LocalTerminalSession.cpp
     src/application/terminal/LocalTerminalPresentation.cpp
@@ -858,6 +873,8 @@ add_library(ztermy_terminal_ui STATIC
     src/ui/terminal/TerminalItem.cpp
     src/ui/terminal/TerminalItemBlink.cpp
     src/ui/terminal/TerminalItemPainting.cpp
+    src/ui/terminal/TerminalImagePainter.cpp
+    src/ui/terminal/TerminalImagePainter.h
     src/ui/terminal/TerminalItem.h
     src/ui/terminal/TerminalKeywordHighlighter.cpp
     src/ui/terminal/TerminalKeywordHighlighter.h
@@ -1574,6 +1591,7 @@ if(ZTERMY_STATIC_BUILD)
 endif()
 
 target_link_libraries(ztermy PRIVATE
+    ztermy_terminal_image_codec
     ztermy_application_controller
     ztermy_ai_application
     ztermy_ai_context
@@ -3356,6 +3374,7 @@ if(BUILD_TESTING)
     target_compile_features(ztermy_terminal_engine_tests PRIVATE cxx_std_23)
     target_link_libraries(ztermy_terminal_engine_tests PRIVATE
         ztermy_terminal_engine
+        ztermy_terminal_image_codec
         Qt6::Test
     )
 

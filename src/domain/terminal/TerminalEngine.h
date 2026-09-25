@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/config/TerminalColorScheme.h"
+#include "domain/terminal/TerminalImage.h"
 #include "domain/terminal/TerminalInput.h"
 #include "domain/terminal/TerminalStatus.h"
 
@@ -223,6 +224,7 @@ struct TerminalSnapshot
     std::vector<std::uint16_t> damagedRows;
     std::vector<TerminalCell> cells;
     std::vector<TerminalHyperlink> hyperlinks;
+    std::vector<TerminalImagePlacement> images;
     // Raw value emitted by OSC 7 / OSC 9 / OSC 1337. Consumers must
     // validate and normalize it before treating it as a filesystem path.
     std::string workingDirectory;

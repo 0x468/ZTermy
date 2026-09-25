@@ -1,4 +1,5 @@
 #include "domain/terminal/GhosttyTerminalEngine.h"
+#include "domain/terminal/GhosttyImageSnapshot.h"
 #include "domain/terminal/GhosttyInputMapping.h"
 #include "domain/terminal/GhosttyStatusEvents.h"
 #include "domain/terminal/TerminalLinkDetector.h"
@@ -458,6 +459,7 @@ struct GhosttyTerminalEngine::Impl
     std::vector<std::byte> pendingPtyWrite;
     std::optional<std::string> pendingClipboardWrite;
     GhosttyStatusEvents statusEvents;
+    GhosttyImageSnapshot imageSnapshot;
     GhosttyColorScheme reportedScheme = GHOSTTY_COLOR_SCHEME_DARK;
     TerminalGeometry geometry;
     std::string pendingSemanticPromptPrefix;
@@ -1711,6 +1713,10 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
     }
 
     TerminalSnapshot result;
+    bool imagesChanged = false;
+    if (const auto imageResult = m_impl->imageSnapshot.capture(m_impl->terminal, result.images, imagesChanged);
+        imageResult != GHOSTTY_SUCCESS)
+        return std::unexpected(ghosttyError(imageResult));
     result.progress = m_impl->statusEvents.progress;
     result.notification = m_impl->statusEvents.notification;
     GhosttyRenderStateDirty dirtyState = GHOSTTY_RENDER_STATE_DIRTY_FULL;
@@ -1734,6 +1740,8 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
             break;
     }
 
+    if (imagesChanged)
+        result.damage = TerminalDamageKind::full;
     if (const GhosttyResult colsResult =
             ghostty_render_state_get(m_impl->renderState, GHOSTTY_RENDER_STATE_DATA_COLS, &result.columns);
         colsResult != GHOSTTY_SUCCESS)

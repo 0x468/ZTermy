@@ -613,3 +613,125 @@ synthetic workload near its baseline; these samples do not establish a general
 speedup, nor measure SSH throughput or every font/DPI. The separate phase test
 continues to require zero texture-upload bytes while blinking/turning motion
 off. The opt-in profile has no machine-dependent timing pass threshold.
+
+## Inline images: implementation in progress (2026-09-26)
+
+The pinned Ghostty C API already owns Kitty transmissions, image generations,
+placements, source crops, and viewport-relative positioning. Reuse that state
+instead of parsing Kitty a second time. The domain snapshot now carries owned,
+immutable pixels plus placement metadata; it never exposes borrowed Ghostty
+pointers to the GUI/render thread. Equal generations reuse the same pixel
+object, including multiple placements. Cache references are weak so deletion
+releases pixels after the last displayed/queued snapshot releases them.
+
+The bridge bounds a snapshot to 32 MiB of unique image pixels, 8192 pixels per
+dimension and 4096 visible placements. These are **snapshot bounds, not yet a
+complete protocol admission policy**. The pinned library's terminal defaults
+use 10,000,000 bytes of image storage per screen (the standalone Ghostty
+application uses 320,000,000), while the loader independently allows up to
+400 MiB. Merely reducing stored-image bytes does not bound transmission or
+decompression peaks. This must be addressed before declaring image support
+ready. File, temporary-file and shared-memory media must remain disabled;
+direct terminal-stream transmission is sufficient for remote sessions.
+
+Focused dynamic Release tests feed real, fragmented Kitty sequences and check
+same-ID/same-size pixel replacement, old-snapshot immutability, same-generation
+pixel sharing, deletion lifetime, alternate-screen isolation, and scroll
+position changes. These pass alongside blink attributes, split VT input,
+screen switching and render-damage regressions (6 cases plus init/cleanup).
+No full regression was run for this intermediate domain-layer change.
+
+An additional image-only deletion check initially failed: Ghostty's text damage
+remained clean after deleting a placement. The bridge now compares graphics
+storage generations independently and forces a full viewport repaint when the
+image state changes. The failing deletion assertion now passes; this prevents
+the future compositor from leaving a stale deleted image on screen.
+
+The viewport now composites ordinary placements in the three protocol layers:
+below explicit cell backgrounds, below text, and above text. Source cropping,
+pixel offsets and clipping use the snapshot geometry. Above-text imagery uses
+a bounded-to-visible-area texture above blinking ink and below the cursor;
+phase-only blink paints retain that texture and upload zero additional bytes.
+Images bypass text contrast/faint-color adjustments and pane background opacity.
+
+Dynamic Release hardware Qt window captures pass at default and 125% scaling:
+explicit background coverage, text/image order, cropped source scaling,
+padding clipping, overlay deletion, and a blinking glyph hidden by an opaque
+image. A first whole-frame assertion exposed one glyph overhang pixel outside
+the fixture's image; the fixture was enlarged to cover the glyph, without
+weakening the pixel equality assertion. The three existing blink cases also
+pass. A separate integration case sends a real RGB Kitty transmission through
+Ghostty, displays its snapshot in a real terminal item, checks the red pixels
+at the requested cell and verifies deletion removes them. These are test-window
+captures, not yet an acceptance run of a shell image tool in the full app.
+
+PNG decoding is now registered once before application terminal workers start,
+via a separate Qt-backed infrastructure target; the domain engine stays Qt-free.
+The callback returns allocator-owned, straight RGBA bytes using Ghostty's own
+allocator, rather than crossing the MSVC/Zig heap boundary. It accepts at most
+8 MiB of encoded PNG, 8192 pixels per dimension, and 32 MiB of decoded raster
+(preflight budgets eight bytes per pixel for 16-bit PNG). It processes only
+critical pixel chunks and transparency, rejects unknown critical chunks, and
+does not inflate textual/ICC metadata or run animation. This deliberately
+omits embedded color-profile processing; the output is static raw color data.
+The format constraints follow the
+[PNG chunk specification](https://www.w3.org/TR/png-3/#5Chunk-layout).
+
+Real fragmented Kitty `f=100` transmission preserves RGBA values including
+half-transparent pixels. Focused tests also reject valid over-wide and
+over-raster-budget PNGs, huge declared dimensions with repaired IHDR CRCs,
+overflow-sized chunks and truncation;
+valid compressed text metadata does not change decoded pixels. Those two cases
+and the two existing Kitty lifecycle cases pass in dynamic Release. The valid
+oversize fixtures are important: a mismatched IHDR/IDAT image could fail in the
+codec even without our admission check and would not prove the limit works.
+The complete dynamic Release application also builds with startup registration.
+These
+decoder bounds do not yet bound the preceding Ghostty multipart/zlib loader or
+the total memory retained by multiple sessions.
+
+The Qt-free Sixel payload decoder now incrementally accepts raster attributes,
+RGB/DEC-HLS color definitions, repeat runs, carriage return, next-band controls,
+and transparent/opaque backgrounds. It retains color-register indexes until
+final RGBA conversion and returns the resulting palette, aspect ratio and sixel
+cursor coordinates for the eventual terminal adapter. The DEC defaults and
+blue-at-zero HLS convention come from the original
+[color mapping chapter](https://vt100.net/docs/vt3xx-gp/chapter2.html) and
+[Sixel chapter](https://vt100.net/docs/vt3xx-gp/chapter14.html), not another
+terminal's implementation.
+
+Limits are 8 MiB input, 8192 pixels per dimension, 8,388,608 pixels
+(32 MiB RGBA), and separate 64-million-unit budgets for painting and storage
+growth. Rejected streams release scratch storage immediately. The decoder does
+not preallocate a full-size canvas and does not expand RLE into a temporary
+input string. Focused tests cover every chunk size of a multi-color payload,
+transparent overprinting, DEC hue zero, raster dimensions as minimum extent
+rather than crop limits, incomplete/overflowed repeat counts, and repetitive
+overdrawing of a small final bitmap. These three tests plus adjacent PNG and
+Kitty lifecycle tests pass in dynamic Release (5 cases plus init/cleanup).
+The accompanying graphics-stream framer recognizes seven-bit and raw C1 Sixel
+DCS boundaries, distinguishes UTF-8 continuation bytes from C1 controls, and
+passes other OSC/APC/DCS traffic through unchanged. Its retained header is
+bounded to 128 bytes; payloads are delivered as borrowed spans instead of
+accumulating a second image buffer. Ordinary 64 KiB text is forwarded with one
+sink call. CAN/SUB, an interrupted escape, and stream EOF cancel unfinished
+images. All fragment sizes of mixed VT/Kitty/UTF-8/Sixel input, both ST forms,
+overlong headers, cancellation and EOF recovery pass focused tests (together
+with Sixel decoding and ordinary VT, 6 cases plus init/cleanup).
+
+These are the payload decoder and framer only: the framer is not yet connected
+to `GhosttyTerminalEngine::feed`, and Sixel is not advertised in device-attribute
+replies. The adapter must still couple stream events to image placement and
+terminal cursor/scroll semantics before runtime support can be claimed.
+For that adapter, verify modern compatibility against
+[xterm's sixelScrolling documentation](https://invisible-island.net/xterm/manpage/xterm.html):
+scrolling is enabled by default and is the inverse of DECSDM (private mode 80).
+The old DEC chapter's prose is not a safe substitute for this interoperability
+check. Mode 8452 and the post-image text cursor also require explicit evidence.
+
+Still pending: transmission/decompression admission,
+Sixel DCS routing and cursor semantics, Unicode placeholders, IME/selection-overlay
+priority around above-text images, resource/performance policy, and full-app
+runtime evidence. The current patch is not a claim of complete Kitty or Sixel
+support. Reference:
+[Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/).

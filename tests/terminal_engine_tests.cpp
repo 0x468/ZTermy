@@ -1,7 +1,12 @@
 #include "domain/terminal/GhosttyTerminalEngine.h"
 #include "domain/terminal/ShellPathQuoter.h"
+#include "domain/terminal/SixelDecoder.h"
+#include "domain/terminal/TerminalGraphicsStream.h"
+#include "infrastructure/terminal/TerminalPngDecoder.h"
 
+#include <QBuffer>
 #include <QTest>
+#include <QtEndian>
 
 #include <algorithm>
 #include <cstddef>
@@ -12,11 +17,48 @@
 namespace
 {
 
+class GraphicsSinkFixture final : public ztermy::terminal::TerminalGraphicsSink
+{
+public:
+    void writeTerminal(std::string_view bytes) override
+    {
+        terminal.append(bytes);
+        transcript.append(bytes);
+        ++writes;
+    }
+    void beginSixel(std::string_view parameters) override
+    {
+        headers.emplace_back(parameters);
+        payloads.emplace_back();
+    }
+    void writeSixel(std::string_view bytes) override { payloads.back().append(bytes); }
+    void endSixel(bool cancelled) override
+    {
+        cancellations.push_back(cancelled);
+        transcript += "<image>";
+    }
+    std::string terminal;
+    std::string transcript;
+    std::vector<std::string> headers;
+    std::vector<std::string> payloads;
+    std::vector<bool> cancellations;
+    int writes = 0;
+};
+
 class TerminalEngineTests final : public QObject
 {
     Q_OBJECT
 
 private slots:
+    void separatesSixelWithoutChangingOtherVtOrUtf8();
+    void recoversFromCancelledOrIncompleteGraphicsStrings();
+    void decodesFragmentedSixelOverprintsAndDecColors();
+    void preservesSixelBackgroundAndRasterExtent();
+    void boundsSixelRepeatAndOverdrawWork();
+    void decodesPngThroughKittyWithoutPremultiplyingAlpha();
+    void rejectsOversizedAndMalformedPngBeforeRasterDecode();
+    void retainsKittyPixelsAcrossReplacementAndDeletion();
+    void tracksKittyPlacementAcrossScreenAndScrollChanges();
     void preservesBlinkAttributesWithoutChangingText();
     void retainsProgressAcrossFragmentedReports();
     void boundsAndThrottlesProgramNotifications();
@@ -58,6 +100,338 @@ private slots:
     void pagesThroughScrollback();
     void quotesDroppedPathsForShellDialects();
 };
+
+void TerminalEngineTests::separatesSixelWithoutChangingOtherVtOrUtf8()
+{
+    const std::string before = "before\x1b]2;title q#1~\x07\x1b_Ga=q,i=7;AAAA\x1b\\\x1bP$qm\x1b\\"
+                               "\xf0\x9f\x90\x9c\x1b[31m";
+    const std::string payload = "\"1;1;2;6#1;2;100;0;0!2~";
+    const std::string after = "after\xc2\xa2\x1b[0m";
+    for (const bool c1 : {false, true})
+    {
+        auto input = before;
+        input.append(c1 ? "\x90" : "\x1bP")
+            .append("0;1;0q")
+            .append(payload)
+            .append(c1 ? "\x9c" : "\x1b\\")
+            .append(after);
+        auto transcript = before;
+        transcript.append("<image>").append(after);
+        for (std::size_t chunk = 1; chunk <= input.size(); ++chunk)
+        {
+            ztermy::terminal::TerminalGraphicsStream stream;
+            GraphicsSinkFixture sink;
+            for (std::size_t offset = 0; offset < input.size(); offset += chunk)
+                stream.append(std::string_view(input).substr(offset, chunk), sink);
+            stream.finish(sink);
+            QCOMPARE(sink.terminal, before + after);
+            QCOMPARE(sink.transcript, transcript);
+            QCOMPARE(sink.headers, std::vector<std::string>({"0;1;0"}));
+            QCOMPARE(sink.payloads, std::vector<std::string>({payload}));
+            QCOMPARE(sink.cancellations, std::vector<bool>({false}));
+        }
+    }
+    ztermy::terminal::TerminalGraphicsStream stream;
+    GraphicsSinkFixture sink;
+    const std::string plain(std::size_t{64} * 1024, 'A');
+    stream.append(plain, sink);
+    QCOMPARE(sink.terminal, plain);
+    QCOMPARE(sink.writes, 1);
+}
+
+void TerminalEngineTests::recoversFromCancelledOrIncompleteGraphicsStrings()
+{
+    const std::string input = "A\x1bPq~\x18tail\x1bPq!2~\x1b[31mred\x1bPq!";
+    for (std::size_t chunk = 1; chunk <= input.size(); ++chunk)
+    {
+        ztermy::terminal::TerminalGraphicsStream stream;
+        GraphicsSinkFixture sink;
+        for (std::size_t offset = 0; offset < input.size(); offset += chunk)
+            stream.append(std::string_view(input).substr(offset, chunk), sink);
+        stream.finish(sink);
+        QCOMPARE(sink.terminal, std::string("A\x18tail\x1b[31mred"));
+        QCOMPARE(sink.cancellations, std::vector<bool>({true, true, true}));
+        QCOMPARE(sink.payloads, std::vector<std::string>({"~", "!2~", "!"}));
+    }
+    for (const auto &passthrough : {std::string("\x1bP") + std::string(150, '1') + "qanything\x1b\\after",
+                                    std::string("\x1bP1;2"), std::string("hello\x1b"),
+                                    std::string("\x1bP12\x9c"
+                                                "after")})
+    {
+        ztermy::terminal::TerminalGraphicsStream stream;
+        GraphicsSinkFixture sink;
+        for (const char &byte : passthrough)
+            stream.append({&byte, 1}, sink);
+        stream.finish(sink);
+        QCOMPARE(sink.terminal, passthrough);
+        QVERIFY(sink.headers.empty());
+    }
+}
+
+void TerminalEngineTests::decodesFragmentedSixelOverprintsAndDecColors()
+{
+    const std::string_view payload = "\"1;1;3;2#1;2;100;0;0!2@?$#2;2;0;100;0A-#3;1;0;50;100B";
+    for (std::size_t chunk = 1; chunk <= payload.size(); ++chunk)
+    {
+        ztermy::terminal::SixelDecoder decoder({.transparent = true});
+        for (std::size_t offset = 0; offset < payload.size(); offset += chunk)
+            QVERIFY(decoder.append(payload.substr(offset, chunk)));
+        const auto result = decoder.finish();
+        QVERIFY(result);
+        QCOMPARE(result->image.width, std::uint32_t{3});
+        QCOMPARE(result->image.height, std::uint32_t{12});
+        QCOMPARE(result->options.aspectNumerator, std::uint32_t{1});
+        QCOMPARE(result->cursorX, std::uint32_t{1});
+        QCOMPARE(result->cursorY, std::uint32_t{6});
+        const auto pixel = [&](std::size_t x, std::size_t y) {
+            const auto *p = result->image.pixels.data() + (y * 3 + x) * 4;
+            return QColor(p[0], p[1], p[2], p[3]);
+        };
+        QCOMPARE(pixel(0, 0), QColor(Qt::red));
+        QCOMPARE(pixel(1, 0), QColor(Qt::red));
+        QCOMPARE(pixel(0, 1), QColor(Qt::green));
+        QCOMPARE(pixel(2, 0).alpha(), 0);
+        QCOMPARE(pixel(0, 6), QColor(Qt::blue)); // DEC HLS hue 0 is blue, not red.
+        QCOMPARE(pixel(0, 7), QColor(Qt::blue));
+    }
+}
+
+void TerminalEngineTests::preservesSixelBackgroundAndRasterExtent()
+{
+    ztermy::terminal::SixelDecoder decoder({.background = {.red = 7, .green = 8, .blue = 9}});
+    QVERIFY(decoder.append("\"2;1;4;8#7;2;100;0;0@"));
+    const auto result = decoder.finish();
+    QVERIFY(result);
+    QCOMPARE(result->image.width, std::uint32_t{4});
+    QCOMPARE(result->image.height, std::uint32_t{8});
+    QCOMPARE(result->options.aspectNumerator, std::uint32_t{2});
+    QCOMPARE(result->image.pixels[0], std::uint8_t{255});
+    QCOMPARE(result->image.pixels[4], std::uint8_t{7});
+    QCOMPARE(result->image.pixels[5], std::uint8_t{8});
+    QCOMPARE(result->image.pixels[6], std::uint8_t{9});
+    QCOMPARE(result->image.pixels[7], std::uint8_t{255});
+    QCOMPARE(result->image.pixels.back(), std::uint8_t{255});
+    QVERIFY(!decoder.append("@"));
+    QVERIFY(!decoder.finish());
+
+    // Grow beyond a large declared raster after writing a pixel. Earlier rows
+    // must survive any change of row stride, without retaining unused capacity.
+    ztermy::terminal::SixelDecoder growth({.transparent = true});
+    QVERIFY(growth.append("\"1;1;5000;1000#1;2;100;0;0@"));
+    QVERIFY(growth.append(std::string(167, '-')));
+    QVERIFY(growth.append("#2;2;0;0;100@"));
+    const auto grown = growth.finish();
+    QVERIFY(grown);
+    QCOMPARE(grown->image.width, std::uint32_t{5000});
+    QCOMPARE(grown->image.height, std::uint32_t{1008});
+    QCOMPARE(grown->image.pixels[0], std::uint8_t{255});
+    QCOMPARE(grown->image.pixels[3], std::uint8_t{255});
+    const auto last = std::size_t{1002} * 5000 * 4;
+    QCOMPARE(grown->image.pixels[last + 2], std::uint8_t{255});
+    QCOMPARE(grown->image.pixels[last + 3], std::uint8_t{255});
+}
+
+void TerminalEngineTests::boundsSixelRepeatAndOverdrawWork()
+{
+    using ztermy::terminal::SixelDecoder;
+    using ztermy::terminal::SixelError;
+    SixelDecoder hugeRepeat;
+    QVERIFY(!hugeRepeat.append("!4294967295~"));
+    QCOMPARE(hugeRepeat.finish().error(), SixelError::limit);
+    SixelDecoder integerOverflow;
+    QVERIFY(!integerOverflow.append("!42949672960"));
+    QCOMPARE(integerOverflow.finish().error(), SixelError::limit);
+    SixelDecoder hugeRaster;
+    QVERIFY(!hugeRaster.append("\"1;1;8192;8192@"));
+    QCOMPARE(hugeRaster.finish().error(), SixelError::limit);
+    SixelDecoder missingRepeat;
+    QVERIFY(missingRepeat.append("!42"));
+    QCOMPARE(missingRepeat.finish().error(), SixelError::invalid);
+    SixelDecoder work;
+    bool rejected = false;
+    // Repainting the same short row must not evade the work budget merely
+    // because the final bitmap is small (a few KiB of compressed input).
+    for (int i = 0; i < 1500 && !rejected; ++i)
+        rejected = !work.append("!8192~$");
+    QVERIFY(rejected);
+    QCOMPARE(work.finish().error(), SixelError::limit);
+}
+
+QByteArray pngFixture()
+{
+    QImage source(2, 1, QImage::Format_RGBA8888);
+    source.setPixelColor(0, 0, QColor(240, 30, 80, 128));
+    source.setPixelColor(1, 0, QColor(10, 200, 50, 255));
+    QByteArray bytes;
+    QBuffer buffer(&bytes);
+    if (!buffer.open(QIODevice::WriteOnly) || !source.save(&buffer, "PNG"))
+        return {};
+    return bytes;
+}
+
+void updatePngChunkCrc(QByteArray &png, qsizetype offset)
+{
+    const auto size = qFromBigEndian<quint32>(png.constData() + offset);
+    quint32 crc = 0xffffffffU;
+    for (qsizetype index = offset + 4; index < offset + 8 + size; ++index)
+    {
+        crc ^= static_cast<unsigned char>(png[index]);
+        for (int bit = 0; bit < 8; ++bit)
+            crc = (crc >> 1) ^ ((crc & 1U) ? 0xedb88320U : 0U);
+    }
+    qToBigEndian(crc ^ 0xffffffffU, png.data() + offset + 8 + size);
+}
+
+void TerminalEngineTests::decodesPngThroughKittyWithoutPremultiplyingAlpha()
+{
+    QVERIFY(ztermy::terminal::installTerminalPngDecoder());
+    auto created = ztermy::terminal::GhosttyTerminalEngine::create(
+        {.columns = 10, .rows = 3, .cellWidthPixels = 8, .cellHeightPixels = 16});
+    QVERIFY(created);
+    const auto png = pngFixture();
+    QVERIFY(!png.isEmpty());
+    const QByteArray command = QByteArray("\x1b_Ga=T,f=100,i=74,c=2,r=1;") + png.toBase64() + "\x1b\\";
+    auto &engine = **created;
+    for (qsizetype offset = 0; offset < command.size(); offset += 7)
+    {
+        const auto fragment = QByteArrayView(command).sliced(offset, std::min(qsizetype{7}, command.size() - offset));
+        QVERIFY(!engine.feed(std::as_bytes(std::span(fragment.data(), static_cast<std::size_t>(fragment.size())))));
+    }
+    const auto snapshot = engine.snapshot();
+    QVERIFY(snapshot);
+    QCOMPARE(snapshot->images.size(), std::size_t{1});
+    QCOMPARE(snapshot->images[0].image->width, std::uint32_t{2});
+    QCOMPARE(snapshot->images[0].image->height, std::uint32_t{1});
+    QCOMPARE(snapshot->images[0].image->format, ztermy::terminal::TerminalImageFormat::rgba);
+    QCOMPARE(snapshot->images[0].image->pixels, std::vector<std::uint8_t>({240, 30, 80, 128, 10, 200, 50, 255}));
+}
+
+void TerminalEngineTests::rejectsOversizedAndMalformedPngBeforeRasterDecode()
+{
+    const auto valid = pngFixture();
+    QVERIFY(!valid.isEmpty());
+    const auto expected = ztermy::terminal::decodeTerminalPng(valid);
+    QVERIFY(!expected.isNull());
+    const auto encode = [](const QImage &image) {
+        QByteArray bytes;
+        QBuffer buffer(&bytes);
+        if (!buffer.open(QIODevice::WriteOnly) || !image.save(&buffer, "PNG"))
+            return QByteArray{};
+        return bytes;
+    };
+    // These are valid images, not mismatched IHDR/IDAT fixtures. Removing the
+    // admission limits would make decoding succeed, so failure is meaningful.
+    QImage wide(8193, 1, QImage::Format_Grayscale8);
+    wide.fill(128);
+    const auto widePng = encode(wide);
+    QVERIFY(!widePng.isEmpty());
+    QVERIFY(ztermy::terminal::decodeTerminalPng(widePng).isNull());
+    QImage large(8192, 1025, QImage::Format_Grayscale8);
+    large.fill(128);
+    const auto largePng = encode(large);
+    QVERIFY(!largePng.isEmpty());
+    QVERIFY(ztermy::terminal::decodeTerminalPng(largePng).isNull());
+    auto oversized = valid;
+    qToBigEndian(quint32{8193}, oversized.data() + 16);
+    updatePngChunkCrc(oversized, 8);
+    QVERIFY(ztermy::terminal::decodeTerminalPng(oversized).isNull());
+    qToBigEndian(quint32{8192}, oversized.data() + 16);
+    qToBigEndian(quint32{8192}, oversized.data() + 20);
+    updatePngChunkCrc(oversized, 8);
+    QVERIFY(ztermy::terminal::decodeTerminalPng(oversized).isNull());
+    auto malformed = valid;
+    qToBigEndian(quint32{0xffffffffU}, malformed.data() + 8);
+    QVERIFY(ztermy::terminal::decodeTerminalPng(malformed).isNull());
+    QVERIFY(ztermy::terminal::decodeTerminalPng(QByteArrayView(valid).first(valid.size() - 1)).isNull());
+
+    // Valid compressed metadata can expand far beyond its chunk length; it is not image data.
+    const QByteArray compressed = qCompress(QByteArray(qsizetype{2} * 1024 * 1024, 'x'), 9).mid(4);
+    const QByteArray payload = QByteArray("Comment\0\0", 9) + compressed;
+    QByteArray chunk(12 + payload.size(), '\0');
+    qToBigEndian(static_cast<quint32>(payload.size()), chunk.data());
+    chunk.replace(4, 4, "zTXt");
+    chunk.replace(8, payload.size(), payload);
+    updatePngChunkCrc(chunk, 0);
+    auto withMetadata = valid;
+    withMetadata.insert(33, chunk);
+    QCOMPARE(ztermy::terminal::decodeTerminalPng(withMetadata), expected);
+}
+
+void TerminalEngineTests::retainsKittyPixelsAcrossReplacementAndDeletion()
+{
+    auto created = ztermy::terminal::GhosttyTerminalEngine::create(
+        {.columns = 10, .rows = 4, .cellWidthPixels = 8, .cellHeightPixels = 16});
+    QVERIFY(created);
+    auto &engine = **created;
+    const auto feed = [&](std::string_view value) {
+        return !engine.feed(std::as_bytes(std::span(value)));
+    };
+    // A direct RGBA red pixel, split inside its base64 payload.
+    QVERIFY(feed("\x1b_Ga=T,f=32,s=1,v=1,i=71,p=1,c=2,r=1;"));
+    QVERIFY(engine.snapshot()->images.empty());
+    QVERIFY(feed("/wAA"));
+    QVERIFY(feed("/w==\x1b\\"));
+    const auto original = engine.snapshot();
+    QVERIFY(original);
+    QCOMPARE(original->images.size(), std::size_t{1});
+    QVERIFY(original->damage != ztermy::terminal::TerminalDamageKind::none);
+    const auto red = original->images[0].image;
+    QCOMPARE(red->pixels, std::vector<std::uint8_t>({255, 0, 0, 255}));
+    QCOMPARE(original->images[0].width, std::uint32_t{16});
+    QCOMPARE(original->images[0].height, std::uint32_t{16});
+    const auto unchanged = engine.snapshot();
+    QVERIFY(unchanged);
+    QCOMPARE(unchanged->images[0].image.get(), red.get());
+    // Same dimensions and ID, different pixels: size-only caches are wrong.
+    QVERIFY(feed("\x1b_Ga=t,f=32,s=1,v=1,i=71;AAD//w==\x1b\\"));
+    QVERIFY(feed("\x1b_Ga=p,i=71,p=1,c=2,r=1;\x1b\\"));
+    const auto replaced = engine.snapshot();
+    QVERIFY(replaced);
+    QVERIFY(!replaced->images.empty());
+    QVERIFY(replaced->damage != ztermy::terminal::TerminalDamageKind::none);
+    QCOMPARE(replaced->images[0].image->pixels, std::vector<std::uint8_t>({0, 0, 255, 255}));
+    QVERIFY(replaced->images[0].image->generation != red->generation);
+    QCOMPARE(red->pixels, std::vector<std::uint8_t>({255, 0, 0, 255}));
+    QVERIFY(feed("\x1b_Ga=d,d=A;\x1b\\"));
+    const auto deleted = engine.snapshot();
+    QVERIFY(deleted);
+    QVERIFY(deleted->images.empty());
+    QVERIFY(deleted->damage != ztermy::terminal::TerminalDamageKind::none);
+    QCOMPARE(red->pixels, std::vector<std::uint8_t>({255, 0, 0, 255}));
+}
+
+void TerminalEngineTests::tracksKittyPlacementAcrossScreenAndScrollChanges()
+{
+    auto created = ztermy::terminal::GhosttyTerminalEngine::create(
+        {.columns = 10, .rows = 4, .cellWidthPixels = 8, .cellHeightPixels = 16});
+    QVERIFY(created);
+    auto &engine = **created;
+    const auto feed = [&](std::string_view value) {
+        return !engine.feed(std::as_bytes(std::span(value)));
+    };
+    QVERIFY(feed("\x1b[2;3H\x1b_Ga=T,f=24,s=1,v=1,i=72,c=1,r=1,C=1;/wAA\x1b\\"));
+    auto original = engine.snapshot();
+    QVERIFY(original);
+    QCOMPARE(original->images.size(), std::size_t{1});
+    QCOMPARE(original->images[0].column, 2);
+    QCOMPARE(original->images[0].row, 1);
+    std::weak_ptr<const ztermy::terminal::TerminalImage> pixels = original->images[0].image;
+    QVERIFY(feed("\x1b[?1049h"));
+    QVERIFY(engine.snapshot()->images.empty());
+    QVERIFY(feed("\x1b[?1049l"));
+    QCOMPARE(engine.snapshot()->images[0].image.get(), original->images[0].image.get());
+    QVERIFY(feed("\x1b[4;1H\n"));
+    auto scrolled = engine.snapshot();
+    QVERIFY(scrolled);
+    QCOMPARE(scrolled->images.size(), std::size_t{1});
+    QCOMPARE(scrolled->images[0].row, 0);
+    QVERIFY(feed("\x1b_Ga=d,d=A;\x1b\\"));
+    QVERIFY(engine.snapshot()->images.empty());
+    original->images.clear();
+    QVERIFY(!pixels.expired()); // The scrolled snapshot still owns its pixels.
+    scrolled->images.clear();
+    QVERIFY(pixels.expired()); // The bridge must not retain deleted image pixels.
+}
 
 void TerminalEngineTests::preservesBlinkAttributesWithoutChangingText()
 {
