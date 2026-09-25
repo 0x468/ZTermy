@@ -2997,7 +2997,8 @@ QVariantList AppController::terminalTabs() const
         if (tab != nullptr)
         {
             QVariantMap value = terminalTabValue(*tab, utf8QString(workspace.id));
-            value.insert(QStringLiteral("title"), utf8QString(workspace.title));
+            if (!workspace.manualTitle.empty())
+                value.insert(QStringLiteral("title"), utf8QString(workspace.manualTitle));
             value.insert(QStringLiteral("paneCount"), static_cast<int>(workspace.restoreIntents.size()));
             value.insert(QStringLiteral("windowId"), utf8QString(workspace.windowId));
             value.insert(QStringLiteral("tabIndex"), static_cast<int>(windowIndex));
@@ -3027,7 +3028,10 @@ QVariantMap AppController::terminalTabValue(const TerminalTab &tab, const QStrin
         {QStringLiteral("id"), publicId},
         {QStringLiteral("sessionId"), tab.id},
         {QStringLiteral("paneId"), tab.paneId},
-        {QStringLiteral("title"), tab.title},
+        {QStringLiteral("title"), tab.displayTitle(m_settings.allowTerminalTitleChanges)},
+        {QStringLiteral("progressState"),
+         tab.running && tab.snapshot ? static_cast<int>(tab.snapshot->progress.state) : 0},
+        {QStringLiteral("progressPercentage"), tab.snapshot ? tab.snapshot->progress.percentage : -1},
         {QStringLiteral("kind"), tab.kind == TerminalTabKind::Local ? QStringLiteral("local") : QStringLiteral("ssh")},
         {QStringLiteral("localShell"), tab.localShellId},
         {QStringLiteral("status"), tab.status},
@@ -3519,9 +3523,13 @@ QVariantMap AppController::terminalWorkspace(const QString &workspaceId) const
     {
         return {};
     }
+    const auto *tab = findTabForPane(utf8QString(workspace->activePaneId));
+    const QString displayTitle = !workspace->manualTitle.empty() ? utf8QString(workspace->manualTitle)
+                                 : tab ? tab->displayTitle(m_settings.allowTerminalTitleChanges)
+                                       : utf8QString(workspace->title);
     return {
         {QStringLiteral("id"), utf8QString(workspace->id)},
-        {QStringLiteral("title"), utf8QString(workspace->title)},
+        {QStringLiteral("title"), displayTitle},
         {QStringLiteral("activePaneId"), utf8QString(workspace->activePaneId)},
         {QStringLiteral("windowId"), utf8QString(workspace->windowId)},
         {QStringLiteral("paneCount"), static_cast<int>(workspace->restoreIntents.size())},
@@ -3903,7 +3911,8 @@ bool AppController::saveSessionLifecycleSettings(const bool closePaneOnEnd, cons
 QVariantMap AppController::windowInteractionSettings() const
 {
     const auto &settings = m_settings.windowInteraction;
-    return {{QStringLiteral("singleInstance"), settings.singleInstance},
+    return {{QStringLiteral("allowTerminalTitleChanges"), m_settings.allowTerminalTitleChanges},
+            {QStringLiteral("singleInstance"), settings.singleInstance},
             {QStringLiteral("navigationWidth"), settings.navigationWidth},
             {QStringLiteral("navigationExpandedWidth"), settings.navigationExpandedWidth},
             {QStringLiteral("tabDoubleClick"), settings.tabDoubleClick},
@@ -3927,6 +3936,7 @@ bool AppController::saveWindowInteractionSettings(const QVariantMap &changes)
         .tabDoubleClick = values.value(QStringLiteral("tabDoubleClick")).toString(),
         .tabCloseButton = values.value(QStringLiteral("tabCloseButton")).toString(),
     };
+    updated.allowTerminalTitleChanges = values.value(QStringLiteral("allowTerminalTitleChanges")).toBool();
     return persistApplicationSettings(updated);
 }
 
@@ -4961,7 +4971,7 @@ void AppController::recordClosedTerminal(const QString &workspaceId)
     }
     m_closedTerminalTabs.push_front({.kind = tab->kind,
                                      .sourceProfileId = tab->sourceProfileId,
-                                     .title = utf8QString(workspace->title),
+                                     .title = utf8QString(workspace->manualTitle),
                                      .workingDirectory = tab->terminalWorkingDirectory});
     constexpr std::size_t maximumClosedTerminalDescriptions = 10;
     if (m_closedTerminalTabs.size() > maximumClosedTerminalDescriptions)
@@ -5058,15 +5068,17 @@ bool AppController::duplicateTerminalTab(const QString &id)
     {
         return false;
     }
+    const QString manualTitle = utf8QString(workspace->manualTitle);
     if (source->kind == TerminalTabKind::Local)
     {
-        return !startLocalTerminalAt(source->terminalWorkingDirectory, utf8QString(workspace->title)).isEmpty();
+        const QString created = startLocalTerminalAt(source->terminalWorkingDirectory, source->title);
+        return !created.isEmpty() && setTerminalTabTitle(created, manualTitle);
     }
     if (source->sourceProfileId.isEmpty() || !connectHostProfile(source->sourceProfileId, {}))
     {
         return false;
     }
-    return setTerminalTabTitle(m_activeTabId, utf8QString(workspace->title));
+    return setTerminalTabTitle(m_activeTabId, manualTitle);
 }
 
 bool AppController::reopenLastClosedTerminalTab()
@@ -5080,7 +5092,8 @@ bool AppController::reopenLastClosedTerminalTab()
     bool reopened = false;
     if (description.kind == TerminalTabKind::Local)
     {
-        reopened = !startLocalTerminalAt(description.workingDirectory, description.title).isEmpty();
+        const QString created = startLocalTerminalAt(description.workingDirectory);
+        reopened = !created.isEmpty() && setTerminalTabTitle(created, description.title);
     }
     else if (!description.sourceProfileId.isEmpty())
     {
@@ -5162,58 +5175,26 @@ bool AppController::toggleActiveTerminalTabPinned()
 bool AppController::setTerminalTabTitle(const QString &id, const QString &title)
 {
     const QString normalized = title.trimmed();
-    if (normalized.isEmpty() || normalized.size() > 256)
-    {
+    if (normalized.size() > 256 || normalized.contains(QChar::Null))
         return false;
-    }
     QString workspaceId = id;
     if (const TerminalTab *session = findTab(id); session != nullptr && findTerminalWorkspace(id) == nullptr)
-    {
         workspaceId = session->workspaceId;
-    }
-    workbench::TerminalWorkspaceLayout *workspace = findTerminalWorkspace(workspaceId);
+    auto *workspace = findTerminalWorkspace(workspaceId);
     if (workspace == nullptr)
-    {
         return false;
-    }
-    const std::string previousWorkspaceTitle = workspace->title;
-    std::vector<std::string> previousIntentTitles;
-    previousIntentTitles.reserve(workspace->restoreIntents.size());
-    for (const workbench::TerminalRestoreIntent &intent : workspace->restoreIntents)
-    {
-        previousIntentTitles.push_back(intent.title);
-    }
-    std::vector<QString> previousTabTitles;
-    previousTabTitles.reserve(m_tabs.size());
-    for (const auto &tab : m_tabs)
-    {
-        previousTabTitles.push_back(tab->title);
-    }
-    workspace->title = utf8String(normalized);
-    for (workbench::TerminalRestoreIntent &intent : workspace->restoreIntents)
-    {
-        intent.title = utf8String(normalized);
-    }
-    for (const auto &tab : m_tabs)
-    {
-        if (tab->workspaceId == workspaceId)
-        {
-            tab->title = normalized;
-        }
-    }
+    const auto previous = *workspace;
+    workspace->manualTitle = utf8String(normalized);
+    for (auto &intent : workspace->restoreIntents)
+        intent.manualTitle = workspace->manualTitle;
     if (!persistTerminalWorkspaces())
     {
-        workspace->title = previousWorkspaceTitle;
-        for (std::size_t index = 0; index < workspace->restoreIntents.size(); ++index)
-        {
-            workspace->restoreIntents[index].title = previousIntentTitles[index];
-        }
-        for (std::size_t index = 0; index < m_tabs.size(); ++index)
-        {
-            m_tabs[index]->title = previousTabTitles[index];
-        }
+        *workspace = previous;
         return false;
     }
+    for (const auto &tab : m_tabs)
+        if (tab->workspaceId == workspaceId)
+            tab->manualTitle = normalized;
     emit terminalTabsChanged();
     return true;
 }
@@ -15186,7 +15167,7 @@ void AppController::connectLocalTabSignals(TerminalTab &tab)
                          {
                              return;
                          }
-                         updated->snapshot = snapshot;
+                         updateTerminalStatus(*updated, snapshot);
                          if (updated->aiFrameTracker)
                          {
                              updated->aiFrameTracker->observeFrame(terminalFrameInput(snapshot));
@@ -15287,7 +15268,7 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                          {
                              return;
                          }
-                         updated->snapshot = snapshot;
+                         updateTerminalStatus(*updated, snapshot);
                          if (updated->aiFrameTracker)
                          {
                              updated->aiFrameTracker->observeFrame(terminalFrameInput(snapshot));
@@ -17045,6 +17026,7 @@ void AppController::restoreTerminalWorkspaces()
             tab->workspaceId = utf8QString(workspace.id);
             tab->paneId = utf8QString(node.id);
             tab->title = utf8QString(intent->title);
+            tab->manualTitle = utf8QString(intent->manualTitle);
             if (intent->kind == workbench::TerminalRestoreKind::Local)
             {
                 const QString savedShellId = utf8QString(intent->profileId).trimmed();
@@ -17060,7 +17042,7 @@ void AppController::restoreTerminalWorkspaces()
                 }
                 tab->kind = TerminalTabKind::Local;
                 tab->localShellId = shell->id;
-                tab->title = tab->title.isEmpty() ? shell->name : tab->title;
+                tab->title = shell->name;
                 tab->status = m_settings.reopenLocalSessions ? tr("Restoring local terminal...") : QString{};
                 tab->local = m_localSessionFactory();
                 applyTerminalTheme(*tab);
@@ -17116,7 +17098,7 @@ void AppController::restoreTerminalWorkspaces()
             const auto profile = std::ranges::find(m_profiles, intent->profileId, &ssh::SshProfile::id);
             if (profile != m_profiles.end())
             {
-                tab->title = tab->title.isEmpty() ? utf8QString(profile->name) : tab->title;
+                tab->title = utf8QString(profile->name);
                 tab->identity = QStringLiteral("%1@%2:%3")
                                     .arg(utf8QString(profile->username), utf8QString(profile->host))
                                     .arg(profile->port);
@@ -17230,6 +17212,7 @@ bool AppController::persistApplicationSettings(const config::ApplicationSettings
         return true;
     }
     const bool aiDebugTraceChanged = m_settings.aiDebugTraceEnabled != settings.aiDebugTraceEnabled;
+    const bool titlePolicyChanged = m_settings.allowTerminalTitleChanges != settings.allowTerminalTitleChanges;
     const bool terminalThemeChanged =
         m_settings.terminalTheme != settings.terminalTheme || m_settings.theme != settings.theme
         || m_settings.lightTheme != settings.lightTheme || m_settings.darkTheme != settings.darkTheme;
@@ -17258,6 +17241,8 @@ bool AppController::persistApplicationSettings(const config::ApplicationSettings
         applyTerminalThemeToSessions();
     }
     emit applicationSettingsChanged();
+    if (titlePolicyChanged)
+        emit terminalTabsChanged();
     return true;
 }
 

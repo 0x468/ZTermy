@@ -17,6 +17,8 @@ class TerminalEngineTests final : public QObject
     Q_OBJECT
 
 private slots:
+    void retainsProgressAcrossFragmentedReports();
+    void boundsAndThrottlesProgramNotifications();
     void rejectsInvalidGeometry();
     void tracksSynchronizedOutputMode();
     void parsesSplitVtSequences();
@@ -55,6 +57,64 @@ private slots:
     void pagesThroughScrollback();
     void quotesDroppedPathsForShellDialects();
 };
+
+void TerminalEngineTests::retainsProgressAcrossFragmentedReports()
+{
+    using ztermy::terminal::TerminalProgressState;
+    auto created = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 10, .rows = 3});
+    QVERIFY(created);
+    auto &engine = **created;
+    const auto feed = [&](std::string_view value) {
+        return !engine.feed(std::as_bytes(std::span(value)));
+    };
+    QVERIFY(feed("x\x1b]9;4;1;37\x07"));
+    const auto initial = engine.snapshot();
+    QVERIFY(initial);
+    QCOMPARE(initial->progress.state, TerminalProgressState::active);
+    QCOMPARE(initial->progress.percentage, 37);
+    QVERIFY(feed("\x1b]9;4;4;6"));
+    QCOMPARE(engine.snapshot()->progress, initial->progress);
+    QVERIFY(feed("0\x1b\\"));
+    QCOMPARE(engine.snapshot()->progress.state, TerminalProgressState::paused);
+    QCOMPARE(engine.snapshot()->progress.percentage, 60);
+    QVERIFY(feed("\x1b]9;4;2;60\x07"));
+    QCOMPARE(engine.snapshot()->progress.state, TerminalProgressState::error);
+    QVERIFY(feed("\x1b]9;4;3\x07"));
+    QCOMPARE(engine.snapshot()->progress.state, TerminalProgressState::indeterminate);
+    QVERIFY(feed("\x1b]9;4;0\x07"));
+    const auto removed = engine.snapshot();
+    QVERIFY(removed);
+    QCOMPARE(removed->progress.state, TerminalProgressState::none);
+    QCOMPARE(removed->progress.percentage, -1);
+    QCOMPARE(removed->cell(0, 0).grapheme, std::u32string(U"x"));
+    QCOMPARE(initial->progress.percentage, 37);
+}
+
+void TerminalEngineTests::boundsAndThrottlesProgramNotifications()
+{
+    for (const std::string_view prefix : {"\x1b]9;", "\x1b]777;notify;Job;"})
+    {
+        auto created = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 10, .rows = 3});
+        QVERIFY(created);
+        auto &engine = **created;
+        const auto feed = [&](std::string_view value) {
+            return !engine.feed(std::as_bytes(std::span(value)));
+        };
+        QVERIFY(feed(std::string(prefix) + std::string(4097, 'x') + '\x07'));
+        QVERIFY(!engine.snapshot()->notification);
+        QVERIFY(feed(prefix));
+        QVERIFY(feed("Build complete"));
+        QVERIFY(!engine.snapshot()->notification);
+        QVERIFY(feed("\x07"));
+        const auto first = engine.snapshot();
+        QVERIFY(first && first->notification);
+        QCOMPARE(first->notification->sequence, std::uint64_t{1});
+        QCOMPARE(first->notification->body, std::string("Build complete"));
+        for (int index = 0; index < 100; ++index)
+            QVERIFY(feed(std::string(prefix) + "Flood\x07"));
+        QCOMPARE(engine.snapshot()->notification, first->notification);
+    }
+}
 
 void TerminalEngineTests::preservesTransientTitlesAcrossFragmentedOutput()
 {

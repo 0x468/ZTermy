@@ -1,5 +1,6 @@
 #include "domain/terminal/GhosttyTerminalEngine.h"
 #include "domain/terminal/GhosttyInputMapping.h"
+#include "domain/terminal/GhosttyStatusEvents.h"
 #include "domain/terminal/TerminalLinkDetector.h"
 
 #include <ghostty/vt.h>
@@ -456,6 +457,7 @@ struct GhosttyTerminalEngine::Impl
     std::string lastSearchQuery;
     std::vector<std::byte> pendingPtyWrite;
     std::optional<std::string> pendingClipboardWrite;
+    GhosttyStatusEvents statusEvents;
     GhosttyColorScheme reportedScheme = GHOSTTY_COLOR_SCHEME_DARK;
     TerminalGeometry geometry;
     std::string pendingSemanticPromptPrefix;
@@ -519,6 +521,9 @@ GhosttyTerminalEngine::create(const TerminalGeometry geometry)
     {
         return std::unexpected(ghosttyError(userdataResult));
     }
+    if (const auto statusResult = GhosttyStatusEvents::install<Impl, validUtf8>(engine->m_impl->terminal);
+        statusResult != GHOSTTY_SUCCESS)
+        return std::unexpected(ghosttyError(statusResult));
     if (const GhosttyResult writeResult =
             ghostty_terminal_set(engine->m_impl->terminal, GHOSTTY_TERMINAL_OPT_WRITE_PTY,
                                  reinterpret_cast<const void *>(&GhosttyTerminalEngine::Impl::writePty));
@@ -1706,6 +1711,8 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
     }
 
     TerminalSnapshot result;
+    result.progress = m_impl->statusEvents.progress;
+    result.notification = m_impl->statusEvents.notification;
     GhosttyRenderStateDirty dirtyState = GHOSTTY_RENDER_STATE_DIRTY_FULL;
     if (const GhosttyResult dirtyResult =
             ghostty_render_state_get(m_impl->renderState, GHOSTTY_RENDER_STATE_DATA_DIRTY, &dirtyState);

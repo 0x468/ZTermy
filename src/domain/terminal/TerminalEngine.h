@@ -2,6 +2,7 @@
 
 #include "core/config/TerminalColorScheme.h"
 #include "domain/terminal/TerminalInput.h"
+#include "domain/terminal/TerminalStatus.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -226,6 +227,8 @@ struct TerminalSnapshot
     std::string workingDirectory;
     // Transient OSC 0/2 title, never a user-owned persisted name.
     std::string windowTitle;
+    TerminalProgress progress;
+    std::shared_ptr<const TerminalNotification> notification;
 
     [[nodiscard]] const TerminalCell &cell(const std::uint16_t column, const std::uint16_t row) const
     {

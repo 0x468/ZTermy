@@ -124,6 +124,7 @@ Item {
             width: Math.max(0, Math.min(implicitWidth, content.available - (iconHost.visible ? iconHost.width + content.spacing : 0)))
             visible: control.titleVisible
             text: control.title
+            textFormat: Text.PlainText
             color: control.selected ? Theme.text : Theme.textMuted
             elide: Text.ElideRight
             font.family: Theme.uiFont

@@ -12,6 +12,7 @@ SectionCard {
     property alias reconnectRemoteSessions: reconnectRemoteSessionsSwitch.checked
     property alias performanceMode: performanceModeSwitch.checked
     property alias singleInstance: singleInstanceSwitch.checked
+    property alias allowTerminalTitleChanges: terminalTitleSwitch.checked
     property alias tabDoubleClickIndex: tabDoubleClickBox.currentIndex
     property alias tabCloseButtonIndex: tabCloseButtonBox.currentIndex
     signal performanceModeEdited(bool enabled)
@@ -19,6 +20,22 @@ SectionCard {
     Layout.fillWidth: true
     heading: qsTr("Window behavior")
     compact: true
+
+    function loadInteraction(values) {
+        singleInstance = values.singleInstance;
+        allowTerminalTitleChanges = values.allowTerminalTitleChanges;
+        tabDoubleClickIndex = ["rename", "close", "none"].indexOf(values.tabDoubleClick);
+        tabCloseButtonIndex = ["always", "hover", "hidden"].indexOf(values.tabCloseButton);
+    }
+
+    function interactionValues() {
+        return {
+            singleInstance: singleInstance,
+            allowTerminalTitleChanges: allowTerminalTitleChanges,
+            tabDoubleClick: ["rename", "close", "none"][tabDoubleClickIndex],
+            tabCloseButton: ["always", "hover", "hidden"][tabCloseButtonIndex]
+        };
+    }
 
     ColumnLayout {
         Layout.fillWidth: true
@@ -101,6 +118,19 @@ SectionCard {
         Text {
             Layout.fillWidth: true
             text: qsTr("Portable and installed copies with separate data directories remain independent. Applies on next launch.")
+            color: Theme.textMuted
+            wrapMode: Text.WordWrap
+        }
+        AppSwitch {
+            id: terminalTitleSwitch
+            objectName: "settingsAllowTerminalTitleChangesSwitch"
+            Layout.fillWidth: true
+            text: qsTr("Allow terminals to change titles")
+            accessibleName: text
+        }
+        Text {
+            Layout.fillWidth: true
+            text: qsTr("A manually renamed tab keeps its name. Clear the name to restore automatic titles.")
             color: Theme.textMuted
             wrapMode: Text.WordWrap
         }

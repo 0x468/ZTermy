@@ -1124,6 +1124,8 @@ Rectangle {
                     closeButtonMode: root.controller.windowInteractionSettings.tabCloseButton
                     connecting: modelData.connecting === true
                     running: modelData.running
+                    progressState: modelData.progressState || 0
+                    progressPercentage: modelData.progressPercentage ?? -1
                     canReconnect: modelData.canReconnect
                     canDuplicate: modelData.canDuplicate
                     canCloseOthers: modelData.canCloseOthers
@@ -1394,8 +1396,9 @@ Rectangle {
         z: 100
     }
 
-    ActionToast {
+    TerminalNotificationToast {
         id: terminalActionToast
+        controller: root.controller
 
         x: root.width - width - 16
         y: root.titleBarHeight + 14 + (transferToast.opened ? transferToast.height + 8 : 0)
@@ -1537,7 +1540,6 @@ Rectangle {
                     text: qsTr("Rename")
                     accessibleName: text
                     variant: "primary"
-                    enabled: renameTerminalTitleField.text.trim().length > 0
                     onClicked: {
                         if (root.controller.setTerminalTabTitle(root.renameTerminalTabId, renameTerminalTitleField.text)) {
                             renameTerminalDialog.close();

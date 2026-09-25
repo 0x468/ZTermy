@@ -179,6 +179,7 @@ struct ApplicationSettings final
     bool preserveTerminalSessions = true;
     bool reopenLocalSessions = true;
     bool reconnectRemoteSessions = false;
+    bool allowTerminalTitleChanges = true;
     EffectsTier effectsTier = EffectsTier::full;
     // Id of a TerminalThemeCatalog theme; unknown ids resolve to the built-in default.
     QString terminalTheme = QStringLiteral("ztermy-dark");

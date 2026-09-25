@@ -53,6 +53,7 @@ TitleChromeAction {
                         Text {
                             Layout.fillWidth: true
                             text: entry.modelData.title
+                            textFormat: Text.PlainText
                             color: Theme.text
                             font.bold: control.controller.activeTerminalTabId === entry.modelData.id
                             elide: Text.ElideRight

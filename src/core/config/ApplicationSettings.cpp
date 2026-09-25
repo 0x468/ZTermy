@@ -75,7 +75,8 @@ constexpr qint64 unifiedThemeSchemaVersion = 36;
 constexpr qint64 unifiedMaterialSchemaVersion = 37;
 // Version 38 makes pane-exit and startup session restoration behavior explicit.
 constexpr qint64 sessionLifecycleSchemaVersion = 38;
-constexpr qint64 currentSchemaVersion = sessionLifecycleSchemaVersion;
+constexpr qint64 terminalTitleSchemaVersion = 39;
+constexpr qint64 currentSchemaVersion = terminalTitleSchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -253,6 +254,7 @@ using ztermy::config::ThemePreference;
     const QJsonValue preserveTerminalSessionsValue = root.value(QStringLiteral("preserveTerminalSessions"));
     const QJsonValue reopenLocalSessionsValue = root.value(QStringLiteral("reopenLocalSessions"));
     const QJsonValue reconnectRemoteSessionsValue = root.value(QStringLiteral("reconnectRemoteSessions"));
+    const QJsonValue allowTerminalTitleChangesValue = root.value(QStringLiteral("allowTerminalTitleChanges"));
     const QJsonValue effectsTierValue = root.value(QStringLiteral("effectsTier"));
     const QJsonValue terminalThemeValue = root.value(QStringLiteral("terminalTheme"));
     const QJsonValue lightThemeValue = root.value(QStringLiteral("lightTheme"));
@@ -315,6 +317,7 @@ using ztermy::config::ThemePreference;
         || (version >= sessionLifecycleSchemaVersion
             && (!closePaneOnSessionEndValue.isBool() || !preserveTerminalSessionsValue.isBool()
                 || !reopenLocalSessionsValue.isBool() || !reconnectRemoteSessionsValue.isBool()))
+        || (version >= terminalTitleSchemaVersion && !allowTerminalTitleChangesValue.isBool())
         || (version >= effectsTierSchemaVersion && !effectsTierValue.isString())
         || (version >= unifiedThemeSchemaVersion && (!lightThemeValue.isString() || !darkThemeValue.isString()))
         || (version >= terminalThemeSchemaVersion
@@ -506,6 +509,7 @@ using ztermy::config::ThemePreference;
         .preserveTerminalSessions = version < sessionLifecycleSchemaVersion || preserveTerminalSessionsValue.toBool(),
         .reopenLocalSessions = version < sessionLifecycleSchemaVersion || reopenLocalSessionsValue.toBool(),
         .reconnectRemoteSessions = version >= sessionLifecycleSchemaVersion && reconnectRemoteSessionsValue.toBool(),
+        .allowTerminalTitleChanges = version < terminalTitleSchemaVersion || allowTerminalTitleChangesValue.toBool(),
         .effectsTier = *effectsTier,
         .terminalTheme = version >= terminalThemeSchemaVersion ? terminalThemeValue.toString().trimmed()
                                                                : QStringLiteral("ztermy-dark"),
@@ -649,6 +653,7 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("preserveTerminalSessions"), settings.preserveTerminalSessions},
         {QStringLiteral("reopenLocalSessions"), settings.reopenLocalSessions},
         {QStringLiteral("reconnectRemoteSessions"), settings.reconnectRemoteSessions},
+        {QStringLiteral("allowTerminalTitleChanges"), settings.allowTerminalTitleChanges},
         {QStringLiteral("windowInteraction"), settings.windowInteraction.toJson()},
         {QStringLiteral("theme"), themePreferenceToken(settings.theme)},
         {QStringLiteral("backdropOpacity"), settings.backdropOpacity},

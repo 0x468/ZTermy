@@ -50,8 +50,31 @@ enum class TerminalSelectionAction : std::uint8_t
     Unhighlight,
 };
 
+struct ClosedTerminalSession final
+{
+    TerminalSessionKind kind = TerminalSessionKind::Local;
+    QString sourceProfileId;
+    QString title;
+    QString workingDirectory;
+};
+
 struct TerminalSessionState final
 {
+    [[nodiscard]] QString displayTitle(bool allowTerminalChanges) const
+    {
+        if (!manualTitle.isEmpty())
+            return manualTitle;
+        if (allowTerminalChanges && snapshot && !snapshot->windowTitle.empty())
+        {
+            const auto &value = snapshot->windowTitle;
+            const QString label =
+                QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size())).simplified().left(256);
+            if (!label.isEmpty())
+                return label;
+        }
+        return title;
+    }
+
     struct PendingAiSftpRead final
     {
         quint64 requestId = 0;
@@ -116,6 +139,7 @@ struct TerminalSessionState final
     QString workspaceId;
     QString paneId;
     QString title;
+    QString manualTitle;
     QString status;
     QString searchQuery;
     QString sourceProfileId;

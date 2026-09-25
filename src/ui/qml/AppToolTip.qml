@@ -23,6 +23,7 @@ ToolTip {
 
     contentItem: Text {
         text: control.text
+        textFormat: Text.PlainText
         color: Theme.text
         wrapMode: Text.Wrap
         font.family: Theme.uiFont

@@ -62,6 +62,7 @@ Popup {
             Text {
                 Layout.fillWidth: true
                 text: root.title
+                textFormat: Text.PlainText
                 color: Theme.text
                 elide: Text.ElideRight
                 font.family: Theme.uiFont
@@ -72,6 +73,7 @@ Popup {
             Text {
                 Layout.fillWidth: true
                 text: root.message
+                textFormat: Text.PlainText
                 visible: text.length > 0
                 color: Theme.textMuted
                 elide: Text.ElideMiddle

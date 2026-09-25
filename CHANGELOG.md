@@ -6,6 +6,12 @@ Release assets are published through GitHub Releases.
 
 ## Unreleased
 
+- Display OSC 9;4 task progress on terminal tabs, including paused, failed and
+  indeterminate states. Show bounded OSC 9/777 in-app notifications without
+  taking terminal focus; limit notification frequency and avoid frame replays.
+- Show terminal-provided titles with an opt-out preference. Manual tab names
+  remain fixed until cleared and survive layout restoration; transient Shell
+  titles are not saved as user names. Preserve existing names during migration.
 - Reuse action presentation data instead of rebuilding every action for each
   shortcut lookup during pane/tab changes. Refresh it on shortcut edits,
   resets and language changes; keep terminal availability states distinct.

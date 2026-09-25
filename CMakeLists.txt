@@ -920,6 +920,7 @@ add_library(ztermy_application_controller STATIC
     src/application/AppController.cpp
     src/application/AppControllerThemes.cpp
     src/application/AppControllerDefaults.cpp
+    src/application/AppControllerTerminalStatus.cpp
     src/application/AppControllerWorkspaceTransfers.cpp
     src/application/AppControllerWorkspace.cpp
     src/application/ApplicationInstance.cpp
@@ -1473,6 +1474,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/TransferCenter.qml
         src/ui/qml/TransferToast.qml
         src/ui/qml/ActionToast.qml
+        src/ui/qml/TerminalNotificationToast.qml
         src/ui/qml/WorkspaceCredentialsPane.qml
         src/ui/qml/WorkspaceKnownHostsPane.qml
         src/ui/qml/WorkspaceLogsPane.qml

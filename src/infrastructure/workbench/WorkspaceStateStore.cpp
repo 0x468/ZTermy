@@ -17,7 +17,7 @@ namespace ztermy::workbench
 namespace
 {
 
-constexpr int currentSchemaVersion = 8;
+constexpr int currentSchemaVersion = 9;
 
 QString text(const std::string &value)
 {
@@ -78,11 +78,13 @@ QJsonObject serializeTerminalWorkspace(const TerminalWorkspaceLayout &layout)
             {QStringLiteral("kind"), restoreKindToken(intent.kind)},
             {QStringLiteral("profileId"), text(intent.profileId)},
             {QStringLiteral("title"), text(intent.title)},
+            {QStringLiteral("manualTitle"), text(intent.manualTitle)},
         });
     }
     return {
         {QStringLiteral("id"), text(layout.id)},
         {QStringLiteral("title"), text(layout.title)},
+        {QStringLiteral("manualTitle"), text(layout.manualTitle)},
         {QStringLiteral("rootNodeId"), text(layout.rootNodeId)},
         {QStringLiteral("activePaneId"), text(layout.activePaneId)},
         {QStringLiteral("nodes"), nodes},
@@ -172,6 +174,11 @@ std::optional<TerminalWorkspaceLayout> parseTerminalWorkspace(const QJsonValue &
         .activePaneId = bytes(object.value(QStringLiteral("activePaneId")).toString()),
     };
     const QJsonArray nodes = nodesValue.toArray();
+    if (schemaVersion >= 9 && !object.value(QStringLiteral("manualTitle")).isString())
+        return std::nullopt;
+    // Old schemas cannot distinguish a user name from a generated label.
+    layout.manualTitle =
+        schemaVersion >= 9 ? bytes(object.value(QStringLiteral("manualTitle")).toString()) : layout.title;
     if (schemaVersion >= 8)
     {
         if (!object.value(QStringLiteral("windowId")).isString()
@@ -220,7 +227,8 @@ std::optional<TerminalWorkspaceLayout> parseTerminalWorkspace(const QJsonValue &
         const auto kind = parseRestoreKind(intent.value(QStringLiteral("kind")));
         if (!kind || !intent.value(QStringLiteral("id")).isString()
             || !intent.value(QStringLiteral("profileId")).isString()
-            || !intent.value(QStringLiteral("title")).isString())
+            || !intent.value(QStringLiteral("title")).isString()
+            || (schemaVersion >= 9 && !intent.value(QStringLiteral("manualTitle")).isString()))
         {
             return std::nullopt;
         }
@@ -229,6 +237,8 @@ std::optional<TerminalWorkspaceLayout> parseTerminalWorkspace(const QJsonValue &
             .profileId = bytes(intent.value(QStringLiteral("profileId")).toString()),
             .title = bytes(intent.value(QStringLiteral("title")).toString()),
             .kind = *kind,
+            .manualTitle = bytes(
+                intent.value(schemaVersion >= 9 ? QStringLiteral("manualTitle") : QStringLiteral("title")).toString()),
         });
     }
     return validTerminalWorkspaceLayout(layout) ? std::optional{std::move(layout)} : std::nullopt;

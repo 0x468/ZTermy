@@ -109,7 +109,7 @@ require the host application to answer or present something outside the VT grid.
 | OSC 11 background-color query | The pinned libghostty parser replies with the configured background RGB through `WRITE_PTY`; a focused engine check confirms a light theme returns white. | Keep this separate from the newer light/dark mode query; Shells may use either. |
 | Device attributes and XTVERSION | Pinned libghostty supplies usable default replies without custom callbacks; a diagnostic test confirmed both. | Do not register callbacks merely to duplicate defaults. |
 | OSC 52 clipboard write | Bounded text/UTF-8 callback delivery is implemented for local and SSH sessions; clipboard read is not advertised. The documented 0.4.3 behavior deliberately has no modal prompt, so there is no per-host permission boundary today. | Preserve the size/lifetime limits. Any new remote-host consent policy would be a product change, not a claim about the current implementation. |
-| OSC title, working directory, BEL, ENQ, desktop notification and progress | The corresponding optional C callbacks are not registered. This says nothing about support for unrelated sequences handled internally by libghostty. | Prioritize only from a concrete shell/app workflow and define presentation, trust and rate limits before wiring effects. OSC 0/2 title, if added, must be transient per Pane: `AppController::setTerminalTabTitle` renames and persists the entire workspace, so using it for shell output would overwrite the user's explicit tab name and restore intents. |
+| OSC title, working directory, BEL, ENQ, desktop notification and progress | Title and working-directory metadata are read from retained terminal state. Progress and notification callbacks are now registered with bounded retained status; BEL and ENQ callbacks remain unregistered. | OSC titles do not invoke manual renaming. OSC 9;4 drives tab progress; OSC 9/777 drive rate-limited plain-text in-app notifications. This is not Windows taskbar progress or a system toast integration. |
 | DEC synchronized output (`CSI ? 2026 h/l`) | Local/SSH snapshot suppression and a one-second fallback are implemented. Raw local-session and real loopback SSH checks cover held frames, queries, timeout recovery, host interaction and final output. | Installed ConPTY can change the application's interval; retain the explicit platform-test skip and do not promise preservation across every Windows version. |
 | Kitty inline images | The pinned C API exposes image storage and placement data, but ztermy does not configure a nonzero Kitty image storage limit or a PNG decoder, and its snapshots and Qt renderer have no image-placement representation. This is not a working image feature even if the parser recognizes the sequence. | Treat as a separate opt-in design with strict byte/pixel limits, decode off the GUI thread, GPU/CPU cache budgets and eviction, and security review. Do not advertise image support based on parser coverage alone. |
 
@@ -353,8 +353,11 @@ with every mainstream terminal. Suggested follow-up order:
    regardless of that setting, until explicitly cleared by the user. The pin
    must survive layout restoration. The engine snapshot now carries a bounded
    transient OSC 0/2 title, including title-only output and explicit clearing.
-   Display precedence, the setting and persisted pin state are still pending;
-   this is not yet a shipped automatic-title feature.
+   Display precedence, the setting and schema-9 manual-name persistence are now
+   implemented in the worktree with focused controller and real local Shell
+   verification (see below). Progress and in-app notifications are now connected;
+   system taskbar/toast presentation and detached-window routing are not yet
+   covered by the current main-window implementation.
 3. Approved on 2026-09-26: both Kitty and Sixel inline images, plus SGR text
    blink, with memory/accessibility budgets. These are not yet shipped
    capabilities; approval must not be mistaken for implementation evidence.
@@ -460,3 +463,66 @@ read action list. The existing shortcut dispatch and adjacent bulk/window-scope
 tests pass. Dynamic Release, QML formatting/lint, targeted clang-tidy (warnings
 as errors), source-size/dependency and diff checks pass. Test processes and
 direct children were confirmed gone. No full suite was run for this iteration.
+
+## Title-policy persistence groundwork: 2026-09-26
+
+Application settings schema 39 adds `allowTerminalTitleChanges` (default true).
+Schema 38 and earlier acquire that default; schema 39 requires an actual JSON
+boolean, not a coerced string/number or a missing field. The fixed schema-38
+fixture in `tests/fixtures/settings/schema-38.json` includes non-default theme,
+session restoration, shortcuts and provider settings. Migration verifies that
+every existing JSON field survives unchanged, then that disabling the new
+preference persists. Separate malformed-input checks use fresh stores so backup
+recovery cannot mask rejection. The application-settings owning suite, dynamic
+Release test build, targeted clang-tidy, format and code-health gates pass.
+
+The preference is now exposed in Window behavior. Snapshot titles are projected
+per pane, with workspace/manual names taking precedence. An empty manual rename
+clears the pin; an empty program title returns to the Shell/Profile default.
+Workspace schema 9 preserves manual names separately from default labels;
+older schemas retain existing names as fixed names because their origin was
+not recorded. See ADR 0129 for ownership and migration semantics.
+
+Controller checks cover preference toggles, program changes while pinned,
+clearing, restoration, active-pane switching, duplicate/reopen and transient
+titles staying out of persistence. The real local PowerShell/ConPTY smoke at
+`build/runtime-checks/title-policy-20260926` exited 0 and reported
+`programTitleAndManualOverride=true`; PID 25732 and its direct children were
+confirmed gone. This is local runtime evidence, not a live SSH-server check
+or completion evidence for the remaining window/image/notification work.
+
+## Program progress and in-app notifications: 2026-09-26
+
+The pinned Ghostty callbacks now retain OSC 9;4 progress (remove, determinate,
+error, indeterminate, paused) and OSC 9/777 notifications. No parallel escape
+sequence parser or cell-level QML objects were introduced. Local and SSH
+snapshots carry the same state; title/progress UI notifications are coalesced.
+Only the active pane's progress is currently projected onto its workspace tab.
+Ended sessions hide progress even if the program did not send a remove report.
+
+Notifications accept at most 512 title bytes and 4096 body bytes, require valid
+UTF-8, and retain one shared immutable accepted message per engine. Bursts are
+dropped with a two-second per-engine cooldown and a second two-second global
+presentation cooldown. Allocation failure preserves the prior message and
+backs off rather than unwinding through the C callback. Snapshot coalescing
+does not lose the retained message; ordinary redraws cannot replay it.
+
+Main-window notifications use the existing non-modal action toast, plain text,
+and an application-owned source heading. They do not request activation or
+keyboard focus. The displayed message is capped at 1024 UTF-16 units and is
+not persisted. This deliberately does not claim Windows system toast, taskbar
+progress or independent detached-window delivery support; those presentation
+paths still need integration/acceptance alongside the remaining window work.
+The tab indicator respects effects reduction/disablement and does not animate
+when its window is hidden or minimized.
+
+VT-fed tests cover fragmented progress termination, state transitions, removal,
+retained snapshot independence, both notification protocols, oversized payloads
+and flooding. Controller tests cover frame replay suppression, progress-only
+updates and clearing the visible indicator when the session ends. Dynamic
+Release and QML checks pass. The real PowerShell/ConPTY run at
+`build/runtime-checks/terminal-status-repeat-20260926` reports
+`progressAndToast=true`, `focusPreserved=true` and exit 0. PID 3308 and direct
+children were confirmed gone. The first run failed because QObject-only lookup
+missed Repeater delegates; the corrected check uses the existing visual-tree
+lookup and observes the actual tab property and open toast, not just C++ state.

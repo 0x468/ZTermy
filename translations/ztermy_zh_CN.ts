@@ -8619,6 +8619,22 @@
 <context>
     <name>TerminalTabAction</name>
     <message>
+        <source>Task failed</source>
+        <translation>任务失败</translation>
+    </message>
+    <message>
+        <source>Task paused</source>
+        <translation>任务已暂停</translation>
+    </message>
+    <message>
+        <source>Task running</source>
+        <translation>任务进行中</translation>
+    </message>
+    <message>
+        <source>Progress: %1%</source>
+        <translation>进度：%1%</translation>
+    </message>
+    <message>
         <location filename="../src/ui/qml/TerminalTabAction.qml" line="40"/>
         <source>Activate %1</source>
         <translation>激活%1</translation>
@@ -9639,6 +9655,14 @@ Click to unpin · Double-click pins the whole window</source>
 <context>
     <name>WindowBehaviorSettings</name>
     <message>
+        <source>Allow terminals to change titles</source>
+        <translation>允许终端修改标题</translation>
+    </message>
+    <message>
+        <source>A manually renamed tab keeps its name. Clear the name to restore automatic titles.</source>
+        <translation>手动重命名的标签始终保持名称。清空名称可恢复自动标题。</translation>
+    </message>
+    <message>
         <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="20"/>
         <source>Window behavior</source>
         <translation>窗口行为</translation>
@@ -10531,6 +10555,10 @@ Click to unpin · Double-click pins the whole window</source>
 </context>
 <context>
     <name>ztermy::AppController</name>
+    <message>
+        <source>Terminal notification — %1</source>
+        <translation>终端通知 — %1</translation>
+    </message>
     <message>
         <location filename="../src/application/AppController.cpp" line="4814"/>
         <location filename="../src/application/AppController.cpp" line="7875"/>

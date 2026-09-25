@@ -237,6 +237,8 @@ class AppControllerTests final : public QObject
     Q_OBJECT
 
 private slots:
+    void publishesProgressAndDeduplicatesTerminalNotifications();
+    void keepsManualTitlesSeparateFromProgramTitles();
     void instanceOwnershipIsScopedToDataDirectory();
     void savesUpdatesReloadsAndDeletesProfiles();
     void persistsAndPreservesSessionOptions();
@@ -2676,6 +2678,113 @@ void AppControllerTests::createsKeywordHighlightFromSshSelection()
     QCOMPARE(reloadedProfiles->size(), std::size_t{1});
     QCOMPARE(reloadedProfiles->front().keywordHighlightRules.size(), std::size_t{2});
     QVERIFY(reloadedProfiles->front().keywordHighlightEnabled);
+}
+
+void AppControllerTests::publishesProgressAndDeduplicatesTerminalNotifications()
+{
+    QTemporaryDir directory;
+    FakeLocalTerminalSession *backend = nullptr;
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")), [&] {
+                                         auto session = std::make_unique<FakeLocalTerminalSession>(
+                                             std::make_shared<FakeLocalSessionState>());
+                                         backend = session.get();
+                                         return session;
+                                     });
+    QVERIFY(!controller.startLocalTerminal().isEmpty());
+    QSignalSpy notifications(&controller, &ztermy::AppController::terminalNotificationRequested);
+    auto snapshot = std::make_shared<ztermy::terminal::TerminalSnapshot>();
+    snapshot->progress = {.state = ztermy::terminal::TerminalProgressState::active, .percentage = 42};
+    auto notification = std::make_shared<ztermy::terminal::TerminalNotification>();
+    notification->sequence = 1;
+    notification->title = "Build";
+    notification->body = "Finished";
+    snapshot->notification = notification;
+    emit backend->snapshotReady(snapshot);
+    QCOMPARE(notifications.count(), 1);
+    QCOMPARE(notifications.first().first().toMap().value(QStringLiteral("message")).toString(),
+             QStringLiteral("Build: Finished"));
+    QCOMPARE(controller.terminalTabs().first().toMap().value(QStringLiteral("progressPercentage")).toInt(), 42);
+    for (int i = 0; i < 10; ++i)
+        emit backend->snapshotReady(std::make_shared<ztermy::terminal::TerminalSnapshot>(*snapshot));
+    QCOMPARE(notifications.count(), 1);
+    snapshot = std::make_shared<ztermy::terminal::TerminalSnapshot>(*snapshot);
+    snapshot->progress = {.state = ztermy::terminal::TerminalProgressState::paused, .percentage = 60};
+    emit backend->snapshotReady(snapshot);
+    QCOMPARE(controller.terminalTabs().first().toMap().value(QStringLiteral("progressState")).toInt(), 4);
+    QCOMPARE(notifications.count(), 1);
+    backend->stop();
+    QCOMPARE(controller.terminalTabs().first().toMap().value(QStringLiteral("progressState")).toInt(), 0);
+}
+
+void AppControllerTests::keepsManualTitlesSeparateFromProgramTitles()
+{
+    QTemporaryDir directory;
+    FakeLocalTerminalSession *backend = nullptr;
+    const auto factory = [&backend] {
+        auto session = std::make_unique<FakeLocalTerminalSession>(std::make_shared<FakeLocalSessionState>());
+        backend = session.get();
+        return session;
+    };
+    auto controller =
+        std::make_unique<ztermy::AppController>(directory.filePath(QStringLiteral("profiles.json")),
+                                                directory.filePath(QStringLiteral("known_hosts.json")), factory);
+    const QString id = controller->startLocalTerminal();
+    QVERIFY(!id.isEmpty());
+    const auto title = [&] {
+        return controller->terminalTabs().first().toMap().value(QStringLiteral("title")).toString();
+    };
+    const QString defaultTitle = title();
+    auto snapshot = std::make_shared<ztermy::terminal::TerminalSnapshot>();
+    snapshot->windowTitle = "build / remote";
+    emit backend->snapshotReady(snapshot);
+    QCOMPARE(title(), QStringLiteral("build / remote"));
+    QVERIFY(controller->saveWindowInteractionSettings({{QStringLiteral("allowTerminalTitleChanges"), false}}));
+    QCOMPARE(title(), defaultTitle);
+    QVERIFY(controller->setTerminalTabTitle(id, QStringLiteral("Pinned")));
+    QVERIFY(controller->saveWindowInteractionSettings({{QStringLiteral("allowTerminalTitleChanges"), true}}));
+    QCOMPARE(title(), QStringLiteral("Pinned"));
+    snapshot = std::make_shared<ztermy::terminal::TerminalSnapshot>();
+    snapshot->windowTitle = "new program";
+    emit backend->snapshotReady(snapshot);
+    QCOMPARE(title(), QStringLiteral("Pinned"));
+    QVERIFY(controller->setTerminalTabTitle(id, QStringLiteral("  ")));
+    QCOMPARE(title(), QStringLiteral("new program"));
+    QVERIFY(controller->setTerminalTabTitle(id, QStringLiteral("Restored name")));
+    controller.reset();
+    controller =
+        std::make_unique<ztermy::AppController>(directory.filePath(QStringLiteral("profiles.json")),
+                                                directory.filePath(QStringLiteral("known_hosts.json")), factory);
+    QCOMPARE(title(), QStringLiteral("Restored name"));
+    emit backend->snapshotReady(snapshot);
+    QCOMPARE(title(), QStringLiteral("Restored name"));
+    QVERIFY(controller->setTerminalTabTitle(id, QString{}));
+    QCOMPARE(title(), QStringLiteral("new program"));
+    snapshot = std::make_shared<ztermy::terminal::TerminalSnapshot>();
+    emit backend->snapshotReady(snapshot);
+    QCOMPARE(title(), defaultTitle);
+    const QString firstPane = controller->activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString();
+    QVERIFY(controller->splitActiveTerminal(QStringLiteral("horizontal"), true));
+    snapshot = std::make_shared<ztermy::terminal::TerminalSnapshot>();
+    snapshot->windowTitle = "second pane";
+    emit backend->snapshotReady(snapshot);
+    QCOMPARE(title(), QStringLiteral("second pane"));
+    QVERIFY(controller->activateTerminalPane(firstPane));
+    QCOMPARE(title(), defaultTitle);
+    const auto saved =
+        ztermy::workbench::WorkspaceStateStore(directory.filePath(QStringLiteral("workspace_state.json"))).load();
+    QVERIFY(saved);
+    QCOMPARE(saved->terminalWorkspaces.size(), std::size_t{1});
+    QCOMPARE(saved->terminalWorkspaces.front().restoreIntents.size(), std::size_t{2});
+    for (const auto &workspace : saved->terminalWorkspaces)
+    {
+        QVERIFY(workspace.manualTitle.empty());
+        for (const auto &intent : workspace.restoreIntents)
+        {
+            QVERIFY(intent.manualTitle.empty());
+            QVERIFY(intent.title != "second pane" && intent.title != "new program");
+        }
+    }
 }
 
 void AppControllerTests::managesFreshTerminalTabWorkflows()

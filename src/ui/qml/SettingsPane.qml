@@ -559,9 +559,7 @@ Rectangle {
         windowBehavior.preserveTerminalSessions = controller.preserveTerminalSessions;
         windowBehavior.reopenLocalSessions = controller.reopenLocalSessions;
         windowBehavior.reconnectRemoteSessions = controller.reconnectRemoteSessions;
-        windowBehavior.singleInstance = controller.windowInteractionSettings.singleInstance;
-        windowBehavior.tabDoubleClickIndex = ["rename", "close", "none"].indexOf(controller.windowInteractionSettings.tabDoubleClick);
-        windowBehavior.tabCloseButtonIndex = ["always", "hover", "hidden"].indexOf(controller.windowInteractionSettings.tabCloseButton);
+        windowBehavior.loadInteraction(controller.windowInteractionSettings);
         performanceModeDraft = controller.performanceMode;
         windowBehavior.performanceMode = performanceModeDraft;
         languageDraft = controller.languagePreference;
@@ -600,11 +598,7 @@ Rectangle {
         const shellSaved = terminalThemeSaved && controller.saveLocalShellPreference(localShellTokens[Math.max(0, localShellBox.currentIndex)] || "automatic");
         const selectionSaved = shellSaved && controller.saveTerminalSelectionPopupSettings(selectionPopupSwitch.checked, selectionActionDraftValues());
         const lifecycleSaved = selectionSaved && controller.saveSessionLifecycleSettings(windowBehavior.closePaneOnSessionEnd, windowBehavior.preserveTerminalSessions, windowBehavior.reopenLocalSessions, windowBehavior.reconnectRemoteSessions);
-        const saved = lifecycleSaved && controller.saveWindowInteractionSettings({
-            singleInstance: windowBehavior.singleInstance,
-            tabDoubleClick: ["rename", "close", "none"][windowBehavior.tabDoubleClickIndex],
-            tabCloseButton: ["always", "hover", "hidden"][windowBehavior.tabCloseButtonIndex]
-        });
+        const saved = lifecycleSaved && controller.saveWindowInteractionSettings(windowBehavior.interactionValues());
         presentStatus(saved ? restartRequired ? qsTr("Settings saved. Restart ztermy to apply the rendering mode.") : qsTr("Settings saved and applied.") : qsTr("These settings could not be saved. Check the font and numeric ranges."), !saved, saved);
         if (!saved) {
             loadDraft();

@@ -62,7 +62,7 @@ const TerminalRestoreIntent *findRestoreIntent(const TerminalWorkspaceLayout &la
 bool validRestoreIntent(const TerminalRestoreIntent &intent) noexcept
 {
     if (!validBoundedText(intent.id, 128, false) || !validBoundedText(intent.title, 256, true)
-        || !validBoundedText(intent.profileId, 256, true))
+        || !validBoundedText(intent.profileId, 256, true) || !validBoundedText(intent.manualTitle, 1024, true))
     {
         return false;
     }
@@ -182,11 +182,12 @@ bool validWorkspaceState(const WorkspaceState &state) noexcept
 bool validTerminalWorkspaceLayout(const TerminalWorkspaceLayout &layout) noexcept
 {
     if (!validBoundedText(layout.id, 128, false) || !validBoundedText(layout.title, 256, true)
-        || !validBoundedText(layout.windowId, 128, false) || !validBoundedText(layout.returnWorkspaceId, 128, true)
-        || !validBoundedText(layout.rootNodeId, 128, false) || !validBoundedText(layout.activePaneId, 128, false)
-        || layout.nodes.empty() || layout.nodes.size() > maximumTerminalNodesPerWorkspace
-        || layout.restoreIntents.empty() || layout.restoreIntents.size() > maximumTerminalPanesPerWorkspace
-        || !uniqueTerminalIds(layout) || !std::ranges::all_of(layout.restoreIntents, validRestoreIntent))
+        || !validBoundedText(layout.manualTitle, 1024, true) || !validBoundedText(layout.windowId, 128, false)
+        || !validBoundedText(layout.returnWorkspaceId, 128, true) || !validBoundedText(layout.rootNodeId, 128, false)
+        || !validBoundedText(layout.activePaneId, 128, false) || layout.nodes.empty()
+        || layout.nodes.size() > maximumTerminalNodesPerWorkspace || layout.restoreIntents.empty()
+        || layout.restoreIntents.size() > maximumTerminalPanesPerWorkspace || !uniqueTerminalIds(layout)
+        || !std::ranges::all_of(layout.restoreIntents, validRestoreIntent))
     {
         return false;
     }
@@ -261,6 +262,7 @@ TerminalWorkspaceLayout makeSinglePaneTerminalWorkspace(std::string workspaceId,
         .title = intent.title,
         .rootNodeId = paneId,
         .activePaneId = paneId,
+        .manualTitle = intent.manualTitle,
     };
     layout.nodes.push_back(TerminalLayoutNode{.id = std::move(paneId), .restoreIntentId = intent.id});
     layout.restoreIntents.push_back(std::move(intent));

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "application/AppController.h"
+#include "ui/RuntimeSmokeItems.h"
 #include "ui/WindowStateRuntimeSmoke.h"
 #include "ui/terminal/TerminalItem.h"
 
@@ -92,6 +93,62 @@ namespace ztermy::ui
     return true;
 }
 
+[[nodiscard]] inline bool runTitleRuntimeSmoke(NativeWindow &window, AppController &controller)
+{
+    const QString id = controller.startLocalTerminal();
+    if (id.isEmpty()
+        || !processWindowEventsUntil(
+            [&] {
+                return terminalTabRunning(controller, id);
+            },
+            std::chrono::seconds{5}))
+        return false;
+    processWindowEventsFor(std::chrono::milliseconds{300});
+    auto *terminal = window.findChild<TerminalItem *>();
+    if (!terminal)
+        return false;
+    const auto title = [&] {
+        return controller.terminalWorkspace(id).value(QStringLiteral("title")).toString();
+    };
+    terminal->inputGenerated(QByteArrayLiteral("[Console]::Write([char]27 + ']2;ZTERMY_TITLE_RUNTIME' + [char]7)\r"));
+    if (!processWindowEventsUntil(
+            [&] {
+                return title() == QStringLiteral("ZTERMY_TITLE_RUNTIME");
+            },
+            std::chrono::seconds{5}))
+        return false;
+    if (!controller.setTerminalTabTitle(id, QStringLiteral("Pinned runtime title")))
+        return false;
+    terminal->inputGenerated(QByteArrayLiteral("[Console]::Write([char]27 + ']2;ZTERMY_TITLE_UPDATED' + [char]7)\r"));
+    processWindowEventsFor(std::chrono::milliseconds{500});
+    if (title() != QStringLiteral("Pinned runtime title") || !controller.setTerminalTabTitle(id, QString{}))
+        return false;
+    const bool unpinned = processWindowEventsUntil(
+        [&] {
+            return title() == QStringLiteral("ZTERMY_TITLE_UPDATED");
+        },
+        std::chrono::seconds{5});
+    qCInfo(applicationLog) << "Terminal title runtime smoke" << "programTitleAndManualOverride=" << unpinned;
+    if (!unpinned)
+        return false;
+    const auto focused = window.activeFocusItem();
+    terminal->inputGenerated(QByteArrayLiteral(
+        "[Console]::Write([char]27 + ']9;4;1;42' + [char]7 + [char]27 + ']777;notify;Build;Finished' + [char]7)\r"));
+    const bool statusVisible = processWindowEventsUntil(
+        [&] {
+            const auto *tab =
+                quickItem(window.rootObject(), (QStringLiteral("workspaceTitle-") + id).toLatin1().constData());
+            const auto *toast = window.findChild<QObject *>(QStringLiteral("terminalNotificationToast"));
+            return tab && tab->property("progressState").toInt() == 1
+                   && tab->property("progressPercentage").toInt() == 42 && toast && toast->property("opened").toBool();
+        },
+        std::chrono::seconds{5});
+    const bool focusPreserved = window.activeFocusItem() == focused;
+    qCInfo(applicationLog) << "Terminal status runtime smoke" << "progressAndToast=" << statusVisible
+                           << "focusPreserved=" << focusPreserved;
+    return controller.closeTerminalTab(id) && statusVisible && focusPreserved;
+}
+
 [[nodiscard]] inline bool runLifecycleRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller)
 {
     window.resize(QSize{1120, 800});
@@ -107,6 +164,11 @@ namespace ztermy::ui
         processWindowEventsFor(std::chrono::milliseconds{100});
     };
 
+    if (qEnvironmentVariableIntValue("ZTERMY_TEST_TITLES") > 0)
+    {
+        showTerminalPage();
+        return runTitleRuntimeSmoke(window, controller);
+    }
     if (qEnvironmentVariableIntValue("ZTERMY_TEST_PANE_CLOSE") > 0)
     {
         showTerminalPage();

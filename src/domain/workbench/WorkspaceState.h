@@ -58,6 +58,7 @@ struct TerminalRestoreIntent final
     std::string profileId;
     std::string title;
     TerminalRestoreKind kind = TerminalRestoreKind::Local;
+    std::string manualTitle;
 
     [[nodiscard]] friend bool operator==(const TerminalRestoreIntent &, const TerminalRestoreIntent &) = default;
 };
@@ -85,6 +86,7 @@ struct TerminalWorkspaceLayout final
     std::vector<TerminalRestoreIntent> restoreIntents;
     std::string windowId = "main";
     std::string returnWorkspaceId;
+    std::string manualTitle;
 
     [[nodiscard]] friend bool operator==(const TerminalWorkspaceLayout &, const TerminalWorkspaceLayout &) = default;
 };

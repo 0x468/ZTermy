@@ -759,6 +759,7 @@ signals:
     void sftpChanged();
     void transferTasksChanged();
     void transferNotificationRequested(const QVariantMap &notification);
+    void terminalNotificationRequested(const QVariantMap &notification);
     void terminalKeywordHighlightAdded(const QString &tabId, const QString &ruleId, const QString &pattern);
     void transferConflictRequested(const QString &taskId, const QVariantMap &conflict);
     void actionRegistryChanged();
@@ -809,18 +810,13 @@ private:
     using TerminalTab = TerminalSessionState;
     using TerminalTabKind = TerminalSessionKind;
     using TerminalSelectionAction = ztermy::TerminalSelectionAction;
-    struct ClosedTerminalDescription final
-    {
-        TerminalTabKind kind = TerminalTabKind::Local;
-        QString sourceProfileId;
-        QString title;
-        QString workingDirectory;
-    };
+    using ClosedTerminalDescription = ClosedTerminalSession;
 
     struct PortForwardingRuntime;
 
     void connectTerminalSignals(ui::TerminalItem &terminal, const QString &paneId);
     void connectLocalTabSignals(TerminalTab &tab);
+    void updateTerminalStatus(TerminalTab &tab, const terminal::TerminalSnapshotPtr &snapshot);
     void connectSshTabSignals(TerminalTab &tab);
     void scheduleTerminalTabsChanged();
     void flushTerminalTabsChanged();
@@ -1133,6 +1129,7 @@ private:
     bool m_openSshImportRunning = false;
     bool m_terminalTelemetryVisible = false;
     bool m_terminalTabsChangePending = false;
+    qint64 m_nextTerminalNotificationMs = 0;
     QTimer m_scriptExecutionTimer;
     QString m_hostKeyTransferTaskId;
     QString m_hostKeyForwardingRuleId;

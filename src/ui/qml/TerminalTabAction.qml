@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Window
 
 // Terminal (and Settings) tab on the title bar: a TitleTab with session
 // status in the icon, a close affordance, reorder drag, and the tab menu.
@@ -9,6 +10,9 @@ TitleTab {
     id: control
 
     property bool running: false
+    property int progressState: 0
+    property int progressPercentage: -1
+    readonly property string progressDescription: progressState === 2 ? qsTr("Task failed") : progressState === 4 ? qsTr("Task paused") : progressState === 3 || progressPercentage < 0 ? qsTr("Task running") : qsTr("Progress: %1%").arg(progressPercentage)
     property bool connecting: false
     property bool canReconnect: false
     property bool canDuplicate: false
@@ -39,13 +43,43 @@ TitleTab {
     trailingInset: closeButtonShown ? 28 : 0
     accessibleName: qsTr("Activate %1").arg(title)
     doubleClickEnabled: doubleClickAction !== "none"
-    toolTip: title
-    toolTipEnabled: compact
+    toolTip: title + (progressState > 0 ? "\n" + progressDescription : "")
+    toolTipEnabled: compact || progressState > 0
     onDoubleActivated: {
         if (doubleClickAction === "close")
             closeRequested();
         else if (doubleClickAction === "rename")
             renameRequested();
+    }
+
+    Item {
+        id: progressTrack
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.margins: 3
+        height: 2
+        visible: control.progressState > 0
+        clip: true
+
+        Rectangle {
+            id: progressFill
+            height: parent.height
+            width: parent.width * (control.progressState === 3 ? 0.35 : control.progressPercentage < 0 ? 1 : Math.max(0, Math.min(100, control.progressPercentage)) / 100)
+            color: control.progressState === 2 ? Theme.danger : control.progressState === 4 ? Theme.warning : Theme.accent
+
+            NumberAnimation on x {
+                running: progressTrack.visible && control.progressState === 3 && Motion.enabled && !Motion.reduced && control.Window.window && control.Window.window.visible && control.Window.window.visibility !== Window.Minimized
+                from: -progressFill.width
+                to: progressTrack.width
+                duration: 1400
+                loops: Animation.Infinite
+                onRunningChanged: {
+                    if (!running)
+                        progressFill.x = 0;
+                }
+            }
+        }
     }
 
     SequentialAnimation on iconOpacity {

@@ -23,6 +23,7 @@ private slots:
     void migratesVersionFiveWithoutTerminalWorkspaces();
     void migratesVersionSixWithoutRestoreGuardState();
     void migratesVersionSevenToWindowOwnership();
+    void migratesVersionEightWithoutLosingManualNames();
     void togglesAndBoundsSftpBookmarks();
     void rejectsMalformedDuplicateAndInvalidState();
     void rejectsMalformedTerminalWorkspaceTopology();
@@ -71,6 +72,8 @@ void WorkspaceStateStoreTests::savesAndLoadsVersionedNonSecretState()
     auto workspace = ztermy::workbench::makeSinglePaneTerminalWorkspace("workspace-a", "pane-a",
                                                                         {.id = "intent-a", .title = "PowerShell"});
     workspace.title = "Operations";
+    workspace.manualTitle = "Pinned workspace";
+    workspace.restoreIntents.front().manualTitle = "Pinned pane";
     workspace.windowId = "detached-window";
     workspace.returnWorkspaceId = "original-tab";
     QVERIFY(ztermy::workbench::splitTerminalPane(workspace, "pane-a", "split-a", "pane-b",
@@ -92,7 +95,7 @@ void WorkspaceStateStoreTests::savesAndLoadsVersionedNonSecretState()
     QFile file(path);
     QVERIFY(file.open(QIODevice::ReadOnly));
     const QByteArray payload = file.readAll();
-    QCOMPARE(QJsonDocument::fromJson(payload).object().value(QStringLiteral("schemaVersion")).toInt(), 8);
+    QCOMPARE(QJsonDocument::fromJson(payload).object().value(QStringLiteral("schemaVersion")).toInt(), 9);
     QVERIFY(payload.contains("terminalWorkspaces"));
     QVERIFY(payload.contains("activeTerminalWorkspaceId"));
     QVERIFY(!payload.contains("password"));
@@ -140,7 +143,40 @@ void WorkspaceStateStoreTests::migratesVersionSevenToWindowOwnership()
     QVERIFY(store.save(*loaded));
     QCOMPARE(*store.load(), *loaded);
     QVERIFY(file.open(QIODevice::ReadOnly));
-    QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value(QStringLiteral("schemaVersion")).toInt(), 8);
+    QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value(QStringLiteral("schemaVersion")).toInt(), 9);
+}
+
+void WorkspaceStateStoreTests::migratesVersionEightWithoutLosingManualNames()
+{
+    QTemporaryDir directory;
+    const QString path = directory.filePath(QStringLiteral("workspace.json"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    const QByteArray payload = R"({"schemaVersion":8,"profiles":[],"collapsedHostSections":["recent"],
+"activeTerminalWorkspaceId":"tab","quarantinedRestoreIntentIds":[],"restoreAttemptIntentId":"",
+"terminalWorkspaces":[{"id":"tab","title":"My workspace","rootNodeId":"pane","activePaneId":"pane",
+"windowId":"detached","returnWorkspaceId":"origin",
+"nodes":[{"id":"pane","kind":"leaf","restoreIntentId":"intent","firstChildId":"","secondChildId":"","orientation":"horizontal","ratio":0.5}],
+"restoreIntents":[{"id":"intent","kind":"ssh-profile","profileId":"host","title":"My pane"}]}]})";
+    QCOMPARE(file.write(payload), payload.size());
+    file.close();
+    const ztermy::workbench::WorkspaceStateStore store(path);
+    auto loaded = store.load();
+    QVERIFY(loaded);
+    auto &workspace = loaded->terminalWorkspaces.front();
+    QCOMPARE(workspace.manualTitle, std::string("My workspace"));
+    QCOMPARE(workspace.restoreIntents.front().manualTitle, std::string("My pane"));
+    QCOMPARE(workspace.windowId, std::string("detached"));
+    QCOMPARE(workspace.returnWorkspaceId, std::string("origin"));
+    QCOMPARE(loaded->collapsedHostSections, std::vector<std::string>{"recent"});
+    QVERIFY(store.save(*loaded));
+    QCOMPARE(store.load(), loaded);
+    workspace.manualTitle.clear();
+    workspace.restoreIntents.front().manualTitle.clear();
+    QVERIFY(store.save(*loaded));
+    QCOMPARE(store.load(), loaded);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value(QStringLiteral("schemaVersion")).toInt(), 9);
 }
 
 void WorkspaceStateStoreTests::migratesVersionFiveWithoutTerminalWorkspaces()
