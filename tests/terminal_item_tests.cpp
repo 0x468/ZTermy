@@ -103,6 +103,10 @@ private slots:
     void routesTrackedMouseAndWheelToTerminal();
     void exposesScrollbarAndRequestsAbsoluteScroll();
     void preservesNativeMonospaceCellAdvance();
+    void keepsShellPredictionReadableAndDistinctOnLightBackground_data();
+    void keepsShellPredictionReadableAndDistinctOnLightBackground();
+    void paintsColoredUnderlineStyles();
+    void keepsLigatureGeometryWhenSelectionChanges();
     void rendersStyledWideCellsAndCursorPixels();
     void keepsBaseTextureDuringCursorBlink();
     void blinksOnlyWhileFocused();
@@ -1328,6 +1332,300 @@ void TerminalItemTests::preservesNativeMonospaceCellAdvance()
 
     QCOMPARE(cursorRect.x() - originRect.x(), nativeAdvance);
     QCOMPARE(cursorRect.width(), nativeAdvance);
+}
+
+void TerminalItemTests::keepsShellPredictionReadableAndDistinctOnLightBackground_data()
+{
+    QTest::addColumn<qreal>("backgroundOpacity");
+    QTest::addColumn<bool>("explicitLightBackground");
+    QTest::newRow("opaque") << qreal{1.0} << false;
+    QTest::newRow("default-transparent-pane") << qreal{0.0} << false;
+    QTest::newRow("opaque-explicit-light-cell") << qreal{1.0} << true;
+    QTest::newRow("transparent-explicit-light-cell") << qreal{0.0} << true;
+}
+
+void TerminalItemTests::keepsShellPredictionReadableAndDistinctOnLightBackground()
+{
+    QFETCH(qreal, backgroundOpacity);
+    QFETCH(bool, explicitLightBackground);
+    QQuickWindow window;
+    auto *item = new TestableTerminalItem(window.contentItem());
+    auto snapshot = std::make_shared<ztermy::terminal::TerminalSnapshot>();
+    snapshot->columns = 4;
+    snapshot->rows = 1;
+    snapshot->defaultForeground = {.red = 15, .green = 23, .blue = 42};
+    snapshot->defaultBackground = {.red = 255, .green = 255, .blue = 255};
+    snapshot->cells.resize(4);
+    snapshot->cells[0].grapheme = U"M";
+    snapshot->cells[0].foreground = snapshot->defaultForeground;
+    snapshot->cells[1].grapheme = U"M";
+    snapshot->cells[1].foreground = {.red = 226, .green = 232, .blue = 240};
+    if (explicitLightBackground)
+    {
+        snapshot->cells[1].background = snapshot->defaultBackground;
+        snapshot->cells[1].explicitBackground = true;
+    }
+    snapshot->cells[2].grapheme = U"W";
+    snapshot->cells[2].foreground = snapshot->cells[1].foreground;
+    snapshot->cells[3].grapheme = U"M";
+    snapshot->cells[3].foreground = snapshot->defaultForeground;
+    snapshot->cells[3].faint = true;
+    snapshot->cursor = {.column = 0,
+                        .row = 0,
+                        .width = 1,
+                        .style = ztermy::terminal::TerminalCursorStyle::block,
+                        .visible = false};
+
+    item->setKeywordHighlightRules({QVariantMap{{QStringLiteral("pattern"), QStringLiteral("W")},
+                                                {QStringLiteral("background"), QStringLiteral("#102030")}}});
+    item->setSnapshot(snapshot);
+    item->setBackgroundOpacity(backgroundOpacity);
+    window.setColor(Qt::white);
+    window.resize(240, 100);
+    item->setSize(window.size());
+    window.show();
+    QTest::qWait(100);
+    const QImage capture = window.grabWindow();
+    QVERIFY(!capture.isNull());
+
+    const QRectF cell = item->inputMethodQuery(Qt::ImCursorRectangle).toRectF();
+    QVERIFY(cell.width() > 0 && cell.height() > 0);
+    const qreal scale = capture.devicePixelRatio();
+    const auto darkestInkInColumn = [&](const int column) {
+        int darkestInk = 255;
+        const qreal left = (cell.left() + (column * cell.width())) * scale;
+        const qreal right = (cell.right() + (column * cell.width())) * scale;
+        for (int y = qRound(cell.top() * scale); y < qRound(cell.bottom() * scale); ++y)
+        {
+            for (int x = qRound(left); x < qRound(right); ++x)
+            {
+                const QColor pixel = capture.pixelColor(x, y);
+                darkestInk = std::min({darkestInk, pixel.red(), pixel.green(), pixel.blue()});
+            }
+        }
+        return darkestInk;
+    };
+    const int typedInk = darkestInkInColumn(0);
+    const int predictedInk = darkestInkInColumn(1);
+    const int faintInk = darkestInkInColumn(3);
+    QVERIFY2(predictedInk < 115, "Small predicted shell text needs contrast headroom on a light terminal background");
+    QVERIFY2(predictedInk - typedInk >= 35, "Predicted shell text must remain visually distinct from typed text");
+    QVERIFY2(faintInk < 180, "SGR 2 text must remain legible on a light terminal background");
+    QVERIFY2(faintInk - typedInk >= 35, "SGR 2 text must be distinguishable from ordinary shell input");
+
+    int highlightedInk = 0;
+    for (int y = qRound(cell.top() * scale); y < qRound(cell.bottom() * scale); ++y)
+    {
+        for (int x = qRound((cell.left() + (2 * cell.width())) * scale);
+             x < qRound((cell.right() + (2 * cell.width())) * scale); ++x)
+        {
+            highlightedInk = std::max(highlightedInk, capture.pixelColor(x, y).red());
+        }
+    }
+    QVERIFY2(
+        highlightedInk > 180,
+        qPrintable(
+            QStringLiteral("Light text on a dark highlight was darkened (brightest red: %1)").arg(highlightedInk)));
+
+    window.close();
+    QCoreApplication::processEvents();
+}
+
+void TerminalItemTests::paintsColoredUnderlineStyles()
+{
+    QQuickWindow window;
+    auto *item = new TestableTerminalItem(window.contentItem());
+    item->setFontPixelSize(28);
+    auto snapshot = std::make_shared<ztermy::terminal::TerminalSnapshot>();
+    snapshot->columns = 3;
+    snapshot->rows = 1;
+    snapshot->defaultForeground = {.red = 0, .green = 0, .blue = 0};
+    snapshot->defaultBackground = {.red = 255, .green = 255, .blue = 255};
+    snapshot->cells.resize(3);
+    for (auto &cell : snapshot->cells)
+    {
+        cell.grapheme = U"M";
+        cell.foreground = snapshot->defaultForeground;
+    }
+    snapshot->cells[1].underlineStyle = ztermy::terminal::TerminalUnderlineStyle::curly;
+    snapshot->cells[1].underlineColor = {.red = 220, .green = 30, .blue = 50};
+    snapshot->cells[2].underlineStyle = ztermy::terminal::TerminalUnderlineStyle::doubleLine;
+    snapshot->cells[2].underlineColor = {.red = 20, .green = 170, .blue = 40};
+    snapshot->cursor.visible = false;
+    item->setSnapshot(snapshot);
+    window.setColor(Qt::white);
+    window.resize(240, 100);
+    item->setSize(window.size());
+    window.show();
+    QTest::qWait(100);
+    const QImage capture = window.grabWindow();
+    QVERIFY(!capture.isNull());
+
+    const QRectF cell = item->inputMethodQuery(Qt::ImCursorRectangle).toRectF();
+    const qreal scale = capture.devicePixelRatio();
+    int redPixels = 0;
+    int greenPixels = 0;
+    for (int column = 1; column <= 2; ++column)
+    {
+        for (int y = qRound(cell.top() * scale); y < qRound(cell.bottom() * scale); ++y)
+        {
+            for (int x = qRound((cell.left() + (column * cell.width())) * scale);
+                 x < qRound((cell.right() + (column * cell.width())) * scale); ++x)
+            {
+                const QColor pixel = capture.pixelColor(x, y);
+                if (column == 1 && pixel.red() > pixel.green() + 60 && pixel.red() > pixel.blue() + 60)
+                    ++redPixels;
+                if (column == 2 && pixel.green() > pixel.red() + 60 && pixel.green() > pixel.blue() + 60)
+                    ++greenPixels;
+            }
+        }
+    }
+    QVERIFY2(redPixels >= 3, "Curly underline must use the terminal's separate underline color");
+    QVERIFY2(greenPixels >= 3, "Double underline must use the terminal's separate underline color");
+    window.close();
+    QCoreApplication::processEvents();
+}
+
+void TerminalItemTests::keepsLigatureGeometryWhenSelectionChanges()
+{
+    QQuickWindow window;
+    auto *item = new TestableTerminalItem(window.contentItem());
+    item->setFontFamily(QStringLiteral("Cascadia Code"));
+    item->setFontPixelSize(32);
+    item->setLigaturesEnabled(true);
+    item->setSelectionBackground(Qt::white);
+    item->setSelectionForeground(Qt::black);
+
+    auto snapshot = std::make_shared<ztermy::terminal::TerminalSnapshot>();
+    snapshot->columns = 6;
+    snapshot->rows = 1;
+    snapshot->defaultForeground = {.red = 0, .green = 0, .blue = 0};
+    snapshot->defaultBackground = {.red = 255, .green = 255, .blue = 255};
+    snapshot->cells.resize(snapshot->columns);
+    for (int column = 0; column < 3; ++column)
+    {
+        snapshot->cells[static_cast<std::size_t>(column)].grapheme = std::u32string(1, U"==>"[column]);
+        snapshot->cells[static_cast<std::size_t>(column)].foreground = snapshot->defaultForeground;
+    }
+    snapshot->cursor.visible = false;
+    auto selectedMiddle = std::make_shared<ztermy::terminal::TerminalSnapshot>(*snapshot);
+    selectedMiddle->cells[1].selected = true;
+    selectedMiddle->selectionPresent = true;
+    item->setSnapshot(selectedMiddle);
+    window.setColor(Qt::white);
+    window.resize(260, 100);
+    item->setSize(window.size());
+    window.show();
+    QTest::qWait(100);
+    const QImage middleCapture = window.grabWindow();
+    QVERIFY(!middleCapture.isNull());
+
+    auto selectedRight = std::make_shared<ztermy::terminal::TerminalSnapshot>(*snapshot);
+    selectedRight->cells[2].selected = true;
+    selectedRight->selectionPresent = true;
+    item->setSnapshot(selectedRight);
+    QTest::qWait(100);
+    const QImage rightCapture = window.grabWindow();
+    QVERIFY(!rightCapture.isNull());
+    QCOMPARE(middleCapture, rightCapture);
+
+    item->setSnapshot(selectedMiddle);
+    item->setSelectionForeground(QColor(220, 0, 0));
+    QTest::qWait(100);
+    const QImage coloredSelection = window.grabWindow();
+    QVERIFY(!coloredSelection.isNull());
+    const QRectF cell = item->inputMethodQuery(Qt::ImCursorRectangle).toRectF();
+    const qreal scale = coloredSelection.devicePixelRatio();
+    int redPixelsInSelection = 0;
+    int redPixelsOutsideSelection = 0;
+    QStringList redOutsidePositions;
+    for (int y = qRound(cell.top() * scale); y < qRound(cell.bottom() * scale); ++y)
+    {
+        for (int column = 0; column < 3; ++column)
+        {
+            const int left =
+                qRound((cell.left() + (column * cell.width())) * scale) + (column == 2 ? qCeil(2.0 * scale) : 0);
+            const int right =
+                qRound((cell.right() + (column * cell.width())) * scale) - (column == 0 ? qCeil(2.0 * scale) : 0);
+            for (int x = left; x < right; ++x)
+            {
+                const QColor pixel = coloredSelection.pixelColor(x, y);
+                if (pixel.red() > 150 && pixel.green() < 100 && pixel.blue() < 100)
+                {
+                    if (column == 1)
+                        ++redPixelsInSelection;
+                    else
+                    {
+                        ++redPixelsOutsideSelection;
+                        redOutsidePositions.append(QStringLiteral("%1,%2").arg(x).arg(y));
+                    }
+                }
+            }
+        }
+    }
+    QVERIFY(redPixelsInSelection > 2);
+    QVERIFY2(redPixelsOutsideSelection == 0, qPrintable(QStringLiteral("left=%1 width=%2 scale=%3 positions=%4")
+                                                            .arg(cell.left())
+                                                            .arg(cell.width())
+                                                            .arg(scale)
+                                                            .arg(redOutsidePositions.join(QLatin1Char(' ')))));
+
+    auto cursorMiddle = std::make_shared<ztermy::terminal::TerminalSnapshot>(*snapshot);
+    cursorMiddle->cursor.visible = true;
+    cursorMiddle->cursor.style = ztermy::terminal::TerminalCursorStyle::bar;
+    cursorMiddle->cursor.color = {.red = 255, .green = 255, .blue = 255};
+    cursorMiddle->cursor.column = 1;
+    item->setSnapshot(cursorMiddle);
+    QTest::qWait(100);
+    const QImage cursorMiddleCapture = window.grabWindow();
+    QVERIFY(!cursorMiddleCapture.isNull());
+
+    auto cursorRight = std::make_shared<ztermy::terminal::TerminalSnapshot>(*cursorMiddle);
+    cursorRight->cursor.column = 2;
+    item->setSnapshot(cursorRight);
+    QTest::qWait(100);
+    const QImage cursorRightCapture = window.grabWindow();
+    QVERIFY(!cursorRightCapture.isNull());
+    const int firstCellRight = qRound((cell.left() + cell.width()) * scale);
+    QCOMPARE(cursorMiddleCapture.copy(0, 0, firstCellRight, cursorMiddleCapture.height()),
+             cursorRightCapture.copy(0, 0, firstCellRight, cursorRightCapture.height()));
+
+    cursorMiddle->cursor.style = ztermy::terminal::TerminalCursorStyle::block;
+    cursorRight->cursor.style = ztermy::terminal::TerminalCursorStyle::block;
+    item->setSnapshot(cursorMiddle);
+    QTest::qWait(100);
+    const QImage blockMiddleCapture = window.grabWindow();
+    item->setSnapshot(cursorRight);
+    QTest::qWait(100);
+    const QImage blockRightCapture = window.grabWindow();
+    const auto atCursorBoundary = [&](const int x) {
+        for (int column = 1; column <= 3; ++column)
+        {
+            const qreal boundary = (cell.left() + (column * cell.width())) * scale;
+            if (x >= qFloor(boundary) && x <= qCeil(boundary))
+                return true;
+        }
+        return false;
+    };
+    QStringList offBoundaryDifferences;
+    for (int y = 0; y < blockMiddleCapture.height(); ++y)
+    {
+        for (int x = 0; x < blockMiddleCapture.width(); ++x)
+        {
+            // Raster coverage can differ only where a cursor cell meets the unmodified base texture.
+            if (blockMiddleCapture.pixel(x, y) != blockRightCapture.pixel(x, y) && !atCursorBoundary(x)
+                && offBoundaryDifferences.size() < 12)
+                offBoundaryDifferences.append(QStringLiteral("%1,%2").arg(x).arg(y));
+        }
+    }
+    QVERIFY2(offBoundaryDifferences.isEmpty(), qPrintable(QStringLiteral("left=%1 width=%2 scale=%3 differences=%4")
+                                                              .arg(cell.left())
+                                                              .arg(cell.width())
+                                                              .arg(scale)
+                                                              .arg(offBoundaryDifferences.join(QLatin1Char(' ')))));
+
+    window.close();
+    QCoreApplication::processEvents();
 }
 
 void TerminalItemTests::rendersStyledWideCellsAndCursorPixels()

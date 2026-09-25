@@ -2,11 +2,15 @@
 
 #include <Windows.h>
 #include <TlHelp32.h>
+#include <UserEnv.h>
 
 #include <algorithm>
 #include <array>
 #include <limits>
+#include <map>
+#include <memory>
 #include <mutex>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -135,6 +139,45 @@ private:
 [[nodiscard]] std::error_code invalidArgument() noexcept
 {
     return std::make_error_code(std::errc::invalid_argument);
+}
+
+struct EnvironmentNameLess final
+{
+    [[nodiscard]] bool operator()(const std::wstring &left, const std::wstring &right) const noexcept
+    {
+        return CompareStringOrdinal(left.c_str(), -1, right.c_str(), -1, TRUE) == CSTR_LESS_THAN;
+    }
+};
+
+using EnvironmentEntries = std::map<std::wstring, std::wstring, EnvironmentNameLess>;
+
+void mergeEnvironmentEntries(EnvironmentEntries &entries, const wchar_t *block)
+{
+    for (const wchar_t *current = block; *current != L'\0';)
+    {
+        const std::wstring_view entry(current);
+        const std::size_t separator = entry.find(L'=', entry.starts_with(L'=') ? 1U : 0U);
+        if (separator != std::wstring_view::npos)
+        {
+            entries.insert_or_assign(std::wstring(entry.substr(0, separator)),
+                                     std::wstring(entry.substr(separator + 1)));
+        }
+        current += entry.size() + 1;
+    }
+}
+
+[[nodiscard]] std::vector<wchar_t> environmentBlock(const EnvironmentEntries &entries)
+{
+    std::vector<wchar_t> block;
+    for (const auto &[name, value] : entries)
+    {
+        block.insert(block.end(), name.begin(), name.end());
+        block.push_back(L'=');
+        block.insert(block.end(), value.begin(), value.end());
+        block.push_back(L'\0');
+    }
+    block.push_back(L'\0');
+    return block;
 }
 
 } // namespace
@@ -269,9 +312,49 @@ std::error_code ConPtyProcess::start(const std::wstring &applicationName, std::w
     const wchar_t *workingDirectoryPointer =
         workingDirectoryStorage.empty() ? nullptr : workingDirectoryStorage.c_str();
 
-    const BOOL processCreated = CreateProcessW(applicationName.c_str(), mutableCommand.data(), nullptr, nullptr, FALSE,
-                                               EXTENDED_STARTUPINFO_PRESENT, nullptr, workingDirectoryPointer,
-                                               &startupInfo.StartupInfo, &processInformation);
+    HANDLE userTokenRaw = INVALID_HANDLE_VALUE;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE, &userTokenRaw) == FALSE)
+    {
+        const std::error_code error = lastSystemError();
+        deleteAttributeList();
+        return error;
+    }
+    UniqueHandle userToken(userTokenRaw);
+    void *freshEnvironmentRaw = nullptr;
+    if (CreateEnvironmentBlock(&freshEnvironmentRaw, userToken.get(), FALSE) == FALSE)
+    {
+        const std::error_code error = lastSystemError();
+        deleteAttributeList();
+        return error;
+    }
+    const std::unique_ptr<void, decltype(&DestroyEnvironmentBlock)> freshEnvironment(freshEnvironmentRaw,
+                                                                                     &DestroyEnvironmentBlock);
+    wchar_t *currentEnvironmentRaw = GetEnvironmentStringsW();
+    if (currentEnvironmentRaw == nullptr)
+    {
+        const std::error_code error = lastSystemError();
+        deleteAttributeList();
+        return error;
+    }
+    const std::unique_ptr<wchar_t, decltype(&FreeEnvironmentStringsW)> currentEnvironment(currentEnvironmentRaw,
+                                                                                          &FreeEnvironmentStringsW);
+    EnvironmentEntries entries;
+    mergeEnvironmentEntries(entries, currentEnvironment.get());
+    mergeEnvironmentEntries(entries, static_cast<const wchar_t *>(freshEnvironment.get()));
+    // The child is attached to ztermy's ConPTY, not the terminal that launched ztermy.
+    for (const wchar_t *name :
+         {L"WT_SESSION", L"WT_PROFILE_ID", L"WT_WINDOWID", L"TERM_PROGRAM", L"TERM_PROGRAM_VERSION"})
+    {
+        entries.erase(name);
+    }
+    entries.insert_or_assign(L"TERM", L"xterm-256color");
+    entries.insert_or_assign(L"COLORTERM", L"truecolor");
+    std::vector<wchar_t> childEnvironment = environmentBlock(entries);
+
+    const BOOL processCreated =
+        CreateProcessW(applicationName.c_str(), mutableCommand.data(), nullptr, nullptr, FALSE,
+                       EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT, childEnvironment.data(),
+                       workingDirectoryPointer, &startupInfo.StartupInfo, &processInformation);
     const std::error_code processError = processCreated == FALSE ? lastSystemError() : std::error_code{};
     deleteAttributeList();
 

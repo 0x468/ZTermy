@@ -150,6 +150,7 @@ private slots:
     void postProcessExited();
 
 private:
+    friend class LocalTerminalSessionTestPeer;
     struct InputCommand
     {
         QByteArray bytes;
@@ -225,13 +226,15 @@ private:
     void queueByteCommand(Command command, std::size_t byteCount);
     void queueCommand(Command command);
     void readLoop(const std::stop_token &stopToken);
+    [[nodiscard]] bool consumeOutput(std::span<const std::byte> bytes);
     void writeLoop(const std::stop_token &stopToken);
     void monitorProcessExit(const std::stop_token &stopToken);
     void stopWorkers() noexcept;
     [[nodiscard]] bool writeToProcess(std::span<const std::byte> bytes);
-    void publishSnapshot();
+    void publishSnapshot(bool hostInteraction = true);
     void publishSnapshotIfDirty();
-    void buildSnapshot();
+    void buildSnapshot(bool force = false);
+    void scheduleSynchronizedOutputFallback(std::int64_t startedNanoseconds);
     void postStatus(const QString &status);
     void resetMetrics() noexcept;
     void logMetrics() const;
@@ -263,6 +266,7 @@ private:
     QTimer m_snapshotDeliveryTimer;
     std::atomic_bool m_snapshotDeliveryScheduled = false;
     std::atomic_bool m_engineDirty = false;
+    std::atomic<std::int64_t> m_synchronizedOutputStartedNanoseconds = 0;
     std::atomic_bool m_snapshotBuildActive = false;
     std::atomic_bool m_running = false;
     std::atomic_uint64_t m_readBytes = 0;

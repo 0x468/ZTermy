@@ -277,6 +277,7 @@ target_compile_definitions(ztermy_terminal_transport PRIVATE
     WIN32_LEAN_AND_MEAN
     _UNICODE
 )
+target_link_libraries(ztermy_terminal_transport PRIVATE Advapi32 Userenv)
 
 add_library(ztermy_ssh_transport STATIC
     src/infrastructure/ssh/ExplicitProxyTunnel.cpp
@@ -500,6 +501,7 @@ add_library(ztermy_terminal_engine STATIC
     src/domain/terminal/CommandBlockStore.cpp
     src/domain/terminal/CommandBlockStore.h
     src/domain/terminal/GhosttyTerminalEngine.cpp
+    src/domain/terminal/GhosttyInputMapping.cpp
     src/domain/terminal/GhosttyTerminalEngine.h
     src/domain/terminal/TerminalLinkDetector.cpp
     src/domain/terminal/TerminalLinkDetector.h
@@ -743,6 +745,7 @@ target_link_libraries(ztermy_terminal_engine PRIVATE ghostty-vt-static)
 
 add_library(ztermy_terminal_session STATIC
     src/application/terminal/LocalTerminalSession.cpp
+    src/application/terminal/LocalTerminalPresentation.cpp
     src/application/terminal/LocalTerminalSession.h
     src/application/terminal/WindowsLocalShellCatalog.cpp
     src/application/terminal/WindowsLocalShellCatalog.h
@@ -752,6 +755,7 @@ add_library(ztermy_terminal_session STATIC
 
 add_library(ztermy_ssh_session STATIC
     src/application/ssh/SshTerminalSession.cpp
+    src/application/ssh/SshTerminalPresentation.cpp
     src/application/ssh/SshTerminalSession.h
     src/platform/windows/WindowsTerminalTextCodec.cpp
     src/platform/windows/WindowsTerminalTextCodec.h
@@ -852,6 +856,7 @@ add_library(ztermy_terminal_ui STATIC
     src/platform/windows/WindowsTerminalInput.cpp
     src/platform/windows/WindowsTerminalInput.h
     src/ui/terminal/TerminalItem.cpp
+    src/ui/terminal/TerminalItemPainting.cpp
     src/ui/terminal/TerminalItem.h
     src/ui/terminal/TerminalKeywordHighlighter.cpp
     src/ui/terminal/TerminalKeywordHighlighter.h

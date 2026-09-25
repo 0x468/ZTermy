@@ -126,6 +126,7 @@ std::error_code LocalTerminalSession::start(const TerminalGeometry geometry)
         }
     }
     m_process = std::move(process);
+    m_synchronizedOutputStartedNanoseconds.store(0, std::memory_order_release);
     resetMetrics();
     m_running.store(true);
     emit runningChanged(true);
@@ -226,6 +227,7 @@ void LocalTerminalSession::stop() noexcept
     m_snapshotDeliveryTimer.stop();
     m_snapshotDeliveryScheduled.store(false);
     m_engineDirty.store(false);
+    m_synchronizedOutputStartedNanoseconds.store(0, std::memory_order_release);
 
     if (m_running.exchange(false))
     {
@@ -562,35 +564,10 @@ void LocalTerminalSession::readLoop(const std::stop_token &stopToken)
         {
             break;
         }
-        m_readBytes.fetch_add(*readResult, std::memory_order_relaxed);
-
-        if (m_outputSink)
-        {
-            m_outputSink->append(std::span(buffer).first(*readResult));
-        }
-
-        std::vector<std::byte> ptyWrite;
-        std::optional<std::string> clipboardWrite;
-        {
-            std::scoped_lock lock(m_engineMutex);
-            const std::error_code feedError = m_engine->feed(std::span(buffer).first(*readResult));
-            if (feedError)
-            {
-                postStatus(tr("Terminal parser failed: %1").arg(QString::fromStdString(feedError.message())));
-                break;
-            }
-            ptyWrite = m_engine->takePtyWrite();
-            clipboardWrite = m_engine->takeClipboardWrite();
-        }
-        if (!ptyWrite.empty() && !writeToProcess(ptyWrite))
+        if (!consumeOutput(std::span(buffer).first(*readResult)))
         {
             break;
         }
-        if (clipboardWrite)
-        {
-            emit clipboardTextReady(QString::fromUtf8(*clipboardWrite));
-        }
-        publishSnapshot();
     }
 
     if (!stopToken.stop_requested())
@@ -599,11 +576,52 @@ void LocalTerminalSession::readLoop(const std::stop_token &stopToken)
         if (m_engineDirty.load(std::memory_order_acquire)
             && !m_snapshotBuildActive.exchange(true, std::memory_order_acq_rel))
         {
-            buildSnapshot();
+            buildSnapshot(true);
             m_snapshotBuildActive.store(false, std::memory_order_release);
         }
         emit processExitObserved();
     }
+}
+
+bool LocalTerminalSession::consumeOutput(const std::span<const std::byte> bytes)
+{
+    m_readBytes.fetch_add(bytes.size(), std::memory_order_relaxed);
+    if (m_outputSink)
+        m_outputSink->append(bytes);
+
+    std::vector<std::byte> ptyWrite;
+    std::optional<std::string> clipboardWrite;
+    std::int64_t synchronizedOutputStarted = 0;
+    {
+        std::scoped_lock lock(m_engineMutex);
+        if (const auto error = m_engine->feed(bytes))
+        {
+            postStatus(tr("Terminal parser failed: %1").arg(QString::fromStdString(error.message())));
+            return false;
+        }
+        ptyWrite = m_engine->takePtyWrite();
+        clipboardWrite = m_engine->takeClipboardWrite();
+        if (m_engine->synchronizedOutput())
+        {
+            if (m_synchronizedOutputStartedNanoseconds.load(std::memory_order_relaxed) == 0)
+            {
+                synchronizedOutputStarted = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                std::chrono::steady_clock::now().time_since_epoch())
+                                                .count();
+                m_synchronizedOutputStartedNanoseconds.store(synchronizedOutputStarted, std::memory_order_release);
+            }
+        }
+        else
+            m_synchronizedOutputStartedNanoseconds.store(0, std::memory_order_release);
+    }
+    if (synchronizedOutputStarted != 0)
+        scheduleSynchronizedOutputFallback(synchronizedOutputStarted);
+    if (!ptyWrite.empty() && !writeToProcess(ptyWrite))
+        return false;
+    if (clipboardWrite)
+        emit clipboardTextReady(QString::fromUtf8(*clipboardWrite));
+    publishSnapshot(false);
+    return true;
 }
 
 void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
@@ -886,14 +904,23 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
         if (const auto *colorScheme = std::get_if<ColorSchemeCommand>(&command))
         {
             std::error_code error;
+            std::vector<std::byte> ptyWrite;
             {
                 std::scoped_lock lock(m_engineMutex);
                 error = m_engine->setColorScheme(colorScheme->scheme);
+                if (!error)
+                {
+                    ptyWrite = m_engine->takePtyWrite();
+                }
             }
             if (error)
             {
                 postStatus(tr("Terminal color scheme failed: %1").arg(QString::fromStdString(error.message())));
                 continue;
+            }
+            if (!ptyWrite.empty() && !writeToProcess(ptyWrite))
+            {
+                break;
             }
             publishSnapshot();
             continue;
@@ -974,145 +1001,6 @@ bool LocalTerminalSession::writeToProcess(const std::span<const std::byte> bytes
         return false;
     }
     return true;
-}
-
-void LocalTerminalSession::publishSnapshot()
-{
-    m_engineDirty.store(true, std::memory_order_release);
-    publishSnapshotIfDirty();
-}
-
-void LocalTerminalSession::publishSnapshotIfDirty()
-{
-    if (!m_engineDirty.load(std::memory_order_acquire))
-    {
-        return;
-    }
-    // At most one snapshot waits for delivery. Output that lands while one is
-    // pending only marks the engine dirty; deliverLatestSnapshot() asks the
-    // write worker for the next build once the pending frame has gone out.
-    {
-        std::scoped_lock snapshotLock(m_snapshotMutex);
-        if (m_pendingSnapshot)
-        {
-            m_snapshotsCoalesced.fetch_add(1, std::memory_order_relaxed);
-            return;
-        }
-    }
-    if (m_snapshotBuildActive.exchange(true, std::memory_order_acq_rel))
-    {
-        m_snapshotsCoalesced.fetch_add(1, std::memory_order_relaxed);
-        return;
-    }
-    buildSnapshot();
-    m_snapshotBuildActive.store(false, std::memory_order_release);
-}
-
-void LocalTerminalSession::buildSnapshot()
-{
-    TerminalSnapshotPtr snapshot;
-    const auto buildStarted = std::chrono::steady_clock::now();
-    {
-        std::scoped_lock engineLock(m_engineMutex);
-        // Clear under the engine lock: a feed that lands afterwards re-marks
-        // the engine dirty and is picked up by the next delivery round.
-        m_engineDirty.store(false, std::memory_order_release);
-        auto snapshotResult = m_engine->snapshot();
-        if (!snapshotResult)
-        {
-            postStatus(
-                tr("Terminal snapshot failed: %1").arg(QString::fromStdString(snapshotResult.error().message())));
-            return;
-        }
-        snapshot = std::make_shared<const TerminalSnapshot>(std::move(*snapshotResult));
-    }
-    const auto buildNanoseconds = static_cast<std::uint64_t>(
-        std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - buildStarted).count());
-    m_snapshotBuildNanoseconds.fetch_add(buildNanoseconds, std::memory_order_relaxed);
-    std::uint64_t previousMaximum = m_maxSnapshotBuildNanoseconds.load(std::memory_order_relaxed);
-    while (previousMaximum < buildNanoseconds
-           && !m_maxSnapshotBuildNanoseconds.compare_exchange_weak(previousMaximum, buildNanoseconds,
-                                                                   std::memory_order_relaxed))
-    {
-    }
-    m_snapshotsProduced.fetch_add(1, std::memory_order_relaxed);
-    switch (snapshot->damage)
-    {
-        case TerminalDamageKind::none:
-            m_cleanSnapshots.fetch_add(1, std::memory_order_relaxed);
-            break;
-        case TerminalDamageKind::partial:
-            m_partialDamageSnapshots.fetch_add(1, std::memory_order_relaxed);
-            break;
-        case TerminalDamageKind::full:
-            m_fullDamageSnapshots.fetch_add(1, std::memory_order_relaxed);
-            break;
-    }
-    {
-        std::scoped_lock snapshotLock(m_snapshotMutex);
-        m_pendingSnapshot = std::move(snapshot);
-    }
-
-    if (!m_snapshotDeliveryScheduled.exchange(true))
-    {
-        (void)QMetaObject::invokeMethod(this, "scheduleLatestSnapshotDelivery", Qt::QueuedConnection);
-    }
-}
-
-void LocalTerminalSession::scheduleLatestSnapshotDelivery()
-{
-    if (!m_running.load())
-    {
-        m_snapshotDeliveryScheduled.store(false);
-        return;
-    }
-    if (!m_snapshotDeliveryTimer.isActive())
-    {
-        m_snapshotDeliveryTimer.start();
-    }
-}
-
-void LocalTerminalSession::deliverLatestSnapshot()
-{
-    if (!m_running.load())
-    {
-        std::scoped_lock lock(m_snapshotMutex);
-        m_pendingSnapshot.reset();
-        m_snapshotDeliveryScheduled.store(false);
-        return;
-    }
-    TerminalSnapshotPtr snapshot;
-    {
-        std::scoped_lock lock(m_snapshotMutex);
-        snapshot = std::move(m_pendingSnapshot);
-    }
-    m_snapshotDeliveryScheduled.store(false);
-    if (snapshot)
-    {
-        m_snapshotsDelivered.fetch_add(1, std::memory_order_relaxed);
-        emit snapshotReady(std::move(snapshot));
-    }
-
-    {
-        std::scoped_lock lock(m_snapshotMutex);
-        if (m_pendingSnapshot)
-        {
-            if (!m_snapshotDeliveryScheduled.exchange(true))
-            {
-                scheduleLatestSnapshotDelivery();
-            }
-            return;
-        }
-    }
-    if (m_engineDirty.load(std::memory_order_acquire) && m_running.load())
-    {
-        std::scoped_lock lock(m_commandMutex);
-        if (m_commands.empty() || !std::holds_alternative<SnapshotRequestCommand>(m_commands.back()))
-        {
-            m_commands.emplace_back(SnapshotRequestCommand{});
-            m_commandAvailable.notify_one();
-        }
-    }
 }
 
 void LocalTerminalSession::postStatus(const QString &status)

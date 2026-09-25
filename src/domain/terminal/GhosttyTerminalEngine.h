@@ -16,6 +16,8 @@ public:
     ~GhosttyTerminalEngine() override;
 
     [[nodiscard]] std::error_code feed(std::span<const std::byte> bytes) override;
+    [[nodiscard]] bool synchronizedOutput() const noexcept;
+    void cancelSynchronizedOutput() noexcept;
     [[nodiscard]] std::error_code resize(TerminalGeometry geometry) override;
     [[nodiscard]] std::error_code setColorScheme(const TerminalColorScheme &scheme) override;
     [[nodiscard]] std::expected<TerminalSnapshot, std::error_code> snapshot() override;

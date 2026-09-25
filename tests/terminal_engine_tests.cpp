@@ -18,10 +18,12 @@ class TerminalEngineTests final : public QObject
 
 private slots:
     void rejectsInvalidGeometry();
+    void tracksSynchronizedOutputMode();
     void parsesSplitVtSequences();
     void preservesContentAcrossResize();
     void exposesImmutableStyledCells();
     void appliesColorSchemeToDefaultsAndPalette();
+    void updatesPaletteUnderlineColorAfterThemeAndOscChange();
     void exposesWideCellAndCursorWidth();
     void preservesPrimaryScreenAcrossAlternateScreen();
     void normalizesWideCellSelection();
@@ -45,9 +47,34 @@ private slots:
     void detectsAutomaticHttpLinksWithoutOverridingOsc8();
     void drainsBoundedOsc52ClipboardWrites();
     void returnsTerminalQueryResponses();
+    void reportsCurrentLightOrDarkColorScheme();
+    void reportsConfiguredBackgroundColorToShell();
+    void notifiesSubscribedShellWhenColorSchemeChanges();
+    void reportsCurrentTerminalDimensions();
     void pagesThroughScrollback();
     void quotesDroppedPathsForShellDialects();
 };
+
+void TerminalEngineTests::tracksSynchronizedOutputMode()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 80, .rows = 24});
+    QVERIFY(result);
+    auto &engine = **result;
+    QVERIFY(!engine.synchronizedOutput());
+    constexpr std::string_view begin = "\x1b[?2026hworking";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(begin))));
+    QVERIFY(engine.synchronizedOutput());
+    QVERIFY(engine.snapshot());
+    QVERIFY(engine.synchronizedOutput());
+    constexpr std::string_view query = "\x1b[2;4H\x1b[6n";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(query))));
+    const auto response = engine.takePtyWrite();
+    QCOMPARE(std::string(reinterpret_cast<const char *>(response.data()), response.size()), std::string("\x1b[2;4R"));
+    QVERIFY(engine.synchronizedOutput());
+    constexpr std::string_view end = "done\x1b[?2026l";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(end))));
+    QVERIFY(!engine.synchronizedOutput());
+}
 
 void TerminalEngineTests::doesNotScrollWhenNushellClearsToViewportBottom()
 {
@@ -112,6 +139,93 @@ void TerminalEngineTests::returnsTerminalQueryResponses()
     const auto response = engine.takePtyWrite();
     QCOMPARE(std::string(reinterpret_cast<const char *>(response.data()), response.size()), std::string("\x1b[2;4R"));
     QVERIFY(engine.takePtyWrite().empty());
+}
+
+void TerminalEngineTests::reportsCurrentLightOrDarkColorScheme()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 20, .rows = 3});
+    QVERIFY(result.has_value());
+    auto &engine = **result;
+    constexpr std::string_view query = "\x1b[?996n";
+    const auto response = [&engine] {
+        return engine.takePtyWrite();
+    };
+
+    QVERIFY(!engine.feed(std::as_bytes(std::span(query))));
+    const auto darkReply = response();
+    QCOMPARE(std::string(reinterpret_cast<const char *>(darkReply.data()), darkReply.size()),
+             std::string("\x1b[?997;1n"));
+
+    ztermy::terminal::TerminalColorScheme light;
+    light.background = {.red = 255, .green = 255, .blue = 255};
+    QVERIFY(!engine.setColorScheme(light));
+    QVERIFY(!engine.feed(std::as_bytes(std::span(query))));
+    const auto lightReply = response();
+    QCOMPARE(std::string(reinterpret_cast<const char *>(lightReply.data()), lightReply.size()),
+             std::string("\x1b[?997;2n"));
+}
+
+void TerminalEngineTests::reportsConfiguredBackgroundColorToShell()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 20, .rows = 3});
+    QVERIFY(result.has_value());
+    auto &engine = **result;
+    ztermy::terminal::TerminalColorScheme light;
+    light.background = {.red = 255, .green = 255, .blue = 255};
+    QVERIFY(!engine.setColorScheme(light));
+
+    constexpr std::string_view query = "\x1b]11;?\x07";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(query))));
+    const auto response = engine.takePtyWrite();
+    QCOMPARE(std::string(reinterpret_cast<const char *>(response.data()), response.size()),
+             std::string("\x1b]11;rgb:ffff/ffff/ffff\x07"));
+}
+
+void TerminalEngineTests::notifiesSubscribedShellWhenColorSchemeChanges()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 20, .rows = 3});
+    QVERIFY(result.has_value());
+    auto &engine = **result;
+    constexpr std::string_view subscribe = "\x1b[?2031h";
+    constexpr std::string_view unsubscribe = "\x1b[?2031l";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(subscribe))));
+    static_cast<void>(engine.takePtyWrite());
+
+    ztermy::terminal::TerminalColorScheme light;
+    light.background = {.red = 255, .green = 255, .blue = 255};
+    QVERIFY(!engine.setColorScheme(light));
+    auto reply = engine.takePtyWrite();
+    QCOMPARE(std::string(reinterpret_cast<const char *>(reply.data()), reply.size()), std::string("\x1b[?997;2n"));
+
+    light.foreground = {.red = 25, .green = 25, .blue = 25};
+    QVERIFY(!engine.setColorScheme(light));
+    QVERIFY(engine.takePtyWrite().empty());
+
+    QVERIFY(!engine.feed(std::as_bytes(std::span(unsubscribe))));
+    ztermy::terminal::TerminalColorScheme dark;
+    dark.background = {.red = 0, .green = 0, .blue = 0};
+    QVERIFY(!engine.setColorScheme(dark));
+    QVERIFY(engine.takePtyWrite().empty());
+}
+
+void TerminalEngineTests::reportsCurrentTerminalDimensions()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create(
+        {.columns = 80, .rows = 24, .cellWidthPixels = 9, .cellHeightPixels = 18});
+    QVERIFY(result.has_value());
+    auto &engine = **result;
+    const auto query = [&engine](const std::string_view request) {
+        if (engine.feed(std::as_bytes(std::span(request))))
+            return std::string{};
+        const auto response = engine.takePtyWrite();
+        return std::string(reinterpret_cast<const char *>(response.data()), response.size());
+    };
+
+    QCOMPARE(query("\x1b[14t"), std::string("\x1b[4;432;720t"));
+    QCOMPARE(query("\x1b[16t"), std::string("\x1b[6;18;9t"));
+    QCOMPARE(query("\x1b[18t"), std::string("\x1b[8;24;80t"));
+    QVERIFY(!engine.resize({.columns = 100, .rows = 30, .cellWidthPixels = 10, .cellHeightPixels = 20}));
+    QCOMPARE(query("\x1b[18t"), std::string("\x1b[8;30;100t"));
 }
 
 void TerminalEngineTests::exposesExplicitOsc8Hyperlinks()
@@ -240,7 +354,8 @@ void TerminalEngineTests::exposesImmutableStyledCells()
     }
     auto &engine = **result;
 
-    constexpr std::string_view content = "\x1b[38;2;12;34;56mA\x1b[48;2;7;8;9mB\x1b[0m";
+    constexpr std::string_view content = "\x1b[38;2;12;34;56mA\x1b[48;2;7;8;9mB\x1b[49;2mC\x1b[22mD"
+                                         "\x1b[4:3m\x1b[58;2;220;30;50mE\x1b[4:2mF\x1b[0m";
     QVERIFY(!engine.feed(std::as_bytes(std::span(content))));
 
     const auto snapshot = engine.snapshot();
@@ -257,10 +372,16 @@ void TerminalEngineTests::exposesImmutableStyledCells()
     QVERIFY(!snapshot->cell(0, 0).explicitBackground);
     QCOMPARE(snapshot->cell(1, 0).background, (ztermy::terminal::TerminalColor{7, 8, 9}));
     QVERIFY(snapshot->cell(1, 0).explicitBackground);
+    QVERIFY(snapshot->cell(2, 0).faint);
+    QVERIFY(!snapshot->cell(3, 0).faint);
+    QCOMPARE(snapshot->cell(4, 0).underlineStyle, ztermy::terminal::TerminalUnderlineStyle::curly);
+    QVERIFY(snapshot->cell(4, 0).underlineColor.has_value());
+    QCOMPARE(*snapshot->cell(4, 0).underlineColor, (ztermy::terminal::TerminalColor{220, 30, 50}));
+    QCOMPARE(snapshot->cell(5, 0).underlineStyle, ztermy::terminal::TerminalUnderlineStyle::doubleLine);
     QVERIFY(!snapshot->cell(2, 0).explicitBackground);
     QVERIFY(!snapshot->cell(11, 1).explicitBackground);
     QVERIFY(snapshot->cursor.visible);
-    QCOMPARE(snapshot->cursor.column, 2);
+    QCOMPARE(snapshot->cursor.column, 6);
     QCOMPARE(snapshot->cursor.row, 0);
 }
 
@@ -288,6 +409,30 @@ void TerminalEngineTests::appliesColorSchemeToDefaultsAndPalette()
     QCOMPARE(snapshot->cell(0, 0).foreground, scheme.ansi[1]);
     QCOMPARE(snapshot->cell(1, 0).foreground, scheme.foreground);
     QCOMPARE(snapshot->cell(1, 0).background, scheme.background);
+}
+
+void TerminalEngineTests::updatesPaletteUnderlineColorAfterThemeAndOscChange()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 12, .rows = 2});
+    QVERIFY(result.has_value());
+    auto &engine = **result;
+    constexpr std::string_view underlined = "\x1b[4:3;58;5;1mX";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(underlined))));
+
+    ztermy::terminal::TerminalColorScheme scheme;
+    scheme.ansi[1] = {.red = 210, .green = 20, .blue = 30};
+    QVERIFY(!engine.setColorScheme(scheme));
+    const auto themed = engine.snapshot();
+    QVERIFY(themed.has_value());
+    QVERIFY(themed->cell(0, 0).underlineColor.has_value());
+    QCOMPARE(*themed->cell(0, 0).underlineColor, scheme.ansi[1]);
+
+    constexpr std::string_view paletteOverride = "\x1b]4;1;rgb:00/cc/00\x07";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(paletteOverride))));
+    const auto overridden = engine.snapshot();
+    QVERIFY(overridden.has_value());
+    QVERIFY(overridden->cell(0, 0).underlineColor.has_value());
+    QCOMPARE(*overridden->cell(0, 0).underlineColor, (ztermy::terminal::TerminalColor{0, 204, 0}));
 }
 
 void TerminalEngineTests::exposesWideCellAndCursorWidth()

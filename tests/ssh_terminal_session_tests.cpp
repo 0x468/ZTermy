@@ -7,12 +7,14 @@
 #include <Windows.h>
 
 #include "application/ssh/SshTerminalSession.h"
+#include "domain/terminal/GhosttyTerminalEngine.h"
 
 #include <QCoreApplication>
 #include <QFileInfo>
 #include <QGlobalStatic>
 #include <QHostAddress>
 #include <QMutex>
+#include <QProcess>
 #include <QSet>
 #include <QSignalSpy>
 #include <QStringList>
@@ -33,6 +35,28 @@
 #include <utility>
 
 using namespace std::chrono_literals;
+
+namespace ztermy::ssh
+{
+class SshTerminalSessionTestPeer
+{
+public:
+    static bool finishWithPendingOutput(SshTerminalSession &session)
+    {
+        auto engine = terminal::GhosttyTerminalEngine::create({.columns = 80, .rows = 24});
+        if (!engine)
+            return false;
+        session.m_engine = std::move(*engine);
+        session.m_running.store(true);
+        constexpr std::string_view output = "\x1b[?2026hLAST FRAME";
+        if (session.m_engine->feed(std::as_bytes(std::span(output))))
+            return false;
+        session.m_engineDirty.store(true);
+        session.finishWorker(QStringLiteral("closed"), SshConnectionPhase::Disconnected);
+        return true;
+    }
+};
+} // namespace ztermy::ssh
 
 namespace
 {
@@ -218,6 +242,8 @@ class SshTerminalSessionTests final : public QObject
     Q_OBJECT
 
 private slots:
+    void synchronizesOutputOverLoopbackSsh();
+    void deliversFinalSynchronizedFrameBeforeDisconnect();
     void rejectsInvalidStartupConfiguration();
     void presentsDistinctFailureStatuses();
     void reportsConnectionRefusalFromLiveSocket();
@@ -237,6 +263,100 @@ private slots:
     void measuresInteractiveInputQueueLatency();
     void survivesRepeatedConnectDisconnectCycles();
 };
+
+void SshTerminalSessionTests::synchronizesOutputOverLoopbackSsh()
+{
+    const QString python = qEnvironmentVariable("ZTERMY_TEST_SSH_FIXTURE_PYTHON");
+    if (python.isEmpty())
+        QSKIP("Set ZTERMY_TEST_SSH_FIXTURE_PYTHON to a Python environment with Paramiko");
+    QProcess server;
+    server.start(python, {QFINDTESTDATA("fixtures/synchronized_ssh_server.py")});
+    QVERIFY(server.waitForStarted(5000));
+    QByteArray serverEvents;
+    connect(&server, &QProcess::readyReadStandardOutput, this, [&] {
+        serverEvents += server.readAllStandardOutput();
+    });
+    QTRY_VERIFY_WITH_TIMEOUT(serverEvents.contains('\n'), 10000);
+    bool portValid = false;
+    const auto port = serverEvents.split('\n').first().toUShort(&portValid);
+    QVERIFY(portValid && port != 0);
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ztermy::ssh::SshTerminalSession session;
+    connect(&session, &ztermy::ssh::SshTerminalSession::hostKeyConfirmationRequired, &session, [&] {
+        session.confirmHostKey(false);
+    });
+    ztermy::ssh::SshConnectionRequest request{
+        .host = QStringLiteral("127.0.0.1"),
+        .port = port,
+        .username = QStringLiteral("fixture"),
+        .authentication = ztermy::ssh::SshAuthenticationMethod::Password,
+        .secret = ztermy::security::SensitiveByteArray(QByteArrayLiteral("fixture-only")),
+        .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json")),
+    };
+    std::u32string latest;
+    quint16 columns = 0;
+    bool partialWasVisible = false;
+    bool stopped = false;
+    connect(&session, &ztermy::ssh::SshTerminalSession::snapshotReady, this,
+            [&](const ztermy::terminal::TerminalSnapshotPtr &snapshot) {
+                latest.clear();
+                for (const auto &cell : snapshot->cells)
+                    latest.append(cell.grapheme);
+                columns = snapshot->columns;
+                partialWasVisible |=
+                    latest.find(U"PARTIAL") != std::u32string::npos && latest.find(U"FINAL") == std::u32string::npos;
+            });
+    connect(&session, &ztermy::ssh::SshTerminalSession::runningChanged, this, [&](bool running) {
+        stopped |= !running;
+    });
+    QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
+    QTRY_VERIFY_WITH_TIMEOUT(latest.find(U"BASE") != std::u32string::npos, 10000);
+    server.write(QByteArrayLiteral("begin\n"));
+    QTRY_VERIFY_WITH_TIMEOUT(serverEvents.contains("CPR"), 5000);
+    QTest::qWait(100);
+    QVERIFY(!partialWasVisible);
+    server.write(QByteArrayLiteral("end\n"));
+    QTRY_VERIFY_WITH_TIMEOUT(latest.find(U"PARTIALFINAL") != std::u32string::npos, 5000);
+    QVERIFY(!partialWasVisible);
+    server.write(QByteArrayLiteral("orphan\n"));
+    QTRY_VERIFY_WITH_TIMEOUT(serverEvents.contains("ORPHAN"), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(latest.find(U"ORPHAN") != std::u32string::npos, 1500);
+    server.write(QByteArrayLiteral("next\n"));
+    QTRY_VERIFY_WITH_TIMEOUT(serverEvents.contains("NEXT"), 5000);
+    QTest::qWait(100);
+    QVERIFY(latest.find(U"NEXT") == std::u32string::npos);
+    session.requestResize(90, 25, 8, 16);
+    QTRY_VERIFY_WITH_TIMEOUT(serverEvents.contains("RESIZE"), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(columns == 90 && latest.find(U"NEXT") != std::u32string::npos, 300);
+    server.write(QByteArrayLiteral("exit\n"));
+    QTRY_VERIFY_WITH_TIMEOUT(stopped, 5000);
+    QVERIFY(latest.find(U"BYE") != std::u32string::npos);
+    session.stop();
+    QVERIFY(server.waitForFinished(5000) || server.state() == QProcess::NotRunning);
+    QCOMPARE(server.exitCode(), 0);
+}
+
+void SshTerminalSessionTests::deliversFinalSynchronizedFrameBeforeDisconnect()
+{
+    ztermy::ssh::SshTerminalSession session;
+    QStringList events;
+    std::u32string finalText;
+    connect(&session, &ztermy::ssh::SshTerminalSession::snapshotReady, this,
+            [&events, &finalText](const ztermy::terminal::TerminalSnapshotPtr &snapshot) {
+                events.append(QStringLiteral("frame"));
+                for (const auto &cell : snapshot->cells)
+                    finalText.append(cell.grapheme);
+            });
+    connect(&session, &ztermy::ssh::SshTerminalSession::runningChanged, this, [&events](bool running) {
+        if (!running)
+            events.append(QStringLiteral("stopped"));
+    });
+    QVERIFY(ztermy::ssh::SshTerminalSessionTestPeer::finishWithPendingOutput(session));
+    QTRY_VERIFY(events.contains(QStringLiteral("stopped")));
+    QCOMPARE(events, QStringList({QStringLiteral("frame"), QStringLiteral("stopped")}));
+    QVERIFY(finalText.find(U"LAST FRAME") != std::u32string::npos);
+}
 
 void SshTerminalSessionTests::rejectsInvalidStartupConfiguration()
 {

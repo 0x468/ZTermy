@@ -111,6 +111,7 @@ private slots:
     void deliverRemoteTelemetryState(const QString &state);
 
 private:
+    friend class SshTerminalSessionTestPeer;
     struct InputCommand final
     {
         QByteArray bytes;
@@ -198,9 +199,10 @@ private:
     void queueByteCommand(Command command, std::size_t byteCount);
     void queueCommand(Command command);
     void run(SshConnectionRequest &request, terminal::TerminalGeometry geometry, const std::stop_token &stopToken);
-    void publishSnapshot();
+    void publishSnapshot(bool hostInteraction = true);
     void publishSnapshotIfDirty();
-    void buildSnapshot();
+    void buildSnapshot(bool force = false);
+    void scheduleSynchronizedOutputFallback(std::int64_t startedNanoseconds);
     void postStatus(const QString &status);
     void postPhase(SshConnectionPhase phase);
     void postFailure(SshFailureKind failure);
@@ -242,6 +244,7 @@ private:
     QTimer m_snapshotDeliveryTimer;
     std::atomic_bool m_snapshotDeliveryScheduled = false;
     std::atomic_bool m_engineDirty = false;
+    std::atomic<std::int64_t> m_synchronizedOutputStartedNanoseconds = 0;
     std::atomic_bool m_running = false;
     std::atomic_bool m_telemetryRequestedVisible = false;
     diagnostics::LatencyHistogram m_inputQueueLatency;

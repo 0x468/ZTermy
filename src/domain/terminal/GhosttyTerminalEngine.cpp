@@ -1,4 +1,5 @@
 #include "domain/terminal/GhosttyTerminalEngine.h"
+#include "domain/terminal/GhosttyInputMapping.h"
 #include "domain/terminal/TerminalLinkDetector.h"
 
 #include <ghostty/vt.h>
@@ -125,214 +126,10 @@ template <typename Encoder>
     return dynamic;
 }
 
-[[nodiscard]] GhosttyKey ghosttyKey(const ztermy::terminal::TerminalKey key) noexcept
-{
-    using ztermy::terminal::TerminalKey;
-    if (key >= TerminalKey::digit0 && key <= TerminalKey::digit9)
-    {
-        return static_cast<GhosttyKey>(static_cast<int>(GHOSTTY_KEY_DIGIT_0)
-                                       + (static_cast<int>(key) - static_cast<int>(TerminalKey::digit0)));
-    }
-    if (key >= TerminalKey::keyA && key <= TerminalKey::keyZ)
-    {
-        return static_cast<GhosttyKey>(static_cast<int>(GHOSTTY_KEY_A)
-                                       + (static_cast<int>(key) - static_cast<int>(TerminalKey::keyA)));
-    }
-    if (key >= TerminalKey::numpad0 && key <= TerminalKey::numpad9)
-    {
-        return static_cast<GhosttyKey>(static_cast<int>(GHOSTTY_KEY_NUMPAD_0)
-                                       + (static_cast<int>(key) - static_cast<int>(TerminalKey::numpad0)));
-    }
-    if (key >= TerminalKey::f1 && key <= TerminalKey::f24)
-    {
-        return static_cast<GhosttyKey>(static_cast<int>(GHOSTTY_KEY_F1)
-                                       + (static_cast<int>(key) - static_cast<int>(TerminalKey::f1)));
-    }
-
-    switch (key)
-    {
-        case TerminalKey::backquote:
-            return GHOSTTY_KEY_BACKQUOTE;
-        case TerminalKey::backslash:
-            return GHOSTTY_KEY_BACKSLASH;
-        case TerminalKey::bracketLeft:
-            return GHOSTTY_KEY_BRACKET_LEFT;
-        case TerminalKey::bracketRight:
-            return GHOSTTY_KEY_BRACKET_RIGHT;
-        case TerminalKey::comma:
-            return GHOSTTY_KEY_COMMA;
-        case TerminalKey::equal:
-            return GHOSTTY_KEY_EQUAL;
-        case TerminalKey::intlBackslash:
-            return GHOSTTY_KEY_INTL_BACKSLASH;
-        case TerminalKey::intlRo:
-            return GHOSTTY_KEY_INTL_RO;
-        case TerminalKey::intlYen:
-            return GHOSTTY_KEY_INTL_YEN;
-        case TerminalKey::minus:
-            return GHOSTTY_KEY_MINUS;
-        case TerminalKey::period:
-            return GHOSTTY_KEY_PERIOD;
-        case TerminalKey::quote:
-            return GHOSTTY_KEY_QUOTE;
-        case TerminalKey::semicolon:
-            return GHOSTTY_KEY_SEMICOLON;
-        case TerminalKey::slash:
-            return GHOSTTY_KEY_SLASH;
-        case TerminalKey::altLeft:
-            return GHOSTTY_KEY_ALT_LEFT;
-        case TerminalKey::altRight:
-            return GHOSTTY_KEY_ALT_RIGHT;
-        case TerminalKey::backspace:
-            return GHOSTTY_KEY_BACKSPACE;
-        case TerminalKey::capsLock:
-            return GHOSTTY_KEY_CAPS_LOCK;
-        case TerminalKey::contextMenu:
-            return GHOSTTY_KEY_CONTEXT_MENU;
-        case TerminalKey::controlLeft:
-            return GHOSTTY_KEY_CONTROL_LEFT;
-        case TerminalKey::controlRight:
-            return GHOSTTY_KEY_CONTROL_RIGHT;
-        case TerminalKey::enter:
-            return GHOSTTY_KEY_ENTER;
-        case TerminalKey::metaLeft:
-            return GHOSTTY_KEY_META_LEFT;
-        case TerminalKey::metaRight:
-            return GHOSTTY_KEY_META_RIGHT;
-        case TerminalKey::shiftLeft:
-            return GHOSTTY_KEY_SHIFT_LEFT;
-        case TerminalKey::shiftRight:
-            return GHOSTTY_KEY_SHIFT_RIGHT;
-        case TerminalKey::space:
-            return GHOSTTY_KEY_SPACE;
-        case TerminalKey::tab:
-            return GHOSTTY_KEY_TAB;
-        case TerminalKey::convert:
-            return GHOSTTY_KEY_CONVERT;
-        case TerminalKey::kanaMode:
-            return GHOSTTY_KEY_KANA_MODE;
-        case TerminalKey::nonConvert:
-            return GHOSTTY_KEY_NON_CONVERT;
-        case TerminalKey::deleteKey:
-            return GHOSTTY_KEY_DELETE;
-        case TerminalKey::end:
-            return GHOSTTY_KEY_END;
-        case TerminalKey::help:
-            return GHOSTTY_KEY_HELP;
-        case TerminalKey::home:
-            return GHOSTTY_KEY_HOME;
-        case TerminalKey::insert:
-            return GHOSTTY_KEY_INSERT;
-        case TerminalKey::pageDown:
-            return GHOSTTY_KEY_PAGE_DOWN;
-        case TerminalKey::pageUp:
-            return GHOSTTY_KEY_PAGE_UP;
-        case TerminalKey::arrowDown:
-            return GHOSTTY_KEY_ARROW_DOWN;
-        case TerminalKey::arrowLeft:
-            return GHOSTTY_KEY_ARROW_LEFT;
-        case TerminalKey::arrowRight:
-            return GHOSTTY_KEY_ARROW_RIGHT;
-        case TerminalKey::arrowUp:
-            return GHOSTTY_KEY_ARROW_UP;
-        case TerminalKey::numLock:
-            return GHOSTTY_KEY_NUM_LOCK;
-        case TerminalKey::numpadAdd:
-            return GHOSTTY_KEY_NUMPAD_ADD;
-        case TerminalKey::numpadBackspace:
-            return GHOSTTY_KEY_NUMPAD_BACKSPACE;
-        case TerminalKey::numpadClear:
-            return GHOSTTY_KEY_NUMPAD_CLEAR;
-        case TerminalKey::numpadDecimal:
-            return GHOSTTY_KEY_NUMPAD_DECIMAL;
-        case TerminalKey::numpadDivide:
-            return GHOSTTY_KEY_NUMPAD_DIVIDE;
-        case TerminalKey::numpadEnter:
-            return GHOSTTY_KEY_NUMPAD_ENTER;
-        case TerminalKey::numpadEqual:
-            return GHOSTTY_KEY_NUMPAD_EQUAL;
-        case TerminalKey::numpadMultiply:
-            return GHOSTTY_KEY_NUMPAD_MULTIPLY;
-        case TerminalKey::numpadSubtract:
-            return GHOSTTY_KEY_NUMPAD_SUBTRACT;
-        case TerminalKey::numpadSeparator:
-            return GHOSTTY_KEY_NUMPAD_SEPARATOR;
-        case TerminalKey::numpadUp:
-            return GHOSTTY_KEY_NUMPAD_UP;
-        case TerminalKey::numpadDown:
-            return GHOSTTY_KEY_NUMPAD_DOWN;
-        case TerminalKey::numpadRight:
-            return GHOSTTY_KEY_NUMPAD_RIGHT;
-        case TerminalKey::numpadLeft:
-            return GHOSTTY_KEY_NUMPAD_LEFT;
-        case TerminalKey::numpadBegin:
-            return GHOSTTY_KEY_NUMPAD_BEGIN;
-        case TerminalKey::numpadHome:
-            return GHOSTTY_KEY_NUMPAD_HOME;
-        case TerminalKey::numpadEnd:
-            return GHOSTTY_KEY_NUMPAD_END;
-        case TerminalKey::numpadInsert:
-            return GHOSTTY_KEY_NUMPAD_INSERT;
-        case TerminalKey::numpadDelete:
-            return GHOSTTY_KEY_NUMPAD_DELETE;
-        case TerminalKey::numpadPageUp:
-            return GHOSTTY_KEY_NUMPAD_PAGE_UP;
-        case TerminalKey::numpadPageDown:
-            return GHOSTTY_KEY_NUMPAD_PAGE_DOWN;
-        case TerminalKey::escape:
-            return GHOSTTY_KEY_ESCAPE;
-        case TerminalKey::printScreen:
-            return GHOSTTY_KEY_PRINT_SCREEN;
-        case TerminalKey::scrollLock:
-            return GHOSTTY_KEY_SCROLL_LOCK;
-        case TerminalKey::pause:
-            return GHOSTTY_KEY_PAUSE;
-        case TerminalKey::unidentified:
-        default:
-            return GHOSTTY_KEY_UNIDENTIFIED;
-    }
-}
-
-[[nodiscard]] GhosttyKeyAction ghosttyKeyAction(const ztermy::terminal::TerminalKeyAction action) noexcept
-{
-    using ztermy::terminal::TerminalKeyAction;
-    switch (action)
-    {
-        case TerminalKeyAction::release:
-            return GHOSTTY_KEY_ACTION_RELEASE;
-        case TerminalKeyAction::repeat:
-            return GHOSTTY_KEY_ACTION_REPEAT;
-        case TerminalKeyAction::press:
-        default:
-            return GHOSTTY_KEY_ACTION_PRESS;
-    }
-}
-
-[[nodiscard]] GhosttyMouseAction ghosttyMouseAction(const ztermy::terminal::TerminalMouseAction action) noexcept
-{
-    using ztermy::terminal::TerminalMouseAction;
-    switch (action)
-    {
-        case TerminalMouseAction::press:
-            return GHOSTTY_MOUSE_ACTION_PRESS;
-        case TerminalMouseAction::release:
-            return GHOSTTY_MOUSE_ACTION_RELEASE;
-        case TerminalMouseAction::motion:
-        default:
-            return GHOSTTY_MOUSE_ACTION_MOTION;
-    }
-}
-
-[[nodiscard]] GhosttyMouseButton ghosttyMouseButton(const ztermy::terminal::TerminalMouseButton button) noexcept
-{
-    using ztermy::terminal::TerminalMouseButton;
-    if (button == TerminalMouseButton::none)
-    {
-        return GHOSTTY_MOUSE_BUTTON_UNKNOWN;
-    }
-    return static_cast<GhosttyMouseButton>(static_cast<int>(GHOSTTY_MOUSE_BUTTON_LEFT)
-                                           + (static_cast<int>(button) - static_cast<int>(TerminalMouseButton::left)));
-}
+using ztermy::terminal::detail::ghosttyKey;
+using ztermy::terminal::detail::ghosttyKeyAction;
+using ztermy::terminal::detail::ghosttyMouseAction;
+using ztermy::terminal::detail::ghosttyMouseButton;
 
 // Owns a ghostty handle until the engine Impl takes it over.
 template <typename Handle, void (*Free)(Handle)>
@@ -622,6 +419,27 @@ struct GhosttyTerminalEngine::Impl
         }
     }
 
+    static bool colorSchemeReport(GhosttyTerminal, void *userdata, GhosttyColorScheme *outScheme) noexcept
+    {
+        auto *self = static_cast<Impl *>(userdata);
+        if (self == nullptr || outScheme == nullptr)
+            return false;
+        *outScheme = self->reportedScheme;
+        return true;
+    }
+
+    static bool sizeReport(GhosttyTerminal, void *userdata, GhosttySizeReportSize *outSize) noexcept
+    {
+        auto *self = static_cast<Impl *>(userdata);
+        if (self == nullptr || outSize == nullptr)
+            return false;
+        *outSize = {.rows = self->geometry.rows,
+                    .columns = self->geometry.columns,
+                    .cell_width = self->geometry.cellWidthPixels,
+                    .cell_height = self->geometry.cellHeightPixels};
+        return true;
+    }
+
     GhosttyTerminal terminal = nullptr;
     GhosttyRenderState renderState = nullptr;
     GhosttyRenderStateRowIterator rowIterator = nullptr;
@@ -638,6 +456,8 @@ struct GhosttyTerminalEngine::Impl
     std::string lastSearchQuery;
     std::vector<std::byte> pendingPtyWrite;
     std::optional<std::string> pendingClipboardWrite;
+    GhosttyColorScheme reportedScheme = GHOSTTY_COLOR_SCHEME_DARK;
+    TerminalGeometry geometry;
     std::string pendingSemanticPromptPrefix;
     CopyModeGranularity copyModeGranularity = CopyModeGranularity::character;
     bool copyModeActive = false;
@@ -705,6 +525,20 @@ GhosttyTerminalEngine::create(const TerminalGeometry geometry)
         writeResult != GHOSTTY_SUCCESS)
     {
         return std::unexpected(ghosttyError(writeResult));
+    }
+    if (const GhosttyResult schemeResult =
+            ghostty_terminal_set(engine->m_impl->terminal, GHOSTTY_TERMINAL_OPT_COLOR_SCHEME,
+                                 reinterpret_cast<const void *>(&GhosttyTerminalEngine::Impl::colorSchemeReport));
+        schemeResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(schemeResult));
+    }
+    if (const GhosttyResult sizeResult =
+            ghostty_terminal_set(engine->m_impl->terminal, GHOSTTY_TERMINAL_OPT_SIZE,
+                                 reinterpret_cast<const void *>(&GhosttyTerminalEngine::Impl::sizeReport));
+        sizeResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(sizeResult));
     }
     if (const GhosttyResult clipboardResult =
             ghostty_terminal_set(engine->m_impl->terminal, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE,
@@ -799,6 +633,18 @@ std::error_code GhosttyTerminalEngine::feed(const std::span<const std::byte> byt
     return {};
 }
 
+bool GhosttyTerminalEngine::synchronizedOutput() const noexcept
+{
+    bool enabled = false;
+    return ghostty_terminal_mode_get(m_impl->terminal, GHOSTTY_MODE_SYNC_OUTPUT, &enabled) == GHOSTTY_SUCCESS
+           && enabled;
+}
+
+void GhosttyTerminalEngine::cancelSynchronizedOutput() noexcept
+{
+    (void)ghostty_terminal_mode_set(m_impl->terminal, GHOSTTY_MODE_SYNC_OUTPUT, false);
+}
+
 std::error_code GhosttyTerminalEngine::resize(const TerminalGeometry geometry)
 {
     if (!geometry.valid())
@@ -809,7 +655,10 @@ std::error_code GhosttyTerminalEngine::resize(const TerminalGeometry geometry)
     ghostty_selection_gesture_reset(m_impl->selectionGesture, m_impl->terminal);
     const GhosttyResult result = ghostty_terminal_resize(m_impl->terminal, geometry.columns, geometry.rows,
                                                          geometry.cellWidthPixels, geometry.cellHeightPixels);
-    return result == GHOSTTY_SUCCESS ? std::error_code{} : ghosttyError(result);
+    if (result != GHOSTTY_SUCCESS)
+        return ghosttyError(result);
+    m_impl->geometry = geometry;
+    return {};
 }
 
 std::error_code GhosttyTerminalEngine::setColorScheme(const TerminalColorScheme &scheme)
@@ -837,6 +686,34 @@ std::error_code GhosttyTerminalEngine::setColorScheme(const TerminalColorScheme 
             return ghosttyError(result);
         }
     }
+    const std::uint32_t weightedBrightness =
+        (2126U * scheme.background.red) + (7152U * scheme.background.green) + (722U * scheme.background.blue);
+    const GhosttyColorScheme currentScheme =
+        weightedBrightness >= 1280000U ? GHOSTTY_COLOR_SCHEME_LIGHT : GHOSTTY_COLOR_SCHEME_DARK;
+    if (currentScheme != m_impl->reportedScheme)
+    {
+        bool subscribed = false;
+        if (const GhosttyResult modeResult =
+                ghostty_terminal_mode_get(m_impl->terminal, GHOSTTY_MODE_COLOR_SCHEME_REPORT, &subscribed);
+            modeResult != GHOSTTY_SUCCESS)
+        {
+            return ghosttyError(modeResult);
+        }
+        if (subscribed)
+        {
+            std::array<char, 16> report{};
+            std::size_t written = 0;
+            if (const GhosttyResult encodeResult =
+                    ghostty_color_scheme_report_encode(currentScheme, report.data(), report.size(), &written);
+                encodeResult != GHOSTTY_SUCCESS)
+            {
+                return ghosttyError(encodeResult);
+            }
+            Impl::writePty(m_impl->terminal, m_impl.get(), reinterpret_cast<const std::uint8_t *>(report.data()),
+                           written);
+        }
+    }
+    m_impl->reportedScheme = currentScheme;
     return {};
 }
 
@@ -1873,6 +1750,13 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
     result.defaultForeground = terminalColor(colors.foreground);
     result.defaultBackground = terminalColor(colors.background);
     result.cursor.color = terminalColor(colors.cursor_has_value ? colors.cursor : colors.foreground);
+    std::array<GhosttyColorRgb, 256> palette{};
+    if (const GhosttyResult paletteResult =
+            ghostty_terminal_get(m_impl->terminal, GHOSTTY_TERMINAL_DATA_COLOR_PALETTE, palette.data());
+        paletteResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(paletteResult));
+    }
 
     GhosttyTerminalScrollbar scrollbar{};
     if (const GhosttyResult scrollbarResult =
@@ -2134,7 +2018,34 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
             }
             cell.bold = style.bold;
             cell.italic = style.italic;
-            cell.underline = style.underline != 0;
+            cell.faint = style.faint;
+            switch (style.underline)
+            {
+                case GHOSTTY_SGR_UNDERLINE_SINGLE:
+                    cell.underlineStyle = TerminalUnderlineStyle::single;
+                    break;
+                case GHOSTTY_SGR_UNDERLINE_DOUBLE:
+                    cell.underlineStyle = TerminalUnderlineStyle::doubleLine;
+                    break;
+                case GHOSTTY_SGR_UNDERLINE_CURLY:
+                    cell.underlineStyle = TerminalUnderlineStyle::curly;
+                    break;
+                case GHOSTTY_SGR_UNDERLINE_DOTTED:
+                    cell.underlineStyle = TerminalUnderlineStyle::dotted;
+                    break;
+                case GHOSTTY_SGR_UNDERLINE_DASHED:
+                    cell.underlineStyle = TerminalUnderlineStyle::dashed;
+                    break;
+                default:
+                    break;
+            }
+            if (cell.underlineStyle != TerminalUnderlineStyle::none)
+            {
+                if (style.underline_color.tag == GHOSTTY_STYLE_COLOR_RGB)
+                    cell.underlineColor = terminalColor(style.underline_color.value.rgb);
+                else if (style.underline_color.tag == GHOSTTY_STYLE_COLOR_PALETTE)
+                    cell.underlineColor = terminalColor(palette[style.underline_color.value.palette]);
+            }
             cell.strikethrough = style.strikethrough;
             cell.overline = style.overline;
             cell.invisible = style.invisible;

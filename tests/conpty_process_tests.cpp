@@ -10,7 +10,9 @@
 #include <array>
 #include <chrono>
 #include <future>
+#include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -26,6 +28,7 @@ class ConPtyProcessTests final : public QObject
 private slots:
     void rejectsInvalidDimensions();
     void capturesUtf8OutputFromChildProcess();
+    void newShellDoesNotInheritStaleParentPath();
     void closingParallelConsolesEndsOwnedShellProcesses();
     void wakeEventInterruptsExitWait();
 };
@@ -84,6 +87,90 @@ void ConPtyProcessTests::capturesUtf8OutputFromChildProcess()
 
     process.close();
     QVERIFY(!process.running());
+}
+
+void ConPtyProcessTests::newShellDoesNotInheritStaleParentPath()
+{
+    const auto originalValue = [](const wchar_t *name) -> std::optional<std::wstring> {
+        const DWORD length = GetEnvironmentVariableW(name, nullptr, 0);
+        if (length == 0)
+            return std::nullopt;
+        std::wstring value(length, L'\0');
+        const DWORD copied = GetEnvironmentVariableW(name, value.data(), length);
+        if (copied == 0 || copied >= length)
+            return std::nullopt;
+        value.resize(copied);
+        return value;
+    };
+    const auto previousTerm = originalValue(L"TERM");
+    const auto previousColorTerm = originalValue(L"COLORTERM");
+    const auto previousWtSession = originalValue(L"WT_SESSION");
+    const auto restoreTerminalIdentity = qScopeGuard([&] {
+        SetEnvironmentVariableW(L"TERM", previousTerm ? previousTerm->c_str() : nullptr);
+        SetEnvironmentVariableW(L"COLORTERM", previousColorTerm ? previousColorTerm->c_str() : nullptr);
+        SetEnvironmentVariableW(L"WT_SESSION", previousWtSession ? previousWtSession->c_str() : nullptr);
+    });
+    const DWORD pathLength = GetEnvironmentVariableW(L"PATH", nullptr, 0);
+    QVERIFY(pathLength > 0);
+    std::wstring originalPath(pathLength, L'\0');
+    const DWORD copied = GetEnvironmentVariableW(L"PATH", originalPath.data(), pathLength);
+    QVERIFY(copied > 0 && copied < pathLength);
+    originalPath.resize(copied);
+    const auto restorePath = qScopeGuard([&originalPath] {
+        SetEnvironmentVariableW(L"PATH", originalPath.c_str());
+    });
+    QVERIFY(SetEnvironmentVariableW(L"PATH", L"ZTERMY_STALE_PATH_SENTINEL"));
+    QVERIFY(SetEnvironmentVariableW(L"TERM", L"dumb"));
+    QVERIFY(SetEnvironmentVariableW(L"COLORTERM", L"ansi"));
+    QVERIFY(SetEnvironmentVariableW(L"WT_SESSION", L"ZTERMY_PARENT_WT_SESSION"));
+    const auto clearTransient = qScopeGuard([] {
+        SetEnvironmentVariableW(L"ZTERMY_TRANSIENT_ENV_SENTINEL", nullptr);
+    });
+    QVERIFY(SetEnvironmentVariableW(L"ZTERMY_TRANSIENT_ENV_SENTINEL", L"ZTERMY_TRANSIENT_VALUE"));
+
+    ztermy::terminal::ConPtyProcess process;
+    const std::error_code startError = process.start(
+        L"C:\\Windows\\System32\\cmd.exe",
+        L"cmd.exe /d /s /c \"echo ZTERMY_PATH=%PATH% & echo ZTERMY_TERM=%TERM% & echo ZTERMY_COLORTERM=%COLORTERM% & "
+        L"echo ZTERMY_WT_SESSION=%WT_SESSION% & echo ZTERMY_TRANSIENT=%ZTERMY_TRANSIENT_ENV_SENTINEL%\"",
+        {.columns = 80, .rows = 24});
+    QVERIFY2(!startError, startError.message().c_str());
+
+    auto outputFuture = std::async(std::launch::async, [&process] {
+        QByteArray output;
+        std::array<std::byte, 4096> buffer{};
+        for (int attempt = 0; attempt < 16; ++attempt)
+        {
+            const auto readResult = process.read(buffer);
+            if (!readResult || *readResult == 0)
+                break;
+            output.append(reinterpret_cast<const char *>(buffer.data()), static_cast<qsizetype>(*readResult));
+            const qsizetype marker = output.indexOf("ZTERMY_PATH=");
+            if (marker >= 0 && output.contains("ZTERMY_TRANSIENT=ZTERMY_TRANSIENT_VALUE"))
+                break;
+        }
+        return output;
+    });
+
+    const auto exited = process.waitForExit(5s);
+    QVERIFY(exited.has_value());
+    QVERIFY(*exited);
+    if (outputFuture.wait_for(5s) != std::future_status::ready)
+        process.close();
+    QCOMPARE(outputFuture.wait_for(0s), std::future_status::ready);
+    const QByteArray output = outputFuture.get();
+    const qsizetype pathMarker = output.lastIndexOf("ZTERMY_PATH=");
+    QVERIFY(pathMarker >= 0);
+    const qsizetype pathStart = pathMarker + QByteArrayLiteral("ZTERMY_PATH=").size();
+    const qsizetype pathEnd = output.indexOf('\n', pathStart);
+    QVERIFY(pathEnd > pathStart);
+    QVERIFY2(!output.mid(pathStart, pathEnd - pathStart).trimmed().isEmpty(),
+             "The child must receive a non-empty registry-backed PATH");
+    QVERIFY(!output.contains("ZTERMY_STALE_PATH_SENTINEL"));
+    QVERIFY(output.contains("ZTERMY_TERM=xterm-256color"));
+    QVERIFY(output.contains("ZTERMY_COLORTERM=truecolor"));
+    QVERIFY(!output.contains("ZTERMY_PARENT_WT_SESSION"));
+    QVERIFY(output.contains("ZTERMY_TRANSIENT=ZTERMY_TRANSIENT_VALUE"));
 }
 
 void ConPtyProcessTests::closingParallelConsolesEndsOwnedShellProcesses()

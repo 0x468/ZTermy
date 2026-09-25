@@ -250,6 +250,7 @@ std::error_code SshTerminalSession::start(SshConnectionRequest request, const te
     }
 
     m_engine = std::move(*engine);
+    m_synchronizedOutputStartedNanoseconds.store(0, std::memory_order_release);
     if (m_colorScheme)
     {
         if (const std::error_code error = m_engine->setColorScheme(*m_colorScheme))
@@ -325,6 +326,7 @@ void SshTerminalSession::stop() noexcept
     m_snapshotDeliveryTimer.stop();
     m_snapshotDeliveryScheduled.store(false);
     m_engineDirty.store(false);
+    m_synchronizedOutputStartedNanoseconds.store(0, std::memory_order_release);
     m_engine.reset();
 
     if (m_running.exchange(false))
@@ -1163,6 +1165,16 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                     postStatus(tr("SSH terminal color scheme failed: %1").arg(QString::fromStdString(error.message())));
                     continue;
                 }
+                const std::vector<std::byte> ptyWrite = m_engine->takePtyWrite();
+                if (!ptyWrite.empty())
+                {
+                    const auto response = std::span(reinterpret_cast<const char *>(ptyWrite.data()), ptyWrite.size());
+                    if (auto written = session->writeTerminal(*transport, response, 10s, stopToken); !written)
+                    {
+                        finishFailure(sshFailureFromTransport(written.error()));
+                        return;
+                    }
+                }
                 publishSnapshot();
                 continue;
             }
@@ -1386,7 +1398,22 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
         {
             emit clipboardTextReady(QString::fromUtf8(*clipboardWrite));
         }
-        publishSnapshot();
+        if (m_engine->synchronizedOutput())
+        {
+            if (m_synchronizedOutputStartedNanoseconds.load(std::memory_order_relaxed) == 0)
+            {
+                const auto started = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                         std::chrono::steady_clock::now().time_since_epoch())
+                                         .count();
+                m_synchronizedOutputStartedNanoseconds.store(started, std::memory_order_release);
+                scheduleSynchronizedOutputFallback(started);
+            }
+        }
+        else
+        {
+            m_synchronizedOutputStartedNanoseconds.store(0, std::memory_order_release);
+        }
+        publishSnapshot(false);
     }
 
     requestClose(state);
@@ -1401,106 +1428,6 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     }
     completeClose(state);
     finishWorker(tr("SSH terminal disconnected"), state.phase());
-}
-
-void SshTerminalSession::publishSnapshot()
-{
-    m_engineDirty.store(true, std::memory_order_release);
-    publishSnapshotIfDirty();
-}
-
-void SshTerminalSession::publishSnapshotIfDirty()
-{
-    if (!m_engineDirty.load(std::memory_order_acquire))
-    {
-        return;
-    }
-    // At most one snapshot waits for delivery; output that lands meanwhile
-    // only marks the engine dirty and deliverLatestSnapshot() asks the worker
-    // for the next build once the pending frame has gone out.
-    {
-        std::scoped_lock lock(m_snapshotMutex);
-        if (m_pendingSnapshot)
-        {
-            return;
-        }
-    }
-    buildSnapshot();
-}
-
-void SshTerminalSession::buildSnapshot()
-{
-    m_engineDirty.store(false, std::memory_order_release);
-    auto result = m_engine->snapshot();
-    if (!result)
-    {
-        postStatus(tr("SSH terminal snapshot failed"));
-        return;
-    }
-
-    {
-        std::scoped_lock lock(m_snapshotMutex);
-        m_pendingSnapshot = std::make_shared<const terminal::TerminalSnapshot>(std::move(*result));
-    }
-    if (!m_snapshotDeliveryScheduled.exchange(true))
-    {
-        (void)QMetaObject::invokeMethod(this, "scheduleLatestSnapshotDelivery", Qt::QueuedConnection);
-    }
-}
-
-void SshTerminalSession::scheduleLatestSnapshotDelivery()
-{
-    if (!m_running.load())
-    {
-        m_snapshotDeliveryScheduled.store(false);
-        return;
-    }
-    if (!m_snapshotDeliveryTimer.isActive())
-    {
-        m_snapshotDeliveryTimer.start();
-    }
-}
-
-void SshTerminalSession::deliverLatestSnapshot()
-{
-    if (!m_running.load())
-    {
-        std::scoped_lock lock(m_snapshotMutex);
-        m_pendingSnapshot.reset();
-        m_snapshotDeliveryScheduled.store(false);
-        return;
-    }
-    terminal::TerminalSnapshotPtr snapshot;
-    {
-        std::scoped_lock lock(m_snapshotMutex);
-        snapshot = std::move(m_pendingSnapshot);
-    }
-    m_snapshotDeliveryScheduled.store(false);
-    if (snapshot)
-    {
-        emit snapshotReady(std::move(snapshot));
-    }
-
-    {
-        std::scoped_lock lock(m_snapshotMutex);
-        if (m_pendingSnapshot)
-        {
-            if (!m_snapshotDeliveryScheduled.exchange(true))
-            {
-                scheduleLatestSnapshotDelivery();
-            }
-            return;
-        }
-    }
-    if (m_engineDirty.load(std::memory_order_acquire) && m_running.load())
-    {
-        std::scoped_lock lock(m_commandMutex);
-        if (m_commands.empty() || !std::holds_alternative<SnapshotRequestCommand>(m_commands.back()))
-        {
-            m_commands.emplace_back(SnapshotRequestCommand{});
-            signalCommandWake();
-        }
-    }
 }
 
 void SshTerminalSession::postStatus(const QString &status)
@@ -1662,11 +1589,25 @@ void SshTerminalSession::finishWorker(const QString &status, const SshConnection
     // is still owned by this worker, so build the final frame here.
     if (m_engine && m_engineDirty.load(std::memory_order_acquire))
     {
-        buildSnapshot();
+        buildSnapshot(true);
+    }
+    terminal::TerminalSnapshotPtr finalSnapshot;
+    {
+        std::scoped_lock lock(m_snapshotMutex);
+        finalSnapshot = std::move(m_pendingSnapshot);
     }
     if (m_running.exchange(false))
     {
-        postRunning(false);
+        // Normal delivery discards pending frames once running becomes false.
+        // Transfer the last frame into the same owner-thread event as the exit.
+        (void)QMetaObject::invokeMethod(
+            this,
+            [this, finalSnapshot = std::move(finalSnapshot)] {
+                if (finalSnapshot)
+                    emit snapshotReady(finalSnapshot);
+                emit runningChanged(false);
+            },
+            Qt::QueuedConnection);
     }
     postPhase(phase);
     postStatus(status);

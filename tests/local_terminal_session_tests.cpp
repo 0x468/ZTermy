@@ -1,5 +1,6 @@
 #include "application/terminal/LocalTerminalSession.h"
 #include "application/terminal/PowerShellShellIntegration.h"
+#include "domain/terminal/GhosttyTerminalEngine.h"
 #include "domain/terminal/SemanticTerminalObserver.h"
 
 #include <QDebug>
@@ -22,6 +23,33 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+namespace ztermy::terminal
+{
+// Exercise the production output consumer and command worker without ConPTY
+// rewriting application VT sequences. No process or terminal input is created.
+class LocalTerminalSessionTestPeer
+{
+public:
+    static bool start(LocalTerminalSession &session)
+    {
+        auto engine = GhosttyTerminalEngine::create({.columns = 80, .rows = 24});
+        if (!engine)
+            return false;
+        session.m_engine = std::move(*engine);
+        session.m_running.store(true);
+        session.m_writeThread = std::jthread([&session](const std::stop_token &token) {
+            session.writeLoop(token);
+        });
+        return true;
+    }
+
+    static bool output(LocalTerminalSession &session, const std::string_view bytes)
+    {
+        return session.consumeOutput(std::as_bytes(std::span(bytes)));
+    }
+};
+} // namespace ztermy::terminal
 
 namespace
 {
@@ -89,6 +117,10 @@ private slots:
     void buildsEphemeralPowerShellIntegrationCommand();
     void emitsPowerShell5CompatibleOscSequences();
     void recognizesLocalShellExit();
+    void returnsCursorPositionQueryToLocalChild();
+    void hidesIntermediateSynchronizedOutput();
+    void synchronizesRawOutputAndRecoversAfterTimeout();
+    void selectionInterruptsSynchronizedOutput();
     void repeatedlyStopsWithoutBlockingCaller();
     void keepsNushellPromptsOnAdjacentRows();
     void capturesRichPowerShellCommandLifecycle();
@@ -148,6 +180,161 @@ void LocalTerminalSessionTests::recognizesLocalShellExit()
     QCOMPARE(runningSpy.constLast().constFirst().toBool(), false);
     QTRY_VERIFY_WITH_TIMEOUT(
         !statusSpy.isEmpty() && statusSpy.constLast().constFirst().toString().contains(QStringLiteral("exited")), 5000);
+    session.stop();
+}
+
+void LocalTerminalSessionTests::returnsCursorPositionQueryToLocalChild()
+{
+    const QString executable = QStandardPaths::findExecutable(QStringLiteral("pwsh.exe"));
+    if (executable.isEmpty())
+        QSKIP("PowerShell 7 is not installed");
+
+    const QString script = QStringLiteral(
+        "$esc=[char]27; [Console]::Write([string]$esc+'[6n'); $reply=''; "
+        "$until=[DateTime]::UtcNow.AddSeconds(5); "
+        "while([DateTime]::UtcNow -lt $until -and -not $reply.EndsWith('R')) { "
+        "if([Console]::KeyAvailable) { $reply += [Console]::ReadKey($true).KeyChar } "
+        "else { Start-Sleep -Milliseconds 10 } }; "
+        "[Console]::WriteLine('ZTERMY_CPR_REPLY='+[Convert]::ToHexString([Text.Encoding]::ASCII.GetBytes($reply)))");
+    const QByteArray encoded = QByteArray(reinterpret_cast<const char *>(script.utf16()), script.size() * 2).toBase64();
+
+    ztermy::terminal::LocalTerminalSession session;
+    const auto output = std::make_shared<MemoryOutputSink>();
+    session.setOutputSink(output);
+    session.setLaunchSpec({.id = QStringLiteral("pwsh"),
+                           .displayName = QStringLiteral("PowerShell 7"),
+                           .executable = executable,
+                           .arguments = {QStringLiteral("-NoLogo"), QStringLiteral("-NoProfile"),
+                                         QStringLiteral("-EncodedCommand"), QString::fromLatin1(encoded)},
+                           .powerShellIntegration = false});
+    QVERIFY(!session.start({.columns = 80, .rows = 24}));
+    QTRY_VERIFY_WITH_TIMEOUT(
+        [&output] {
+            const QByteArray current = output->bytes();
+            const qsizetype marker = current.lastIndexOf("ZTERMY_CPR_REPLY=");
+            return marker >= 0 && current.indexOf('\r', marker) >= 0;
+        }(),
+        8000);
+    const QByteArray bytes = output->bytes();
+    const qsizetype marker = bytes.lastIndexOf("ZTERMY_CPR_REPLY=");
+    QVERIFY(marker >= 0);
+    const QByteArray replyHex = bytes.mid(marker + QByteArrayLiteral("ZTERMY_CPR_REPLY=").size()).split('\r').first();
+    const QByteArray reply = QByteArray::fromHex(replyHex);
+    QCOMPARE(reply.toHex().toUpper(), replyHex);
+    QVERIFY2(reply.startsWith("\x1b[") && reply.endsWith('R'), replyHex.constData());
+    const QList<QByteArray> coordinates = reply.mid(2, reply.size() - 3).split(';');
+    QCOMPARE(coordinates.size(), 2);
+    bool rowValid = false;
+    bool columnValid = false;
+    const int row = coordinates[0].toInt(&rowValid);
+    const int column = coordinates[1].toInt(&columnValid);
+    QVERIFY(rowValid && row >= 1 && row <= 24);
+    QVERIFY(columnValid && column >= 1 && column <= 80);
+    session.stop();
+}
+
+void LocalTerminalSessionTests::synchronizesRawOutputAndRecoversAfterTimeout()
+{
+    using Peer = ztermy::terminal::LocalTerminalSessionTestPeer;
+    ztermy::terminal::LocalTerminalSession session;
+    QVERIFY(Peer::start(session));
+    QSignalSpy snapshots(&session, &ztermy::terminal::LocalTerminalSession::snapshotReady);
+    QVERIFY(Peer::output(session, "BASE"));
+    QTRY_COMPARE(snapshots.count(), 1);
+    snapshots.clear();
+    QVERIFY(Peer::output(session, "\x1b[?2026hPARTIAL"));
+    QTest::qWait(100);
+    QCOMPARE(snapshots.count(), 0);
+    QVERIFY(Peer::output(session, "FINAL\x1b[?2026l"));
+    QTRY_COMPARE(snapshots.count(), 1);
+    auto snapshot = qvariant_cast<ztermy::terminal::TerminalSnapshotPtr>(snapshots.last().first());
+    QVERIFY(snapshotText(*snapshot).find(U"PARTIALFINAL") != std::u32string::npos);
+
+    snapshots.clear();
+    QVERIFY(Peer::output(session, "\x1b[?2026hORPHAN"));
+    QTest::qWait(100);
+    QCOMPARE(snapshots.count(), 0);
+    QTRY_VERIFY_WITH_TIMEOUT(!snapshots.empty(), 1500);
+    snapshot = qvariant_cast<ztermy::terminal::TerminalSnapshotPtr>(snapshots.last().first());
+    QVERIFY(snapshotText(*snapshot).find(U"ORPHAN") != std::u32string::npos);
+
+    // A timed-out update must not disable synchronization for all future frames.
+    snapshots.clear();
+    QVERIFY(Peer::output(session, "\x1b[?2026hNEXT"));
+    QTest::qWait(100);
+    QCOMPARE(snapshots.count(), 0);
+    QVERIFY(Peer::output(session, "\x1b[?2026l"));
+    QTRY_COMPARE(snapshots.count(), 1);
+    session.stop();
+}
+
+void LocalTerminalSessionTests::selectionInterruptsSynchronizedOutput()
+{
+    using Peer = ztermy::terminal::LocalTerminalSessionTestPeer;
+    ztermy::terminal::LocalTerminalSession session;
+    QVERIFY(Peer::start(session));
+    QSignalSpy snapshots(&session, &ztermy::terminal::LocalTerminalSession::snapshotReady);
+    QVERIFY(Peer::output(session, "BASE"));
+    QTRY_COMPARE(snapshots.count(), 1);
+    snapshots.clear();
+    QVERIFY(Peer::output(session, "\x1b[?2026hPENDING"));
+    session.requestSelection(0, 0, 3, 0, false);
+    QTRY_VERIFY_WITH_TIMEOUT(!snapshots.empty(), 300);
+    const auto snapshot = qvariant_cast<ztermy::terminal::TerminalSnapshotPtr>(snapshots.last().first());
+    QVERIFY(snapshot->cell(0, 0).selected);
+    session.stop();
+}
+
+void LocalTerminalSessionTests::hidesIntermediateSynchronizedOutput()
+{
+    const QString executable = QStandardPaths::findExecutable(QStringLiteral("pwsh.exe"));
+    if (executable.isEmpty())
+        QSKIP("PowerShell 7 is not installed");
+
+    const QString script = QStringLiteral("$esc=[char]27; [Console]::Write('READY'); "
+                                          "[Console]::Out.Flush(); Start-Sleep -Milliseconds 150; "
+                                          "[Console]::Write([string]$esc+'[?2026h'+'ZTERMY_SYNC_INTERMEDIATE'); "
+                                          "[Console]::Out.Flush(); Start-Sleep -Milliseconds 50; "
+                                          "[Console]::Write('ZTERMY_SYNC_FINAL'+[string]$esc+'[?2026l'); "
+                                          "[Console]::Out.Flush(); Start-Sleep -Milliseconds 200");
+    const QByteArray encoded = QByteArray(reinterpret_cast<const char *>(script.utf16()), script.size() * 2).toBase64();
+
+    ztermy::terminal::LocalTerminalSession session;
+    const auto output = std::make_shared<MemoryOutputSink>();
+    session.setOutputSink(output);
+    session.setLaunchSpec({.id = QStringLiteral("pwsh"),
+                           .displayName = QStringLiteral("PowerShell 7"),
+                           .executable = executable,
+                           .arguments = {QStringLiteral("-NoLogo"), QStringLiteral("-NoProfile"),
+                                         QStringLiteral("-EncodedCommand"), QString::fromLatin1(encoded)},
+                           .powerShellIntegration = false});
+    bool sawIntermediateFrame = false;
+    bool sawFinalFrame = false;
+    connect(&session, &ztermy::terminal::LocalTerminalSession::snapshotReady, this,
+            [&sawIntermediateFrame, &sawFinalFrame](const ztermy::terminal::TerminalSnapshotPtr &snapshot) {
+                const std::u32string text = snapshotText(*snapshot);
+                const bool intermediate = text.find(U"ZTERMY_SYNC_INTERMEDIATE") != std::u32string::npos;
+                const bool final = text.find(U"ZTERMY_SYNC_FINAL") != std::u32string::npos;
+                sawIntermediateFrame |= intermediate && !final;
+                sawFinalFrame |= intermediate && final;
+            });
+    QVERIFY(!session.start({.columns = 100, .rows = 24}));
+    QTRY_VERIFY_WITH_TIMEOUT(output->contains(QByteArrayLiteral("ZTERMY_SYNC_INTERMEDIATE")), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(sawFinalFrame, 5000);
+    const QByteArray received = output->bytes();
+    const auto ready = received.indexOf("READY");
+    const auto intermediate = received.indexOf("ZTERMY_SYNC_INTERMEDIATE");
+    const auto final = received.indexOf("ZTERMY_SYNC_FINAL");
+    const auto begin = received.lastIndexOf("\x1b[?2026h", intermediate);
+    const auto end = begin >= 0 ? received.indexOf("\x1b[?2026l", begin) : -1;
+    // ConPTY can consume application modes and generate its own frame markers.
+    // Its startup frame alone is not evidence that it forwarded the test frame.
+    if (begin <= ready || end < final)
+    {
+        QSKIP("Installed ConPTY did not preserve the application's synchronized-output interval; "
+              "this run cannot verify session frame suppression");
+    }
+    QVERIFY2(!sawIntermediateFrame, "DEC 2026 exposed an intermediate frame before synchronized output ended");
     session.stop();
 }
 

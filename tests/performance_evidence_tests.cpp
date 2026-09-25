@@ -67,8 +67,11 @@ class PerformanceEvidenceTests final : public QObject
 
 private slots:
     void acceptsCompleteReleaseEvidence();
+    void acceptsOpaqueReleaseEvidenceWithUnspecifiedAlphaBuffer();
+    void rejectsInvalidAlphaBufferBits();
     void rejectsDebugAndUndersampledEvidence();
     void rejectsEnvironmentMismatch();
+    void rejectsOpaqueAndAlphaSurfaceComparison();
     void rendersDeterministicComparison();
 };
 
@@ -78,6 +81,32 @@ void PerformanceEvidenceTests::acceptsCompleteReleaseEvidence()
     QVERIFY(evidence.has_value());
     QVERIFY(evidence->validationIssues().isEmpty());
     QCOMPARE(evidence->paint.p95Microseconds, std::uint64_t{8000});
+}
+
+void PerformanceEvidenceTests::acceptsOpaqueReleaseEvidenceWithUnspecifiedAlphaBuffer()
+{
+    QJsonObject root = QJsonDocument::fromJson(report()).object();
+    QJsonObject environment = root.value(QStringLiteral("environment")).toObject();
+    environment.insert(QStringLiteral("backdrop"), QStringLiteral("opaque"));
+    environment.insert(QStringLiteral("alphaBufferBits"), -1);
+    root.insert(QStringLiteral("environment"), environment);
+
+    const auto evidence = ztermy::diagnostics::PerformanceEvidence::parse(QJsonDocument(root).toJson());
+    QVERIFY2(evidence.has_value(), evidence ? "" : qPrintable(evidence.error()));
+    QCOMPARE(evidence->alphaBufferBits, -1);
+    QVERIFY(evidence->validationIssues().isEmpty());
+}
+
+void PerformanceEvidenceTests::rejectsInvalidAlphaBufferBits()
+{
+    QJsonObject root = QJsonDocument::fromJson(report()).object();
+    QJsonObject environment = root.value(QStringLiteral("environment")).toObject();
+    environment.insert(QStringLiteral("alphaBufferBits"), -2);
+    root.insert(QStringLiteral("environment"), environment);
+
+    const auto evidence = ztermy::diagnostics::PerformanceEvidence::parse(QJsonDocument(root).toJson());
+    QVERIFY(!evidence.has_value());
+    QVERIFY(evidence.error().contains(QStringLiteral("alphaBufferBits")));
 }
 
 void PerformanceEvidenceTests::rejectsDebugAndUndersampledEvidence()
@@ -102,6 +131,23 @@ void PerformanceEvidenceTests::rejectsEnvironmentMismatch()
     QVERIFY(baseline.has_value());
     QVERIFY(candidate.has_value());
     QCOMPARE(baseline->comparabilityIssues(*candidate), QStringList{QStringLiteral("Different device-pixel ratio.")});
+}
+
+void PerformanceEvidenceTests::rejectsOpaqueAndAlphaSurfaceComparison()
+{
+    QJsonObject root = QJsonDocument::fromJson(report()).object();
+    QJsonObject environment = root.value(QStringLiteral("environment")).toObject();
+    environment.insert(QStringLiteral("backdrop"), QStringLiteral("opaque"));
+    environment.insert(QStringLiteral("alphaBufferBits"), -1);
+    root.insert(QStringLiteral("environment"), environment);
+    const auto opaque = ztermy::diagnostics::PerformanceEvidence::parse(QJsonDocument(root).toJson());
+    QVERIFY(opaque.has_value());
+
+    environment.insert(QStringLiteral("alphaBufferBits"), 8);
+    root.insert(QStringLiteral("environment"), environment);
+    const auto alphaSurface = ztermy::diagnostics::PerformanceEvidence::parse(QJsonDocument(root).toJson());
+    QVERIFY(alphaSurface.has_value());
+    QCOMPARE(opaque->comparabilityIssues(*alphaSurface), QStringList{QStringLiteral("Different alpha-buffer size.")});
 }
 
 void PerformanceEvidenceTests::rendersDeterministicComparison()

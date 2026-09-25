@@ -50,6 +50,17 @@ namespace
     return static_cast<int>(*value);
 }
 
+[[nodiscard]] std::expected<int, QString> parseAlphaBufferBits(const QJsonObject &object)
+{
+    const QString key = QStringLiteral("alphaBufferBits");
+    const QJsonValue value = object.value(key);
+    if (value.isDouble() && value.toDouble() == -1.0)
+    {
+        return -1; // QSurfaceFormat reports an unspecified alpha-buffer size as -1.
+    }
+    return integer(object, key);
+}
+
 [[nodiscard]] std::expected<QString, QString> string(const QJsonObject &object, const QString &key)
 {
     const QJsonValue value = object.value(key);
@@ -166,7 +177,7 @@ std::expected<PerformanceEvidence, QString> PerformanceEvidence::parse(const QBy
     const auto terminalOpacityValue = real(*environment, QStringLiteral("terminalBackgroundOpacity"));
     const auto logicalWidthValue = integer(*environment, QStringLiteral("logicalWidth"));
     const auto logicalHeightValue = integer(*environment, QStringLiteral("logicalHeight"));
-    const auto alphaBufferBitsValue = integer(*environment, QStringLiteral("alphaBufferBits"));
+    const auto alphaBufferBitsValue = parseAlphaBufferBits(*environment);
     const auto preferSoftwareValue = boolean(*environment, QStringLiteral("preferSoftwareRenderer"));
     const auto completedValue = boolean(*scenario, QStringLiteral("completed"));
     const auto responsiveValue = boolean(*scenario, QStringLiteral("responsive"));
@@ -337,6 +348,7 @@ QStringList PerformanceEvidence::comparabilityIssues(const PerformanceEvidence &
     requireEqual(logicalWidth == candidate.logicalWidth && logicalHeight == candidate.logicalHeight,
                  QStringLiteral("window size"));
     requireEqual(backdrop == candidate.backdrop, QStringLiteral("backdrop"));
+    requireEqual(alphaBufferBits == candidate.alphaBufferBits, QStringLiteral("alpha-buffer size"));
     requireEqual(qFuzzyCompare(terminalBackgroundOpacity, candidate.terminalBackgroundOpacity),
                  QStringLiteral("terminal background opacity"));
     requireEqual(preferSoftwareRenderer == candidate.preferSoftwareRenderer,
