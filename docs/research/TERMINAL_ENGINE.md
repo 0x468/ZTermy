@@ -8,7 +8,9 @@ remaining product gaps are listed below, not advertised as implemented.
 The first terminal-state implementation uses `libghostty-vt` through a
 ztermy-owned C++23 interface and C ABI adapter. Contour remains the fallback
 C++ engine candidate. Windows Terminal is used as a correctness and
-Windows-integration reference rather than imported as a library.
+Windows-integration reference rather than imported as a terminal-state library.
+The separate official ConPTY redistributable is now a pinned transport dependency
+(ADR 0131); it does not replace Ghostty or the Qt Quick renderer.
 
 The ConPTY transport, terminal state, and Qt Quick renderer remain separate
 components. This lets the engine spike fail without replacing process I/O or
@@ -626,13 +628,24 @@ releases pixels after the last displayed/queued snapshot releases them.
 
 The bridge bounds a snapshot to 32 MiB of unique image pixels, 8192 pixels per
 dimension and 4096 visible placements. These are **snapshot bounds, not yet a
-complete protocol admission policy**. The pinned library's terminal defaults
+complete process-wide memory policy**. The pinned library's original terminal defaults
 use 10,000,000 bytes of image storage per screen (the standalone Ghostty
 application uses 320,000,000), while the loader independently allows up to
-400 MiB. Merely reducing stored-image bytes does not bound transmission or
-decompression peaks. This must be addressed before declaring image support
-ready. File, temporary-file and shared-memory media must remain disabled;
-direct terminal-stream transmission is sufficient for remote sessions.
+400 MiB. A fail-closed build patch now reduces that loader/inflater payload
+ceiling to 32 MiB and dimensions to 8192. Runtime initialization explicitly sets
+32-MiB storage per screen and 16-KiB APC buffers, and disables file, temporary-file
+and shared-memory media. Direct chunked terminal-stream transmission is sufficient
+for remote sessions. See [ADR 0130](../adr/0130-terminal-inline-image-resource-policy.md).
+
+The valid over-budget zlib test initially found no rejection reply: upstream
+lost the first chunk's image ID on final-chunk failure. The patch now retains
+that response identity and frees a pending loader immediately on append failure.
+Focused dynamic Release checks pass for a valid 4096-by-2049 RGBA zlib stream
+rejected specifically by inflation (not a later storage ENOMEM), an unfinished
+raw multipart upload crossing 32 MiB, and successful image/text output afterward.
+Those two checks plus five existing Sixel/Kitty/PNG cases pass (866 ms total).
+Local FetchContent source overrides also apply the patch before entering the
+dependency CMake directory; its archive rebuild depends on the patched Zig files.
 
 Focused dynamic Release tests feed real, fragmented Kitty sequences and check
 same-ID/same-size pixel replacement, old-snapshot immutability, same-generation
@@ -686,9 +699,8 @@ and the two existing Kitty lifecycle cases pass in dynamic Release. The valid
 oversize fixtures are important: a mismatched IHDR/IDAT image could fail in the
 codec even without our admission check and would not prove the limit works.
 The complete dynamic Release application also builds with startup registration.
-These
-decoder bounds do not yet bound the preceding Ghostty multipart/zlib loader or
-the total memory retained by multiple sessions.
+These decoder bounds complement the separately patched Ghostty multipart/zlib
+loader limit. They do not bound total memory retained by multiple sessions.
 
 The Qt-free Sixel payload decoder now incrementally accepts raster attributes,
 RGB/DEC-HLS color definitions, repeat runs, carriage return, next-band controls,
@@ -719,18 +731,104 @@ images. All fragment sizes of mixed VT/Kitty/UTF-8/Sixel input, both ST forms,
 overlong headers, cancellation and EOF recovery pass focused tests (together
 with Sixel decoding and ordinary VT, 6 cases plus init/cleanup).
 
-These are the payload decoder and framer only: the framer is not yet connected
-to `GhosttyTerminalEngine::feed`, and Sixel is not advertised in device-attribute
-replies. The adapter must still couple stream events to image placement and
-terminal cursor/scroll semantics before runtime support can be claimed.
-For that adapter, verify modern compatibility against
+The framer is now connected to `GhosttyTerminalEngine::feed`. Sixel uses
+internal image IDs and pinned placements through a small ztermy-owned Zig/C
+insertion extension, without entering the Kitty upload parser. The earlier
+base64 adapter was removed after a real mixed-upload test showed that it
+corrupted an unfinished Kitty transfer. Pixel aspect is expanded row by row
+into the storage allocation, with the same 8192-dimension/32-MiB raster ceiling.
+Index controls advance the text cursor without changing its column or replacing
+the application's saved cursor. Mode 8452 instead ends at the right of the last
+image row. Fragmented real-protocol tests cover bottom-edge scrolling, saved
+cursor restoration, alternate screens, no spurious PTY replies, and a larger
+RGBA raster with 2:1 aspect and transparent rows.
+
+Sixel is now advertised in primary device-attribute replies. XTSMGRAPHICS reads
+report 256 color registers and current/maximum pixel geometry; writes to these
+policy attributes fail explicitly, as do requests for unsupported ReGIS. A
+fragmented query test checks exact single responses and an unchanged cursor.
+DECSDM absolute-screen
+mode now inserts at the active-screen origin and clips to its pixel extent,
+without moving the text cursor or touching its pending wrap. The mixed-upload
+and absolute-mode tests first failed on the base64 adapter and now pass, alongside
+four aspect/scroll/resource regressions. Real Qt hardware-window pixel captures
+also pass for both protocols, including deletion and 125% scaling. These are
+test windows, not full-app shell-tool acceptance.
+
+The new `--terminal-image-smoke` launches an isolated local shell, writes known
+Sixel and Kitty images through ConPTY, captures the viewport asynchronously,
+and shuts the session down. Its first run stopped at hidden-startup window
+exposure (fixed in the harness). The subsequent run reached a cleared PowerShell
+prompt but captured **zero** red/Sixel and blue/Kitty pixels. Artifact:
+`build/msvc-dynamic-release/test-data/inline-images-d5423a85b3dc435babbd5d21bd9720e2/terminal-images.png`.
+The session exited cleanly and no direct child remained. This is a failed
+full-app acceptance result, not evidence that local image support is complete.
+Investigate the native ConPTY forwarding path before claiming local compatibility;
+direct engine/Qt tests do not cover its control-sequence filtering.
+
+A subsequent isolated transport comparison confirmed this boundary. A child
+process enables `ENABLE_VIRTUAL_TERMINAL_PROCESSING`, writes fixed Sixel and
+Kitty sequences followed by a completion marker, and exits. With the inbox
+ConPTY, the marker arrived but neither image sequence survived (144 output
+bytes). With Microsoft's signed ConPTY package `1.24.260710001`, both sequences
+arrived intact (113 output bytes; the focused test passed in 3085 ms). This
+probe bypasses shell line editing and the renderer. The optional
+`ZTERMY_CONPTY_PROBE_PACKAGE` CMake setting builds an isolated, excluded-from-all
+comparison executable; it does not switch the production backend or change
+release packaging. Production integration, single-executable distribution,
+host lifecycle regression checks, and full-app image acceptance remain pending.
+
+The production transport now uses embedded, hash-pinned Microsoft binaries
+(ADR 0131), extracted into a versioned user cache before GUI construction.
+An actual dynamic-Release PowerShell session passed `--terminal-image-smoke`:
+10,930 red/Sixel pixels and 1,024 blue/Kitty pixels, exit 0. The saved capture
+was inspected, and no owned application/console-host process remained.
+Artifact: `build/msvc-dynamic-release/test-data/embedded-images-3e76e9347fad4e928b4227061c299427/terminal-images.png`.
+All six transport cases passed (plus init/cleanup, 15.371 s), covering image
+forwarding, ordinary output, fresh environment, parallel close and exit events.
+The ordinary-output test originally stopped after eight arbitrary pipe reads;
+new startup/control fragmentation exposed that invalid assumption. Reading to
+the completion marker under a byte cap fixed the harness without weakening
+the expected output. Static single-EXE validation subsequently passed with the
+same red/blue pixel counts and exit 0:
+`build/single-exe-image-check-c2c8133846374e2fb583d940678230d3/data/terminal-images.png`.
+Only `ztermy.exe` was placed in that new directory. Focused static tests also
+verified that the loaded DLL/host cannot be opened for writing while pinned and
+that parallel consoles leave no owned shell/host running.
+
+The first static run crashed before session startup. A matching Release PDB
+located the access violation in `AppController::applicationSettingsDefaults`;
+its object file was from September 22 while its class header had changed.
+Ninja recorded zero header dependencies for it and twelve other existing
+project objects. Invalidating those exact generated objects and rebuilding
+resolved the crash; no application-state workaround was added. The new
+`repair_msvc_ninja_dependencies.ps1` audits this historical build-tree condition
+read-only by default. Both current build trees now report zero affected existing
+objects. Broader image protocol/resource-policy acceptance remains unfinished.
+The inline behavior follows modern compatibility described by
 [xterm's sixelScrolling documentation](https://invisible-island.net/xterm/manpage/xterm.html):
 scrolling is enabled by default and is the inverse of DECSDM (private mode 80).
 The old DEC chapter's prose is not a safe substitute for this interoperability
-check. Mode 8452 and the post-image text cursor also require explicit evidence.
+check. Broader interoperability evidence remains necessary.
 
-Still pending: transmission/decompression admission,
-Sixel DCS routing and cursor semantics, Unicode placeholders, IME/selection-overlay
+The framer now reports bounded complete CSI observations after forwarding their
+bytes, plus RIS reset observations. This lets the adapter track Sixel
+modes without consuming or duplicating the original terminal controls. Tests
+exercise every input chunk size, raw C1 and seven-bit introducers, C0 embedded
+inside CSI, cancelled/oversized/incomplete sequences, UTF-8 continuation bytes,
+and pseudo-controls inside other control strings. A new C1 CSI can replace an
+unfinished CSI without losing its mode observation.
+
+Unicode placeholder rendering now passes direct engine and Qt item checks,
+including inherited coordinates, overwrite, resize and snapshot release. A
+fixed UTF-8 native child probe also preserves the placeholder and its foreground
+ID through ConPTY. However, the extended full-application PowerShell smoke still
+produces zero green placeholder pixels (red Sixel and blue Kitty remain visible).
+This is an unresolved end-to-end failure, not completed Unicode compatibility.
+Artifact: `build/msvc-dynamic-release/test-data/unicode-images-6c912f54f51d4e11a4dd4a7331527b15/terminal-images.png`.
+
+Still pending: storage metadata admission limits (pixel-byte limits alone do not
+bound image/placement counts), Unicode placeholder full-app acceptance, IME/selection-overlay
 priority around above-text images, resource/performance policy, and full-app
 runtime evidence. The current patch is not a claim of complete Kitty or Sixel
 support. Reference:

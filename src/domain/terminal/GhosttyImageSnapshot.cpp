@@ -1,4 +1,5 @@
 #include "domain/terminal/GhosttyImageSnapshot.h"
+#include "domain/terminal/GhosttyImageExtension.h"
 
 #include <algorithm>
 #include <array>
@@ -96,8 +97,48 @@ GhosttyResult GhosttyImageSnapshot::capture(GhosttyTerminal terminal, std::vecto
     {
         std::unordered_map<std::uint64_t, std::shared_ptr<const TerminalImage>> visibleImages;
         std::size_t totalBytes = 0;
+        const auto attachImage = [&](TerminalImagePlacement &placement, GhosttyKittyGraphicsImage handle) {
+            std::uint64_t generation = 0;
+            const auto readResult =
+                ghostty_kitty_graphics_image_get(handle, GHOSTTY_KITTY_IMAGE_DATA_GENERATION, &generation);
+            if (readResult != GHOSTTY_SUCCESS)
+                return readResult;
+            if (const auto found = visibleImages.find(generation); found != visibleImages.end())
+                placement.image = found->second;
+            else
+            {
+                const auto cached = m_images.find(generation);
+                if (cached != m_images.end())
+                    placement.image = cached->second.lock();
+                if (!placement.image)
+                {
+                    auto image = std::make_shared<TerminalImage>();
+                    image->generation = generation;
+                    if (readImage(handle, *image, maximumSnapshotBytes - totalBytes) != GHOSTTY_SUCCESS)
+                        return GHOSTTY_NO_VALUE;
+                    placement.image = std::move(image);
+                }
+                if (placement.image->pixels.size() > maximumSnapshotBytes - totalBytes)
+                    return GHOSTTY_NO_VALUE;
+                totalBytes += placement.image->pixels.size();
+                visibleImages.emplace(generation, placement.image);
+                m_images[generation] = placement.image;
+            }
+            return GHOSTTY_SUCCESS;
+        };
+        bool hasVirtual = false;
         while (ghostty_kitty_graphics_placement_next(iterator.value) && placements.size() < maximumPlacements)
         {
+            bool isVirtual = false;
+            result = ghostty_kitty_graphics_placement_get(iterator.value,
+                                                          GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_IS_VIRTUAL, &isVirtual);
+            if (result != GHOSTTY_SUCCESS)
+                return result;
+            if (isVirtual)
+            {
+                hasVirtual = true;
+                continue;
+            }
             TerminalImagePlacement placement;
             constexpr std::array keys{
                 GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_IMAGE_ID, GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_PLACEMENT_ID,
@@ -119,31 +160,11 @@ GhosttyResult GhosttyImageSnapshot::capture(GhosttyTerminal terminal, std::vecto
                 return result;
             if (!info.viewport_visible)
                 continue;
-            std::uint64_t generation = 0;
-            result = ghostty_kitty_graphics_image_get(handle, GHOSTTY_KITTY_IMAGE_DATA_GENERATION, &generation);
+            result = attachImage(placement, handle);
+            if (result == GHOSTTY_NO_VALUE)
+                continue;
             if (result != GHOSTTY_SUCCESS)
                 return result;
-            if (const auto found = visibleImages.find(generation); found != visibleImages.end())
-                placement.image = found->second;
-            else
-            {
-                const auto cached = m_images.find(generation);
-                if (cached != m_images.end())
-                    placement.image = cached->second.lock();
-                if (!placement.image)
-                {
-                    auto image = std::make_shared<TerminalImage>();
-                    image->generation = generation;
-                    if (readImage(handle, *image, maximumSnapshotBytes - totalBytes) != GHOSTTY_SUCCESS)
-                        continue;
-                    placement.image = std::move(image);
-                }
-                if (placement.image->pixels.size() > maximumSnapshotBytes - totalBytes)
-                    continue;
-                totalBytes += placement.image->pixels.size();
-                visibleImages.emplace(generation, placement.image);
-                m_images[generation] = placement.image;
-            }
             placement.column = info.viewport_col;
             placement.row = info.viewport_row;
             placement.width = info.pixel_width;
@@ -153,6 +174,40 @@ GhosttyResult GhosttyImageSnapshot::capture(GhosttyTerminal terminal, std::vecto
             placement.sourceWidth = info.source_width;
             placement.sourceHeight = info.source_height;
             placements.push_back(std::move(placement));
+        }
+        if (hasVirtual && placements.size() < maximumPlacements)
+        {
+            std::vector<ZtermyGhosttyUnicodePlacement> fragments(maximumPlacements - placements.size());
+            std::size_t count = 0;
+            result = ztermy_ghostty_unicode_placements(terminal, fragments.data(), fragments.size(), &count);
+            if (result != GHOSTTY_SUCCESS)
+                return result;
+            for (std::size_t i = 0; i < count; ++i)
+            {
+                const auto &fragment = fragments[i];
+                const auto handle = ghostty_kitty_graphics_image(graphics, fragment.imageId);
+                if (!handle)
+                    continue;
+                TerminalImagePlacement placement{.imageId = fragment.imageId,
+                                                 .placementId = fragment.placementId,
+                                                 .column = fragment.column,
+                                                 .row = fragment.row,
+                                                 .z = -1,
+                                                 .offsetX = fragment.offsetX,
+                                                 .offsetY = fragment.offsetY,
+                                                 .width = fragment.width,
+                                                 .height = fragment.height,
+                                                 .sourceX = fragment.sourceX,
+                                                 .sourceY = fragment.sourceY,
+                                                 .sourceWidth = fragment.sourceWidth,
+                                                 .sourceHeight = fragment.sourceHeight};
+                result = attachImage(placement, handle);
+                if (result == GHOSTTY_NO_VALUE)
+                    continue;
+                if (result != GHOSTTY_SUCCESS)
+                    return result;
+                placements.push_back(std::move(placement));
+            }
         }
         std::ranges::sort(placements, [](const auto &a, const auto &b) {
             if (a.z != b.z)

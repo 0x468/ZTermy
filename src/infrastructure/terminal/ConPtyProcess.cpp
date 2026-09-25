@@ -3,6 +3,11 @@
 #include <Windows.h>
 #include <TlHelp32.h>
 #include <UserEnv.h>
+#ifdef ZTERMY_CONPTY_REDISTRIBUTABLE_PROBE
+#include <conpty.h>
+#else
+#include "infrastructure/terminal/ConPtyRuntime.h"
+#endif
 
 #include <algorithm>
 #include <array>
@@ -16,6 +21,25 @@
 
 namespace
 {
+#ifdef ZTERMY_CONPTY_REDISTRIBUTABLE_PROBE
+const auto createNativeConsole = &ConptyCreatePseudoConsole;
+const auto resizeNativeConsole = &ConptyResizePseudoConsole;
+const auto closeNativeConsole = &ConptyClosePseudoConsole;
+#else
+HRESULT createNativeConsole(COORD size, HANDLE input, HANDLE output, DWORD flags, HPCON *console)
+{
+    const auto &api = ztermy::terminal::conPtyApi();
+    return api.error ? HRESULT_FROM_WIN32(ERROR_DLL_INIT_FAILED) : api.create(size, input, output, flags, console);
+}
+HRESULT resizeNativeConsole(HPCON console, COORD size)
+{
+    return ztermy::terminal::conPtyApi().resize(console, size);
+}
+void closeNativeConsole(HPCON console)
+{
+    ztermy::terminal::conPtyApi().close(console);
+}
+#endif
 
 class UniqueHandle final
 {
@@ -89,17 +113,13 @@ public:
 
     [[nodiscard]] HPCON release() noexcept { return std::exchange(m_handle, nullptr); }
 
-    [[nodiscard]] static bool closesAsynchronously() noexcept
-    {
-        const HMODULE kernel = GetModuleHandleW(L"kernel32.dll");
-        return kernel != nullptr && GetProcAddress(kernel, "ReleasePseudoConsole") != nullptr;
-    }
+    [[nodiscard]] static bool closesAsynchronously() noexcept { return true; }
 
     void reset(const HPCON replacement = nullptr) noexcept
     {
         if (*this)
         {
-            ClosePseudoConsole(m_handle);
+            closeNativeConsole(m_handle);
         }
         m_handle = replacement;
     }
@@ -116,7 +136,8 @@ private:
         return processes;
     PROCESSENTRY32W entry{.dwSize = sizeof(PROCESSENTRY32W)};
     for (BOOL more = Process32FirstW(snapshot, &entry); more; more = Process32NextW(snapshot, &entry))
-        if (entry.th32ParentProcessID == GetCurrentProcessId() && _wcsicmp(entry.szExeFile, L"conhost.exe") == 0)
+        if (entry.th32ParentProcessID == GetCurrentProcessId()
+            && (_wcsicmp(entry.szExeFile, L"conhost.exe") == 0 || _wcsicmp(entry.szExeFile, L"OpenConsole.exe") == 0))
             processes.push_back(entry.th32ProcessID);
     CloseHandle(snapshot);
     return processes;
@@ -213,6 +234,10 @@ std::error_code ConPtyProcess::start(const std::wstring &applicationName, std::w
     {
         return std::make_error_code(std::errc::operation_in_progress);
     }
+#ifndef ZTERMY_CONPTY_REDISTRIBUTABLE_PROBE
+    if (const auto error = conPtyApi().error)
+        return error;
+#endif
 
     HANDLE inputReadRaw = INVALID_HANDLE_VALUE;
     HANDLE inputWriteRaw = INVALID_HANDLE_VALUE;
@@ -243,7 +268,7 @@ std::error_code ConPtyProcess::start(const std::wstring &applicationName, std::w
         std::scoped_lock creationLock(creationMutex);
         const auto consoleHostsBefore = childConsoleHosts();
         const HRESULT pseudoConsoleResult =
-            CreatePseudoConsole(consoleSize, inputRead.get(), outputWrite.get(), 0, &pseudoConsoleRaw);
+            createNativeConsole(consoleSize, inputRead.get(), outputWrite.get(), 0, &pseudoConsoleRaw);
         if (FAILED(pseudoConsoleResult))
             return hresultError(pseudoConsoleResult);
         for (const DWORD processId : childConsoleHosts())
@@ -439,7 +464,7 @@ std::error_code ConPtyProcess::resize(const TerminalSize size)
         .X = static_cast<SHORT>(size.columns),
         .Y = static_cast<SHORT>(size.rows),
     };
-    const HRESULT result = ResizePseudoConsole(m_impl->pseudoConsole.get(), consoleSize);
+    const HRESULT result = resizeNativeConsole(m_impl->pseudoConsole.get(), consoleSize);
     return SUCCEEDED(result) ? std::error_code{} : hresultError(result);
 }
 

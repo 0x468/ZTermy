@@ -60,8 +60,16 @@ FetchContent_Declare(
     ghostty
     URL https://github.com/ghostty-org/ghostty/archive/ae8727401d8c549671c36cdc326a94f47c94b635.tar.gz
     URL_HASH SHA256=da5a400b145aa9d1a4c7e44219d3b74d49fb7f0973666f0eb3933894f308fb02
+    PATCH_COMMAND "${CMAKE_COMMAND}" "-DGHOSTTY_SOURCE_DIR=<SOURCE_DIR>"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ApplyGhosttyImageLimits.cmake"
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
+if(FETCHCONTENT_SOURCE_DIR_GHOSTTY)
+    # Local source overrides bypass FetchContent's PATCH_COMMAND entirely.
+    set(GHOSTTY_SOURCE_DIR "${FETCHCONTENT_SOURCE_DIR_GHOSTTY}")
+    include(cmake/ApplyGhosttyImageLimits.cmake)
+    unset(GHOSTTY_SOURCE_DIR)
+endif()
 FetchContent_MakeAvailable(ghostty)
 
 FetchContent_Declare(
@@ -267,6 +275,8 @@ target_link_libraries(ztermy_core_windowing PUBLIC Qt6::Core Qt6::Gui)
 add_library(ztermy_terminal_transport STATIC
     src/infrastructure/terminal/ConPtyProcess.cpp
     src/infrastructure/terminal/ConPtyProcess.h
+    src/infrastructure/terminal/ConPtyRuntime.cpp
+    src/infrastructure/terminal/ConPtyRuntime.h
 )
 
 target_compile_features(ztermy_terminal_transport PUBLIC cxx_std_23)
@@ -277,7 +287,8 @@ target_compile_definitions(ztermy_terminal_transport PRIVATE
     WIN32_LEAN_AND_MEAN
     _UNICODE
 )
-target_link_libraries(ztermy_terminal_transport PRIVATE Advapi32 Userenv)
+target_link_libraries(ztermy_terminal_transport PRIVATE Advapi32 Userenv Qt6::Core)
+include(cmake/ConPtyRuntime.cmake)
 
 add_library(ztermy_ssh_transport STATIC
     src/infrastructure/ssh/ExplicitProxyTunnel.cpp
@@ -504,6 +515,11 @@ add_library(ztermy_terminal_engine STATIC
     src/domain/terminal/GhosttyInputMapping.cpp
     src/domain/terminal/GhosttyImageSnapshot.cpp
     src/domain/terminal/GhosttyImageSnapshot.h
+    src/domain/terminal/GhosttyImagePolicy.cpp
+    src/domain/terminal/GhosttyImagePolicy.h
+    src/domain/terminal/GhosttyImageExtension.h
+    src/domain/terminal/GhosttySixelBridge.cpp
+    src/domain/terminal/GhosttySixelBridge.h
     src/domain/terminal/SixelDecoder.cpp
     src/domain/terminal/SixelDecoder.h
     src/domain/terminal/TerminalGraphicsStream.cpp
@@ -2955,6 +2971,34 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME conpty-process COMMAND ztermy_conpty_process_tests)
+
+    # Explicit research-only A/B target; does not change ztermy's runtime or packaging.
+    set(ZTERMY_CONPTY_PROBE_PACKAGE "" CACHE PATH "Extracted official ConPTY package for isolated transport comparison")
+    if(ZTERMY_CONPTY_PROBE_PACKAGE)
+        qt_add_executable(ztermy_conpty_runtime_probe EXCLUDE_FROM_ALL
+            tests/conpty_process_tests.cpp
+            src/infrastructure/terminal/ConPtyProcess.cpp)
+        target_compile_features(ztermy_conpty_runtime_probe PRIVATE cxx_std_23)
+        target_include_directories(ztermy_conpty_runtime_probe PRIVATE src "${ZTERMY_CONPTY_PROBE_PACKAGE}/inc")
+        target_compile_definitions(ztermy_conpty_runtime_probe PRIVATE
+            ZTERMY_CONPTY_REDISTRIBUTABLE_PROBE NOMINMAX UNICODE _UNICODE WIN32_LEAN_AND_MEAN)
+        target_compile_options(ztermy_conpty_runtime_probe PRIVATE /permissive- /utf-8 /W4 /Zc:__cplusplus)
+        target_link_libraries(ztermy_conpty_runtime_probe PRIVATE Qt6::Test Advapi32 Userenv
+            "${ZTERMY_CONPTY_PROBE_PACKAGE}/runtimes/win-x64/lib/uap10.0/conpty.lib")
+        set_target_properties(ztermy_conpty_runtime_probe PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/conpty-probe")
+        add_custom_command(TARGET ztermy_conpty_runtime_probe POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "$<TARGET_FILE:Qt6::Core>" "$<TARGET_FILE:Qt6::Test>"
+                "$<TARGET_FILE_DIR:ztermy_conpty_runtime_probe>"
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "${ZTERMY_CONPTY_PROBE_PACKAGE}/runtimes/win-x64/native/conpty.dll"
+                "$<TARGET_FILE_DIR:ztermy_conpty_runtime_probe>/conpty.dll"
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "${ZTERMY_CONPTY_PROBE_PACKAGE}/build/native/runtimes/x64/OpenConsole.exe"
+                "$<TARGET_FILE_DIR:ztermy_conpty_runtime_probe>/OpenConsole.exe"
+            VERBATIM)
+    endif()
 
     qt_add_executable(ztermy_windows_local_shell_catalog_tests
         tests/windows_local_shell_catalog_tests.cpp

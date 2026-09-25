@@ -42,6 +42,14 @@ void TerminalGraphicsStream::escaped(char byte, TerminalGraphicsSink &sink)
         sink.writeTerminal({sequence.data(), sequence.size()});
         m_osc = byte == ']';
         m_state = m_osc || byte == '_' || byte == '^' || byte == 'X' ? State::string : State::ground;
+        if (byte == '[')
+        {
+            m_headerSize = 0;
+            m_controlOverflow = false;
+            m_state = State::csi;
+        }
+        else if (byte == 'c')
+            sink.resetTerminal();
     }
 }
 
@@ -97,7 +105,13 @@ void TerminalGraphicsStream::append(std::string_view bytes, TerminalGraphicsSink
                 else
                 {
                     emitBytes(current);
-                    if (rawC1 && (byte == 0x9d || byte == 0x9e || byte == 0x9f || byte == 0x98))
+                    if (rawC1 && byte == 0x9b)
+                    {
+                        m_headerSize = 0;
+                        m_controlOverflow = false;
+                        m_state = State::csi;
+                    }
+                    else if (rawC1 && (byte == 0x9d || byte == 0x9e || byte == 0x9f || byte == 0x98))
                     {
                         m_osc = byte == 0x9d;
                         m_state = State::string;
@@ -107,6 +121,45 @@ void TerminalGraphicsStream::append(std::string_view bytes, TerminalGraphicsSink
             case State::escape:
                 flush();
                 escaped(ch, sink);
+                break;
+            case State::csi:
+                if (rawC1)
+                {
+                    // A C1 introducer replaces an unfinished CSI. Reprocess it
+                    // through ground so a new DCS/CSI is not lost to observers.
+                    flush();
+                    m_headerSize = 0;
+                    m_state = State::ground;
+                    --index;
+                    break;
+                }
+                if (ch == '\x1b')
+                {
+                    flush();
+                    m_state = State::escape;
+                    break;
+                }
+                emitBytes(current);
+                if (ch == '\x18' || ch == '\x1a' || byte >= 0xa0)
+                {
+                    m_state = State::ground;
+                    break;
+                }
+                // C0 executes independently inside CSI; DEL is ignored.
+                if (byte < 0x20 || byte == 0x7f)
+                    break;
+                if (m_headerSize < m_header.size())
+                    m_header[m_headerSize++] = ch;
+                else
+                    m_controlOverflow = true;
+                if (ch >= '@' && ch <= '~')
+                {
+                    flush();
+                    if (!m_controlOverflow)
+                        sink.controlSequence({m_header.data(), m_headerSize});
+                    m_headerSize = 0;
+                    m_state = State::ground;
+                }
                 break;
             case State::header:
                 flush();

@@ -37,11 +37,20 @@ public:
         cancellations.push_back(cancelled);
         transcript += "<image>";
     }
+    void controlSequence(std::string_view value) override
+    {
+        controls.emplace_back(value);
+        controlOffsets.push_back(terminal.size());
+    }
+    void resetTerminal() override { ++resets; }
     std::string terminal;
     std::string transcript;
     std::vector<std::string> headers;
     std::vector<std::string> payloads;
     std::vector<bool> cancellations;
+    std::vector<std::string> controls;
+    std::vector<std::size_t> controlOffsets;
+    int resets = 0;
     int writes = 0;
 };
 
@@ -52,6 +61,14 @@ class TerminalEngineTests final : public QObject
 private slots:
     void separatesSixelWithoutChangingOtherVtOrUtf8();
     void recoversFromCancelledOrIncompleteGraphicsStrings();
+    void observesGraphicsModesWithoutConsumingTerminalControls();
+    void placesSixelAndPreservesSavedCursorAcrossScrolling();
+    void scalesSixelPixelsWithoutChangingTransparency();
+    void rejectsInflationBeyondImageBudgetAndRecovers();
+    void releasesRejectedMultipartImageBeforeNextTransmission();
+    void keepsKittyUploadIndependentOfSixelOutput();
+    void placesAbsoluteSixelWithoutChangingCursorOrWrap();
+    void reportsSixelCapabilitiesWithoutChangingScreen();
     void decodesFragmentedSixelOverprintsAndDecColors();
     void preservesSixelBackgroundAndRasterExtent();
     void boundsSixelRepeatAndOverdrawWork();
@@ -59,6 +76,8 @@ private slots:
     void rejectsOversizedAndMalformedPngBeforeRasterDecode();
     void retainsKittyPixelsAcrossReplacementAndDeletion();
     void tracksKittyPlacementAcrossScreenAndScrollChanges();
+    void rendersUnicodeImageFragmentsWithInheritedCoordinates();
+    void resolvesUnicodeImageIdentityAndReleasesSnapshotPixels();
     void preservesBlinkAttributesWithoutChangingText();
     void retainsProgressAcrossFragmentedReports();
     void boundsAndThrottlesProgramNotifications();
@@ -166,6 +185,239 @@ void TerminalEngineTests::recoversFromCancelledOrIncompleteGraphicsStrings()
         QCOMPARE(sink.terminal, passthrough);
         QVERIFY(sink.headers.empty());
     }
+}
+
+void TerminalEngineTests::observesGraphicsModesWithoutConsumingTerminalControls()
+{
+    const std::string prefix = "A\x1b[?80;8452h";
+    const std::string input = prefix
+                              + "\x9b?80l\x1b[?84\x07"
+                                "52r"
+                                "\x1b[?80\x18h\x1b]2;fake\x1b[?80h\x07"
+                                "\x1bP$q?80h\x1b\\\xf0\x9f\x9b\x80"
+                                "\x1b["
+                              + std::string(160, '1')
+                              + "h\x1b"
+                                "c\x1b[!p\x1b[?8\x9b?8452l\x1b[?80";
+    for (std::size_t chunk = 1; chunk <= input.size(); ++chunk)
+    {
+        ztermy::terminal::TerminalGraphicsStream stream;
+        GraphicsSinkFixture sink;
+        for (std::size_t offset = 0; offset < input.size(); offset += chunk)
+            stream.append(std::string_view(input).substr(offset, chunk), sink);
+        stream.finish(sink);
+        QCOMPARE(sink.terminal, input);
+        QCOMPARE(sink.controls, std::vector<std::string>({"?80;8452h", "?80l", "?8452r", "!p", "?8452l"}));
+        QCOMPARE(sink.controlOffsets.front(), prefix.size());
+        QCOMPARE(sink.resets, 1);
+        QVERIFY(sink.headers.empty());
+    }
+}
+
+void TerminalEngineTests::placesSixelAndPreservesSavedCursorAcrossScrolling()
+{
+    auto created = ztermy::terminal::GhosttyTerminalEngine::create(
+        {.columns = 10, .rows = 4, .cellWidthPixels = 8, .cellHeightPixels = 6});
+    QVERIFY(created);
+    auto &engine = **created;
+    const auto feed = [&](std::string_view value) {
+        return !engine.feed(std::as_bytes(std::span(value)));
+    };
+    QVERIFY(feed("\x1b[1;2H\x1b"
+                 "7\x1b[3;3H"));
+    const std::string_view sixel = "\x1bP0;1q\"1;1;16;12#1;2;100;0;0!16~-!16~\x1b\\";
+    for (const char &byte : sixel)
+        QVERIFY(feed({&byte, 1}));
+    auto snapshot = engine.snapshot();
+    QVERIFY(snapshot);
+    QCOMPARE(snapshot->images.size(), std::size_t{1});
+    QCOMPARE(snapshot->images[0].column, 2);
+    QCOMPARE(snapshot->images[0].row, 1); // Two output rows scroll once at the bottom.
+    QCOMPARE(snapshot->images[0].width, std::uint32_t{16});
+    QCOMPARE(snapshot->images[0].height, std::uint32_t{12});
+    QCOMPARE(snapshot->images[0].image->pixels.size(), std::size_t{16} * 12 * 4);
+    QCOMPARE(snapshot->images[0].image->pixels[0], std::uint8_t{255});
+    QCOMPARE(snapshot->cursor.column, std::uint16_t{2});
+    QCOMPARE(snapshot->cursor.row, std::uint16_t{3});
+    QVERIFY(feed("X\x1b"
+                 "8"));
+    snapshot = engine.snapshot();
+    QCOMPARE(snapshot->cursor.column, std::uint16_t{1});
+    QCOMPARE(snapshot->cursor.row, std::uint16_t{0});
+    QVERIFY(engine.takePtyWrite().empty());
+
+    // Mode 8452 places subsequent text to the right on the last image row.
+    QVERIFY(feed("\x1b[?8452h\x1b[1;3H"));
+    QVERIFY(feed(sixel));
+    snapshot = engine.snapshot();
+    QCOMPARE(snapshot->cursor.column, std::uint16_t{4});
+    QCOMPARE(snapshot->cursor.row, std::uint16_t{1});
+    QCOMPARE(snapshot->images.size(), std::size_t{2});
+    QVERIFY(feed("\x1b[?1049h"));
+    QVERIFY(engine.snapshot()->images.empty());
+    QVERIFY(feed("\x1b[?1049l"));
+    QCOMPARE(engine.snapshot()->images.size(), std::size_t{2});
+}
+
+void TerminalEngineTests::scalesSixelPixelsWithoutChangingTransparency()
+{
+    auto created = ztermy::terminal::GhosttyTerminalEngine::create(
+        {.columns = 20, .rows = 24, .cellWidthPixels = 8, .cellHeightPixels = 6});
+    QVERIFY(created);
+    auto &engine = **created;
+    const std::string_view input = "\x1bP0;1q\"2;1;64;30#1;2;100;0;0!64~\x1b\\";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(input))));
+    const auto snapshot = engine.snapshot();
+    QVERIFY(snapshot);
+    QCOMPARE(snapshot->images.size(), std::size_t{1});
+    const auto &image = *snapshot->images[0].image;
+    QCOMPARE(image.width, std::uint32_t{64});
+    QCOMPARE(image.height, std::uint32_t{60});
+    QCOMPARE(image.pixels.size(), std::size_t{64} * 60 * 4);
+    for (std::size_t pixel = 0; pixel < image.pixels.size() / 4; ++pixel)
+    {
+        const bool red = pixel / 64 < 12; // Six lit rows, each doubled in height.
+        QCOMPARE(image.pixels[pixel * 4], static_cast<std::uint8_t>(red ? 255 : 0));
+        QCOMPARE(image.pixels[pixel * 4 + 3], static_cast<std::uint8_t>(red ? 255 : 0));
+    }
+    QCOMPARE(snapshot->cursor.row, std::uint16_t{10});
+    QVERIFY(engine.takePtyWrite().empty());
+}
+
+void TerminalEngineTests::rejectsInflationBeyondImageBudgetAndRecovers()
+{
+    auto created = ztermy::terminal::GhosttyTerminalEngine::create(
+        {.columns = 10, .rows = 4, .cellWidthPixels = 8, .cellHeightPixels = 16});
+    QVERIFY(created);
+    auto &engine = **created;
+    const auto transmit = [&](int width, int height, int id) {
+        const QByteArray raster(qsizetype{width} * height * 4, '\0');
+        // qCompress prefixes the uncompressed length; Kitty expects only zlib.
+        const QByteArray payload = qCompress(raster, 9).sliced(4).toBase64();
+        for (qsizetype offset = 0; offset < payload.size(); offset += 4096)
+        {
+            std::string command = offset == 0 ? "\x1b_Ga=T,f=32,o=z,C=1,c=1,r=1,i=" + std::to_string(id) + ",s="
+                                                    + std::to_string(width) + ",v=" + std::to_string(height) + ",m="
+                                              : "\x1b_Gm=";
+            command += offset + 4096 < payload.size() ? "1;" : "0;";
+            const auto chunk =
+                QByteArrayView(payload).sliced(offset, std::min(qsizetype{4096}, payload.size() - offset));
+            command.append(chunk.data(), static_cast<std::size_t>(chunk.size())).append("\x1b\\");
+            QVERIFY(!engine.feed(std::as_bytes(std::span(command))));
+        }
+    };
+    transmit(4096, 2049, 901); // Valid RGBA raster, one row beyond 32 MiB.
+    QVERIFY(engine.snapshot()->images.empty());
+    const auto rejected = engine.takePtyWrite();
+    QVERIFY(!rejected.empty());
+    const std::string reply(reinterpret_cast<const char *>(rejected.data()), rejected.size());
+    // Storage-limit rejection would be ENOMEM after allocating the whole raster.
+    // Require rejection by the inflater, not merely absence of a placement.
+    QVERIFY(reply.find("decompression failed") != std::string::npos);
+    transmit(2, 2, 902);
+    QCOMPARE(engine.snapshot()->images.size(), std::size_t{1});
+    const std::string_view text = "healthy";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(text))));
+    QCOMPARE(engine.snapshot()->cursor.column, std::uint16_t{7});
+}
+
+void TerminalEngineTests::releasesRejectedMultipartImageBeforeNextTransmission()
+{
+    auto created = ztermy::terminal::GhosttyTerminalEngine::create(
+        {.columns = 10, .rows = 4, .cellWidthPixels = 8, .cellHeightPixels = 16});
+    QVERIFY(created);
+    auto &engine = **created;
+    const auto feed = [&](std::string_view value) {
+        return !engine.feed(std::as_bytes(std::span(value)));
+    };
+    QVERIFY(feed("\x1b_Ga=T,f=32,s=4096,v=2049,i=903,m=1;\x1b\\"));
+    const std::string chunk = "\x1b_Gm=1;" + std::string(4096, 'A') + "\x1b\\";
+    const std::size_t chunksUntilOverflow = (std::size_t{32} * 1024 * 1024) / 3072 + 1;
+    for (std::size_t index = 0; index < chunksUntilOverflow; ++index)
+        QVERIFY(feed(chunk));
+    const auto rejected = engine.takePtyWrite();
+    const std::string reply(reinterpret_cast<const char *>(rejected.data()), rejected.size());
+    QVERIFY(reply.find("i=903") != std::string::npos);
+    QVERIFY(reply.find("invalid data") != std::string::npos);
+    // No final m=0 was sent: rejection itself must release the active loader.
+    QVERIFY(feed("\x1b_Ga=T,f=32,s=1,v=1,i=904,C=1;/wAA/w==\x1b\\"));
+    const auto snapshot = engine.snapshot();
+    QVERIFY(snapshot);
+    QCOMPARE(snapshot->images.size(), std::size_t{1});
+    QCOMPARE(snapshot->images[0].image->pixels, std::vector<std::uint8_t>({255, 0, 0, 255}));
+}
+
+void TerminalEngineTests::keepsKittyUploadIndependentOfSixelOutput()
+{
+    auto created = ztermy::terminal::GhosttyTerminalEngine::create(
+        {.columns = 10, .rows = 4, .cellWidthPixels = 8, .cellHeightPixels = 16});
+    QVERIFY(created);
+    auto &engine = **created;
+    const auto feed = [&](std::string_view value) {
+        return !engine.feed(std::as_bytes(std::span(value)));
+    };
+    // A blue RGB image is only half transmitted when a red Sixel arrives.
+    QVERIFY(feed("\x1b_Ga=T,f=24,s=2,v=1,i=905,C=1,m=1;AAD/\x1b\\"));
+    QVERIFY(feed("\x1bP0;1q\"1;1;1;6#1;2;100;0;0~\x1b\\"));
+    auto snapshot = engine.snapshot();
+    QVERIFY(snapshot);
+    QCOMPARE(snapshot->images.size(), std::size_t{1});
+    QCOMPARE(snapshot->images[0].image->pixels[0], std::uint8_t{255});
+    QVERIFY(feed("\x1b_Gm=0;AAD/\x1b\\"));
+    snapshot = engine.snapshot();
+    QCOMPARE(snapshot->images.size(), std::size_t{2});
+    const auto blue = std::find_if(snapshot->images.begin(), snapshot->images.end(), [](const auto &placement) {
+        return placement.imageId == 905;
+    });
+    QVERIFY(blue != snapshot->images.end());
+    QCOMPARE(blue->image->pixels, std::vector<std::uint8_t>({0, 0, 255, 0, 0, 255}));
+}
+
+void TerminalEngineTests::placesAbsoluteSixelWithoutChangingCursorOrWrap()
+{
+    auto created = ztermy::terminal::GhosttyTerminalEngine::create(
+        {.columns = 4, .rows = 3, .cellWidthPixels = 8, .cellHeightPixels = 6});
+    QVERIFY(created);
+    auto &engine = **created;
+    const auto feed = [&](std::string_view value) {
+        return !engine.feed(std::as_bytes(std::span(value)));
+    };
+    QVERIFY(feed("\x1b[?80h\x1b[2;4HX")); // Pending soft wrap, not just a column number.
+    QVERIFY(feed("\x1bP0;1q\"1;1;64;30#1;2;100;0;0!64~\x1b\\"));
+    auto snapshot = engine.snapshot();
+    QVERIFY(snapshot);
+    QCOMPARE(snapshot->images.size(), std::size_t{1});
+    QCOMPARE(snapshot->images[0].column, 0);
+    QCOMPARE(snapshot->images[0].row, 0);
+    QCOMPARE(snapshot->images[0].width, std::uint32_t{32});
+    QCOMPARE(snapshot->images[0].height, std::uint32_t{18});
+    QCOMPARE(snapshot->cursor.column, std::uint16_t{3});
+    QCOMPARE(snapshot->cursor.row, std::uint16_t{1});
+    QVERIFY(feed("Y"));
+    snapshot = engine.snapshot();
+    QCOMPARE(snapshot->cursor.column, std::uint16_t{1});
+    QCOMPARE(snapshot->cursor.row, std::uint16_t{2});
+}
+
+void TerminalEngineTests::reportsSixelCapabilitiesWithoutChangingScreen()
+{
+    auto created = ztermy::terminal::GhosttyTerminalEngine::create(
+        {.columns = 10, .rows = 4, .cellWidthPixels = 8, .cellHeightPixels = 16});
+    QVERIFY(created);
+    auto &engine = **created;
+    const std::string_view queries = "\x1b[c\x1b[?1;1S\x1b[?2;1S\x1b[?2;4S\x1b[?3;1S\x1b[?1;3;16S\x1b[6n";
+    for (const char &byte : queries)
+        QVERIFY(!engine.feed(std::as_bytes(std::span(&byte, 1))));
+    const auto replies = engine.takePtyWrite();
+    QCOMPARE(std::string(reinterpret_cast<const char *>(replies.data()), replies.size()),
+             std::string("\x1b[?62;4;22c\x1b[?1;0;256S\x1b[?2;0;80;64S\x1b[?2;0;8192;8192S"
+                         "\x1b[?3;1S\x1b[?1;3S\x1b[1;1R"));
+    const auto snapshot = engine.snapshot();
+    QVERIFY(snapshot);
+    QCOMPARE(snapshot->cursor.column, std::uint16_t{0});
+    QCOMPARE(snapshot->cursor.row, std::uint16_t{0});
+    QVERIFY(snapshot->images.empty());
+    QVERIFY(engine.takePtyWrite().empty());
 }
 
 void TerminalEngineTests::decodesFragmentedSixelOverprintsAndDecColors()
@@ -431,6 +683,103 @@ void TerminalEngineTests::tracksKittyPlacementAcrossScreenAndScrollChanges()
     QVERIFY(!pixels.expired()); // The scrolled snapshot still owns its pixels.
     scrolled->images.clear();
     QVERIFY(pixels.expired()); // The bridge must not retain deleted image pixels.
+}
+
+void TerminalEngineTests::rendersUnicodeImageFragmentsWithInheritedCoordinates()
+{
+    auto created = ztermy::terminal::GhosttyTerminalEngine::create(
+        {.columns = 8, .rows = 4, .cellWidthPixels = 8, .cellHeightPixels = 8});
+    QVERIFY(created);
+    auto &engine = **created;
+    const auto feed = [&](QByteArrayView value) {
+        return !engine.feed(std::as_bytes(std::span(value.data(), static_cast<std::size_t>(value.size()))));
+    };
+    // Independent protocol example: a 2x2 raster, a 2x2 virtual grid, then
+    // row diacritics only. The second column must inherit the first cell's ID/row.
+    const QByteArray pixels = QByteArray::fromHex("ff000000ff000000ffffffff");
+    QVERIFY(feed(QByteArray("\x1b_Ga=T,f=24,s=2,v=2,i=42,U=1,c=2,r=2,q=2;") + pixels.toBase64() + "\x1b\\"));
+    QVERIFY(engine.snapshot()->images.empty()); // A prototype has no screen location.
+    QVERIFY(feed("\x1b[38;5;42m"));
+    const auto text = QString::fromUcs4(U"\U0010eeee\u0305\U0010eeee\r\n\U0010eeee\u030d\U0010eeee").toUtf8();
+    for (const char byte : text)
+        QVERIFY(feed(QByteArrayView(&byte, 1))); // Includes split UTF-8 and combining marks.
+    auto original = engine.snapshot();
+    QVERIFY(original);
+    QCOMPARE(original->images.size(), std::size_t{2});
+    for (const auto &image : original->images)
+    {
+        QCOMPARE(image.imageId, std::uint32_t{42});
+        QCOMPARE(image.column, 0);
+        QVERIFY(image.row == 0 || image.row == 1);
+        QCOMPARE(image.width, std::uint32_t{16});
+        QCOMPARE(image.height, std::uint32_t{8});
+        QCOMPARE(image.sourceX, std::uint32_t{0});
+        QCOMPARE(image.sourceY, static_cast<std::uint32_t>(image.row));
+        QCOMPARE(image.sourceWidth, std::uint32_t{2});
+        QCOMPARE(image.sourceHeight, std::uint32_t{1});
+        QCOMPARE(image.image->pixels.size(), std::size_t{12});
+    }
+    QCOMPARE(original->images[0].image.get(), original->images[1].image.get());
+    QVERIFY(original->cell(0, 0).invisible);
+    QVERIFY(original->cell(1, 1).invisible);
+    // Erasing text, not deleting a graphics placement, must remove only that
+    // fragment. The neighboring normal letter must not be covered by the image.
+    QVERIFY(feed("\x1b[1;2HX"));
+    const auto edited = engine.snapshot();
+    QVERIFY(edited);
+    QCOMPARE(edited->cell(1, 0).grapheme, std::u32string(U"X"));
+    QVERIFY(!edited->cell(1, 0).invisible);
+    const auto first = std::ranges::find_if(edited->images, [](const auto &image) {
+        return image.row == 0;
+    });
+    QVERIFY(first != edited->images.end());
+    QCOMPARE(first->width, std::uint32_t{8});
+    QCOMPARE(first->sourceWidth, std::uint32_t{1});
+    QVERIFY(!engine.resize({.columns = 8, .rows = 4, .cellWidthPixels = 10, .cellHeightPixels = 10}));
+    const auto resized = engine.snapshot();
+    QVERIFY(resized);
+    const auto second = std::ranges::find_if(resized->images, [](const auto &image) {
+        return image.row == 1;
+    });
+    QVERIFY(second != resized->images.end());
+    QCOMPARE(second->width, std::uint32_t{20});
+    QCOMPARE(second->height, std::uint32_t{10});
+}
+
+void TerminalEngineTests::resolvesUnicodeImageIdentityAndReleasesSnapshotPixels()
+{
+    auto created = ztermy::terminal::GhosttyTerminalEngine::create(
+        {.columns = 8, .rows = 4, .cellWidthPixels = 8, .cellHeightPixels = 8});
+    QVERIFY(created);
+    auto &engine = **created;
+    const auto feed = [&](QByteArrayView value) {
+        return !engine.feed(std::as_bytes(std::span(value.data(), static_cast<std::size_t>(value.size()))));
+    };
+    QVERIFY(feed("\x1b_Ga=T,f=24,s=1,v=1,i=33554474,p=1,U=1,c=2,r=1,q=2;/wAA\x1b\\"));
+    QVERIFY(feed("\x1b_Ga=p,i=33554474,p=2,U=1,c=1,r=1,q=2\x1b\\\x1b[38;5;42;58;5;2m"));
+    QVERIFY(feed(QString::fromUcs4(U"\U0010eeee\u0305\u0305\u030e").toUtf8()));
+    auto shown = engine.snapshot();
+    QVERIFY(shown);
+    QCOMPARE(shown->images.size(), std::size_t{1});
+    QCOMPARE(shown->images[0].imageId, std::uint32_t{33554474});
+    QCOMPARE(shown->images[0].placementId, std::uint32_t{2});
+    QCOMPARE(shown->images[0].width, std::uint32_t{8});
+    QCOMPARE(shown->images[0].offsetX, std::uint32_t{0});
+    std::weak_ptr<const ztermy::terminal::TerminalImage> pixels = shown->images[0].image;
+    QVERIFY(feed("\x1b[4;1H\n\n\n\n"));
+    QVERIFY(engine.snapshot()->images.empty());
+    shown->images.clear();
+    QVERIFY(pixels.expired()); // Off-screen snapshots cannot pin the CPU image copy.
+    engine.scrollViewport(-4);
+    auto history = engine.snapshot();
+    QVERIFY(history);
+    QCOMPARE(history->images.size(), std::size_t{1});
+    QCOMPARE(history->images[0].image->pixels, std::vector<std::uint8_t>({255, 0, 0}));
+    pixels = history->images[0].image;
+    QVERIFY(feed("\x1b_Ga=d,d=I,i=33554474,q=2\x1b\\"));
+    QVERIFY(engine.snapshot()->images.empty());
+    history->images.clear();
+    QVERIFY(pixels.expired());
 }
 
 void TerminalEngineTests::preservesBlinkAttributesWithoutChangingText()

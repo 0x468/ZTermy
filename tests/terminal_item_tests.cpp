@@ -76,7 +76,8 @@ class TerminalItemTests final : public QObject
     Q_OBJECT
 
 private slots:
-    void rendersKittyProtocolSnapshot();
+    void rendersInlineImageProtocolSnapshot_data();
+    void rendersInlineImageProtocolSnapshot();
     void rendersImageLayersAndReclaimsOverlay_data();
     void rendersImageLayersAndReclaimsOverlay();
     void reportsOptInFullPaintProfile();
@@ -125,8 +126,17 @@ private slots:
     void analyzesTerminalRowReuse();
 };
 
-void TerminalItemTests::rendersKittyProtocolSnapshot()
+void TerminalItemTests::rendersInlineImageProtocolSnapshot_data()
 {
+    QTest::addColumn<int>("protocol");
+    QTest::newRow("kitty") << 0;
+    QTest::newRow("sixel") << 1;
+    QTest::newRow("kitty-unicode") << 2;
+}
+
+void TerminalItemTests::rendersInlineImageProtocolSnapshot()
+{
+    QFETCH(int, protocol);
     QQuickWindow window;
     auto *item = new TestableTerminalItem(window.contentItem());
     item->setFontPixelSize(24);
@@ -143,7 +153,26 @@ void TerminalItemTests::rendersKittyProtocolSnapshot()
     const auto feed = [&](std::string_view text) {
         return !engine.feed(std::as_bytes(std::span(text)));
     };
-    QVERIFY(feed("\x1b[2;4H\x1b_Ga=T,f=24,s=1,v=1,i=73,c=2,r=1,C=1;/wAA\x1b\\"));
+    QVERIFY(feed("\x1b[2;4H"));
+    if (protocol == 1)
+    {
+        std::string command = "\x1bP0;1q\"1;1#1;2;100;0;0";
+        for (int band = 0; band < qRound(cell.height()) / 6; ++band)
+        {
+            if (band)
+                command += '-';
+            command += "!" + std::to_string(qRound(cell.width()) * 2) + "~";
+        }
+        command += "\x1b\\";
+        QVERIFY(feed(command));
+    }
+    else if (protocol == 2)
+    {
+        QVERIFY(feed("\x1b_Ga=T,f=24,s=1,v=1,i=73,U=1,c=2,r=1,q=2;/wAA\x1b\\\x1b[38;5;73m"));
+        QVERIFY(feed(QString::fromUcs4(U"\U0010eeee\u0305\U0010eeee").toStdString()));
+    }
+    else
+        QVERIFY(feed("\x1b_Ga=T,f=24,s=1,v=1,i=73,c=2,r=1,C=1;/wAA\x1b\\"));
     auto result = engine.snapshot();
     QVERIFY(result);
     QCOMPARE(result->images.size(), std::size_t{1});
@@ -166,7 +195,7 @@ void TerminalItemTests::rendersKittyProtocolSnapshot()
     const QPoint sample(qRound((cell.left() + 4 * cell.width()) * rendered.devicePixelRatio()),
                         qRound((cell.top() + 1.5 * cell.height()) * rendered.devicePixelRatio()));
     QCOMPARE(rendered.pixelColor(sample), QColor(Qt::red));
-    QVERIFY(feed("\x1b_Ga=d,d=A;\x1b\\"));
+    QVERIFY(feed(protocol == 2 ? "\x1b[2;4H\x1b[2X" : "\x1b_Ga=d,d=A;\x1b\\"));
     result = engine.snapshot();
     QVERIFY(result);
     item->setSnapshot(std::make_shared<ztermy::terminal::TerminalSnapshot>(*result));

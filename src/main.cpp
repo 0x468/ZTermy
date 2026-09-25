@@ -7,6 +7,7 @@
 #include "core/config/ApplicationPaths.h"
 #include "core/logging/Logging.h"
 #include "core/windowing/WindowPresenter.h"
+#include "infrastructure/terminal/ConPtyRuntime.h"
 #include "infrastructure/terminal/TerminalPngDecoder.h"
 #include "platform/windows/CrashDiagnostics.h"
 #include "platform/windows/NativeWindow.h"
@@ -18,6 +19,7 @@
 #include "ui/WindowStateRuntimeSmoke.h"
 #include "ui/WorkbenchRuntimeSmoke.h"
 #include "ui/icons/SvgIconImageProvider.h"
+#include "ui/terminal/TerminalImageRuntimeSmoke.h"
 #include "ui/terminal/TerminalItem.h"
 #include "ui/terminal/TerminalPaneRuntimeSmoke.h"
 #include "ztermy_version.h"
@@ -4464,11 +4466,16 @@ struct ResizeHitRuntimeCase
 // NOLINTNEXTLINE(bugprone-exception-escape)
 int main(int argc, char *argv[])
 {
+    // Materialize the pinned native runtime before a GUI/event loop exists.
+    // A failure remains local-session-specific; SSH and settings still open.
+    const auto conPtyError = ztermy::terminal::conPtyApi().error;
     const bool rawPerformanceBenchmark = rawArgumentPresent(argc, argv, "--performance-benchmark")
                                          || rawArgumentPresent(argc, argv, "--ui-performance-benchmark");
     const bool opaquePerformanceSurface =
         rawPerformanceBenchmark && requestedPerformanceBackdrop() == QStringLiteral("opaque");
     QGuiApplication application(argc, argv);
+    if (conPtyError)
+        qWarning() << "ConPTY runtime initialization failed:" << conPtyError.message();
     if (!ztermy::terminal::installTerminalPngDecoder())
         return EXIT_FAILURE;
     QGuiApplication::setApplicationDisplayName(QStringLiteral("ztermy"));
@@ -4539,6 +4546,7 @@ int main(int argc, char *argv[])
     }
     const bool terminalRenderSmoke = QCoreApplication::arguments().contains(QStringLiteral("--terminal-render-smoke"))
                                      || terminalPerformanceBenchmark;
+    const bool terminalImageSmoke = QCoreApplication::arguments().contains(QStringLiteral("--terminal-image-smoke"));
     const bool lifecycleRuntimeSmoke =
         QCoreApplication::arguments().contains(QStringLiteral("--lifecycle-runtime-smoke"));
     const bool windowAppearanceSmoke =
@@ -4755,10 +4763,12 @@ int main(int argc, char *argv[])
                                << "shutdownMs=" << shutdownMilliseconds;
         return EXIT_SUCCESS;
     }
-    if (terminalRenderSmoke)
+    if (terminalRenderSmoke || terminalImageSmoke)
     {
-        const bool passed =
-            runTerminalRenderRuntimeSmoke(window, appController, paths->dataDirectory, !terminalPerformanceBenchmark);
+        const bool passed = terminalImageSmoke
+                                ? ztermy::ui::runTerminalImageRuntimeSmoke(window, appController, paths->dataDirectory)
+                                : runTerminalRenderRuntimeSmoke(window, appController, paths->dataDirectory,
+                                                                !terminalPerformanceBenchmark);
         appController.shutdown();
         window.releaseResources();
         if (!passed)

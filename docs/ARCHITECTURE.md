@@ -44,6 +44,12 @@ ConPTY or SSH channel
 Input travels directly from the focused terminal item to its session writer.
 It must not wait for output, persistence, logging, or a UI snapshot.
 
+Local sessions use the pinned Microsoft ConPTY redistributable embedded in the
+application (ADR 0131), rather than the inbox host whose VT filtering can discard
+image protocols. Native binaries are materialized and verified before GUI
+construction, then reused from a versioned user cache. This preserves single-EXE
+distribution while keeping the host lifecycle under the transport's ownership.
+
 ## Terminal workbench data flow
 
 ```text

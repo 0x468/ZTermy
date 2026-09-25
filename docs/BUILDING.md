@@ -42,6 +42,42 @@ Simplified Chinese `/showIncludes` prefix encoding mismatch when CMake detects
 that exact condition. Without a matching dependency prefix, Ninja can miss
 header-only changes and leave stale object files.
 
+Correcting the prefix does not invalidate already-recorded objects with zero
+header dependencies. If a previously built tree shows inconsistent behavior
+after header changes, inspect it before assuming the source or runtime is broken:
+
+```powershell
+./scripts/repair_msvc_ninja_dependencies.ps1 -BuildDirectory build/msvc-static-release
+# Only when the report finds invalid objects:
+./scripts/repair_msvc_ninja_dependencies.ps1 -BuildDirectory build/msvc-static-release -Repair
+cmake --build --preset msvc-static-release
+```
+
+The repair only removes exact generated C++ objects for repository `src` files
+inside the selected build directory; the normal preset rebuilds them. It never
+deletes source, configuration, dependencies, or the whole build directory.
+
+## Embedded ConPTY runtime
+
+CMake downloads Microsoft's MIT-licensed ConPTY 1.24.260710001 package, verifies
+the archive and x64 binary hashes, and embeds the DLL, OpenConsole host and
+notice. No NuGet client or system installation is needed. An offline extracted
+package can be selected with `FETCHCONTENT_SOURCE_DIR_ZTERMY_CONPTY`; its binary
+hashes are still checked. The application keeps single-EXE distribution by
+materializing a versioned per-user cache before GUI construction (ADR 0131).
+
+For static Release crash investigation, do not trust a PDB left by an older
+build. Generate matching optimized-link symbols when needed:
+
+```powershell
+cmake --preset msvc-static-release '-DCMAKE_EXE_LINKER_FLAGS_RELEASE=/DEBUG:FULL /OPT:REF /OPT:ICF /INCREMENTAL:NO'
+cmake --build --preset msvc-static-release --target ztermy
+```
+
+This supplies linker/function symbols, not source-line information for objects
+compiled without `/Zi`. Keep the resulting PDB privately alongside the exact
+tested binary, never in the portable/installer payload.
+
 ## Intended preset workflow
 
 ```powershell

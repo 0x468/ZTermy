@@ -1,6 +1,12 @@
 #include "infrastructure/terminal/ConPtyProcess.h"
+#ifndef ZTERMY_CONPTY_REDISTRIBUTABLE_PROBE
+#include "infrastructure/terminal/ConPtyRuntime.h"
+#endif
 
 #include <QByteArray>
+#include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
 #include <QScopeGuard>
 #include <QTest>
 
@@ -20,6 +26,9 @@ using namespace std::chrono_literals;
 
 namespace
 {
+constexpr std::string_view sixelProbe = "\x1bP0;1q\"1;1;1;6#1;2;100;0;0~\x1b\\";
+constexpr std::string_view kittyProbe = "\x1b_Ga=T,f=24,s=1,v=1,i=987,C=1;/wAA\x1b\\";
+constexpr std::string_view unicodeProbe = "\x1b[38;2;0;3;224m\xf4\x8e\xbb\xae\xcc\x85\x1b[0m";
 
 class ConPtyProcessTests final : public QObject
 {
@@ -28,6 +37,10 @@ class ConPtyProcessTests final : public QObject
 private slots:
     void rejectsInvalidDimensions();
     void capturesUtf8OutputFromChildProcess();
+    void preservesInlineImageProtocolsFromChildProcess();
+#ifndef ZTERMY_CONPTY_REDISTRIBUTABLE_PROBE
+    void pinsRuntimeBinariesAgainstReplacement();
+#endif
     void newShellDoesNotInheritStaleParentPath();
     void closingParallelConsolesEndsOwnedShellProcesses();
     void wakeEventInterruptsExitWait();
@@ -62,7 +75,9 @@ void ConPtyProcessTests::capturesUtf8OutputFromChildProcess()
         QByteArray output;
         std::array<std::byte, 4096> buffer{};
 
-        for (int attempt = 0; attempt < 8 && !output.contains("ZTERMY_CONPTY_READY"); ++attempt)
+        // Pipe reads are arbitrary fragments, not records. Native host versions
+        // can emit more than eight small startup/control fragments.
+        while (output.size() < qsizetype{64} * 1024 && !output.contains("ZTERMY_CONPTY_READY"))
         {
             const auto readResult = process.read(buffer);
             if (!readResult || *readResult == 0)
@@ -75,6 +90,8 @@ void ConPtyProcessTests::capturesUtf8OutputFromChildProcess()
     });
 
     const auto exitResult = process.waitForExit(5s);
+    if (!exitResult || !*exitResult)
+        process.close();
     QVERIFY(exitResult.has_value());
     QVERIFY(*exitResult);
     const std::future_status outputStatus = outputFuture.wait_for(5s);
@@ -88,6 +105,68 @@ void ConPtyProcessTests::capturesUtf8OutputFromChildProcess()
     process.close();
     QVERIFY(!process.running());
 }
+
+void ConPtyProcessTests::preservesInlineImageProtocolsFromChildProcess()
+{
+    ztermy::terminal::ConPtyProcess process;
+    const auto executable = QCoreApplication::applicationFilePath().toStdWString();
+    const auto error =
+        process.start(executable, L"\"" + executable + L"\" --emit-inline-images", {.columns = 80, .rows = 24});
+    QVERIFY2(!error, error.message().c_str());
+    auto reader = std::async(std::launch::async, [&] {
+        QByteArray output;
+        std::array<std::byte, 4096> buffer{};
+        while (output.size() < qsizetype{64} * 1024 && !output.contains("ZTERMY_IMAGE_PROBE_DONE"))
+        {
+            const auto read = process.read(buffer);
+            if (!read || !*read)
+                break;
+            output.append(reinterpret_cast<const char *>(buffer.data()), static_cast<qsizetype>(*read));
+        }
+        return output;
+    });
+    const auto exited = process.waitForExit(5s);
+    if (!exited || !*exited || reader.wait_for(5s) != std::future_status::ready)
+        process.close();
+    QCOMPARE(reader.wait_for(0s), std::future_status::ready);
+    const auto output = reader.get();
+    process.close();
+    QVERIFY(output.contains("ZTERMY_IMAGE_PROBE_DONE"));
+    const bool sixel = output.contains(QByteArrayView(sixelProbe.data(), static_cast<qsizetype>(sixelProbe.size())));
+    const bool kitty = output.contains(QByteArrayView(kittyProbe.data(), static_cast<qsizetype>(kittyProbe.size())));
+    qInfo() << "ConPTY image forwarding" << "sixel=" << sixel << "kitty=" << kitty << "outputBytes=" << output.size();
+    QVERIFY(sixel);
+    QVERIFY(kitty);
+    const bool unicode =
+        output.contains(QByteArrayView(unicodeProbe.data(), static_cast<qsizetype>(unicodeProbe.size())));
+    qInfo() << "Unicode transport probe" << unicode;
+    QVERIFY(unicode);
+}
+
+#ifndef ZTERMY_CONPTY_REDISTRIBUTABLE_PROBE
+void ConPtyProcessTests::pinsRuntimeBinariesAgainstReplacement()
+{
+    QVERIFY(!ztermy::terminal::conPtyApi().error);
+    const HMODULE module = GetModuleHandleW(L"conpty.dll");
+    QVERIFY(module != nullptr);
+    std::array<wchar_t, 32768> filename{};
+    const DWORD count = GetModuleFileNameW(module, filename.data(), static_cast<DWORD>(filename.size()));
+    QVERIFY(count > 0 && count < filename.size());
+    const QDir directory = QFileInfo(QString::fromWCharArray(filename.data(), static_cast<int>(count))).dir();
+    for (const auto &name : {QStringLiteral("conpty.dll"), QStringLiteral("OpenConsole.exe")})
+    {
+        const auto path = directory.filePath(name).toStdWString();
+        const HANDLE writable =
+            CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        const DWORD error = GetLastError();
+        if (writable != INVALID_HANDLE_VALUE)
+            CloseHandle(writable);
+        QVERIFY(writable == INVALID_HANDLE_VALUE);
+        QCOMPARE(error, DWORD{ERROR_SHARING_VIOLATION});
+    }
+}
+#endif
 
 void ConPtyProcessTests::newShellDoesNotInheritStaleParentPath()
 {
@@ -139,7 +218,7 @@ void ConPtyProcessTests::newShellDoesNotInheritStaleParentPath()
     auto outputFuture = std::async(std::launch::async, [&process] {
         QByteArray output;
         std::array<std::byte, 4096> buffer{};
-        for (int attempt = 0; attempt < 16; ++attempt)
+        while (output.size() < qsizetype{64} * 1024)
         {
             const auto readResult = process.read(buffer);
             if (!readResult || *readResult == 0)
@@ -153,6 +232,8 @@ void ConPtyProcessTests::newShellDoesNotInheritStaleParentPath()
     });
 
     const auto exited = process.waitForExit(5s);
+    if (!exited || !*exited)
+        process.close();
     QVERIFY(exited.has_value());
     QVERIFY(*exited);
     if (outputFuture.wait_for(5s) != std::future_status::ready)
@@ -208,7 +289,7 @@ void ConPtyProcessTests::closingParallelConsolesEndsOwnedShellProcesses()
         std::vector<HANDLE> *owned = nullptr;
         if (_wcsicmp(entry.szExeFile, L"cmd.exe") == 0)
             owned = &children;
-        else if (_wcsicmp(entry.szExeFile, L"conhost.exe") == 0)
+        else if (_wcsicmp(entry.szExeFile, L"conhost.exe") == 0 || _wcsicmp(entry.szExeFile, L"OpenConsole.exe") == 0)
             owned = &hosts;
         if (owned != nullptr)
         {
@@ -272,6 +353,28 @@ void ConPtyProcessTests::wakeEventInterruptsExitWait()
 
 } // namespace
 
-QTEST_GUILESS_MAIN(ConPtyProcessTests)
+int main(int argc, char **argv)
+{
+    if (argc == 2 && std::string_view(argv[1]) == "--emit-inline-images")
+    {
+        const HANDLE output = GetStdHandle(STD_OUTPUT_HANDLE);
+        DWORD mode = 0;
+        if (!GetConsoleMode(output, &mode) || !SetConsoleMode(output, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING))
+            return 2;
+        if (!SetConsoleOutputCP(CP_UTF8))
+            return 2;
+        for (const auto bytes : {sixelProbe, kittyProbe, unicodeProbe, std::string_view("ZTERMY_IMAGE_PROBE_DONE\r\n")})
+        {
+            DWORD written = 0;
+            if (!WriteFile(output, bytes.data(), static_cast<DWORD>(bytes.size()), &written, nullptr)
+                || written != bytes.size())
+                return 3;
+        }
+        return 0;
+    }
+    QCoreApplication application(argc, argv);
+    ConPtyProcessTests tests;
+    return QTest::qExec(&tests, argc, argv);
+}
 
 #include "conpty_process_tests.moc"

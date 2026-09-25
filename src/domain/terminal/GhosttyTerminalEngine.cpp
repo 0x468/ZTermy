@@ -1,6 +1,8 @@
 #include "domain/terminal/GhosttyTerminalEngine.h"
+#include "domain/terminal/GhosttyImagePolicy.h"
 #include "domain/terminal/GhosttyImageSnapshot.h"
 #include "domain/terminal/GhosttyInputMapping.h"
+#include "domain/terminal/GhosttySixelBridge.h"
 #include "domain/terminal/GhosttyStatusEvents.h"
 #include "domain/terminal/TerminalLinkDetector.h"
 
@@ -332,7 +334,8 @@ struct GhosttyTerminalEngine::Impl
         : terminal(terminalHandle),
           renderState(renderStateHandle),
           rowIterator(rowIteratorHandle),
-          rowCells(rowCellsHandle)
+          rowCells(rowCellsHandle),
+          sixelBridge(terminalHandle, &Impl::writePty, this)
     {
     }
 
@@ -460,6 +463,7 @@ struct GhosttyTerminalEngine::Impl
     std::optional<std::string> pendingClipboardWrite;
     GhosttyStatusEvents statusEvents;
     GhosttyImageSnapshot imageSnapshot;
+    GhosttySixelBridge sixelBridge;
     GhosttyColorScheme reportedScheme = GHOSTTY_COLOR_SCHEME_DARK;
     TerminalGeometry geometry;
     std::string pendingSemanticPromptPrefix;
@@ -485,6 +489,8 @@ GhosttyTerminalEngine::create(const TerminalGeometry geometry)
     }
 
     UniqueTerminal terminalOwner(terminal);
+    if (const auto imagePolicyResult = installGhosttyImagePolicy(terminal); imagePolicyResult != GHOSTTY_SUCCESS)
+        return std::unexpected(ghosttyError(imagePolicyResult));
 
     GhosttyRenderState renderState = nullptr;
     if (const GhosttyResult renderResult = ghostty_render_state_new(nullptr, &renderState);
@@ -634,8 +640,7 @@ std::error_code GhosttyTerminalEngine::feed(const std::span<const std::byte> byt
     {
         const auto normalized = normalizeSemanticPromptMarks(bytes, m_impl->pendingSemanticPromptPrefix);
         const auto content = normalized ? std::as_bytes(std::span(*normalized)) : bytes;
-        ghostty_terminal_vt_write(m_impl->terminal, reinterpret_cast<const std::uint8_t *>(content.data()),
-                                  content.size());
+        m_impl->sixelBridge.feed({reinterpret_cast<const char *>(content.data()), content.size()}, m_impl->geometry);
     }
     return {};
 }
@@ -2101,6 +2106,9 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
                     return std::unexpected(ghosttyError(graphemeResult));
                 }
             }
+            // Image placeholders carry placement metadata, never visible glyph ink.
+            if (!cell.grapheme.empty() && cell.grapheme.front() == U'\U0010eeee')
+                cell.invisible = true;
             result.cells.push_back(std::move(cell));
             ++column;
         }
