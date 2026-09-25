@@ -856,6 +856,7 @@ add_library(ztermy_terminal_ui STATIC
     src/platform/windows/WindowsTerminalInput.cpp
     src/platform/windows/WindowsTerminalInput.h
     src/ui/terminal/TerminalItem.cpp
+    src/ui/terminal/TerminalItemBlink.cpp
     src/ui/terminal/TerminalItemPainting.cpp
     src/ui/terminal/TerminalItem.h
     src/ui/terminal/TerminalKeywordHighlighter.cpp

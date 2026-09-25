@@ -6,6 +6,9 @@ Release assets are published through GitHub Releases.
 
 ## Unreleased
 
+- Render SGR blinking text independently of the cursor, keeping selected text
+  readable and reusing cached ink between phases. Reduced/disabled motion and
+  performance mode keep text visible; hidden views stop the text blink timer.
 - Display OSC 9;4 task progress on terminal tabs, including paused, failed and
   indeterminate states. Show bounded OSC 9/777 in-app notifications without
   taking terminal focus; limit notification frequency and avoid frame replays.

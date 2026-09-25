@@ -526,3 +526,90 @@ Release and QML checks pass. The real PowerShell/ConPTY run at
 children were confirmed gone. The first run failed because QObject-only lookup
 missed Repeater delegates; the corrected check uses the existing visual-tree
 lookup and observes the actual tab property and open toast, not just C++ state.
+
+## SGR text blink: 2026-09-26
+
+The pinned Ghostty parser already accepts SGR 5 and 6 as the same blink
+attribute, with SGR 25 and 0 clearing it. The snapshot conversion previously
+dropped that attribute. `TerminalCell::blink` now retains it independently of
+invisible text and cursor blink. VT-fed regression checks cover fragmented
+input, both enable codes, both reset codes, unchanged text/cell width/cursor
+advance, overwriting a previously blinking cell, and immutable old snapshots.
+These checks plus the adjacent styled-cell and render-damage checks pass in
+dynamic Release.
+
+The viewport caches unselected blinking ink in a separate transparent texture,
+bounded by the ink's viewport-clipped rectangle. Backgrounds and selected text
+stay in the base image. Mixed-selection ligatures are shaped as complete runs
+and their colored pixel segments are assigned to the two layers; phase changes
+never split or reshape runs. The 530 ms phase timer changes only scene-graph
+visibility in the ordinary no-IME path, with no texture upload. During IME
+composition the existing full composition redraw remains in use. Removing all
+blinking ink removes the extra texture on the next full paint.
+
+Text blink is independent of cursor blink/focus. Reduced or disabled effects,
+performance mode and the system animation preference keep text continuously
+visible via the shared Motion policy. Hidden/minimized windows and hidden
+viewports stop the text timer; a viewport without unselected blinking ink does
+not start it. Both SGR blink speeds intentionally use the same gentle cadence,
+matching the pinned parser's single attribute.
+
+Real Qt Quick window captures verify changing only unselected blink pixels,
+stable selected/ordinary text, restoring visible ink when disabled, and zero
+uploaded bytes over phase/policy changes. The check passes at normal and 125%
+scale, alongside the existing ligature-selection geometry check. No full test
+matrix or release packaging was run for this change.
+
+The stronger check that removes blink attributes exposed LCD/gamma edge-color
+differences between opaque and transparent text. The final renderer uses one
+reusable transparent row buffer plus transparent cursor ink, rather than a
+second viewport-sized image. All buffers retain native premultiplied ARGB;
+RGBA8888 was evaluated and rejected after CPU measurements. See the pinned
+[Qt 6.8.3 raster implementation](https://raw.githubusercontent.com/qt/qtbase/v6.8.3/src/gui/painting/qpaintengine_raster.cpp)
+for the format-dependent glyph-cache paths. Empty rows skip ink compositing.
+Layer bounds align to physical pixels at fractional DPI. Strict pixel equality
+now also covers returning from blinking to ordinary text, both with and without
+ligatures. Blink runs are rasterized at the original fractional baseline and
+placed at physical-pixel-aligned origins, rather than replaying device-dependent
+text commands into the cached layer. Blink flags, like selection, do not split
+shaping runs. The last segment preserves the rasterizer's guard pixels instead
+of trimming filtered glyph coverage at the advance boundary.
+
+One hardware capture run stalled in `QQuickWindow::grabWindow`, with the render
+thread waiting inside `QRhi::beginFrame`. The owned process (PID 34620) was
+terminated after a non-invasive stack capture. A D3D software-adapter isolation
+run then exposed the reproducible pixel mismatch above; it was not treated as
+a pass or masked by a looser assertion. The post-update capture now waits for
+`frameSwapped` before comparing the result. A second default-hardware capture
+attempt (PID 23024) also stalled and was cleaned up. The new blink test now uses
+asynchronous `grabToImage` with a bounded wait rather than blocking swapchain
+readback. Its three data cases (unligated cells, mixed selection and mixed blink
+without selection) pass on the default hardware adapter at normal and 125%
+scale. Adjacent selection, wide-glyph/cursor, light-theme prediction, underline,
+cursor-cache and IME pixel checks pass with the software-adapter preference.
+This fixes the test capture path; it is not a general Qt/driver hang fix.
+
+### Full-paint cost comparison
+
+`ZTERMY_TEST_PAINT_PROFILE=1` enables `reportsOptInFullPaintProfile` in the
+terminal-item test binary. The fixed workload is 128 columns by 48 rows in a
+1400x900 viewport at DPR 1, with either 3 or 48 populated rows. Each scenario
+discards 8 warm-up frames and records 64 isolated full paints on the render
+thread, not screenshot/wait or build time. Same dynamic Release configuration
+and hardware adapter; baseline uses only the painting source from `0a1a7d8`,
+with the identical current harness and remaining code. The candidate source
+was restored immediately after the baseline run.
+
+| Workload | Baseline median / p95 (µs) | Final median / p95 (µs) |
+|---|---:|---:|
+| Sparse, no ligatures | 1089 / 1145 | 1132 / 1305 |
+| Dense, no ligatures | 13741 / 14217 | 13421 / 13938 |
+| Sparse, ligatures | 573 / 682 | 570 / 742 |
+| Dense, ligatures | 4812 / 4974 | 4649 / 5027 |
+
+The first RGBA-ink candidate cost 8184 µs median for dense ligated text and was
+not accepted. Native ARGB plus skipping empty-row composites brings this
+synthetic workload near its baseline; these samples do not establish a general
+speedup, nor measure SSH throughput or every font/DPI. The separate phase test
+continues to require zero texture-upload bytes while blinking/turning motion
+off. The opt-in profile has no machine-dependent timing pass threshold.

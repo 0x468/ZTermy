@@ -17,6 +17,7 @@ class TerminalEngineTests final : public QObject
     Q_OBJECT
 
 private slots:
+    void preservesBlinkAttributesWithoutChangingText();
     void retainsProgressAcrossFragmentedReports();
     void boundsAndThrottlesProgramNotifications();
     void rejectsInvalidGeometry();
@@ -57,6 +58,39 @@ private slots:
     void pagesThroughScrollback();
     void quotesDroppedPathsForShellDialects();
 };
+
+void TerminalEngineTests::preservesBlinkAttributesWithoutChangingText()
+{
+    auto created = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 10, .rows = 3});
+    QVERIFY(created);
+    auto &engine = **created;
+    const auto feed = [&](std::string_view value) {
+        return !engine.feed(std::as_bytes(std::span(value)));
+    };
+    QVERIFY(feed("A\x1b[5"));
+    const auto partial = engine.snapshot();
+    QVERIFY(partial);
+    QVERIFY(!partial->cell(0, 0).blink);
+    QCOMPARE(partial->cursor.column, std::uint16_t{1});
+    QVERIFY(feed("mB\x1b[25mC\x1b[6mD\x1b[0mE"));
+    const auto styled = engine.snapshot();
+    QVERIFY(styled);
+    for (std::uint16_t column = 0; column < 5; ++column)
+    {
+        QCOMPARE(styled->cell(column, 0).grapheme, std::u32string(1, U'A' + column));
+        QCOMPARE(styled->cell(column, 0).blink, column == 1 || column == 3);
+        QVERIFY(!styled->cell(column, 0).invisible);
+        QCOMPARE(styled->cell(column, 0).displayWidth, std::uint8_t{1});
+    }
+    QCOMPARE(styled->cursor.column, std::uint16_t{5});
+    // Replacing a blinking cell after reset must not retain its old attribute.
+    QVERIFY(feed("\r\x1b[CX"));
+    const auto replaced = engine.snapshot();
+    QVERIFY(replaced);
+    QCOMPARE(replaced->cell(1, 0).grapheme, std::u32string(U"X"));
+    QVERIFY(!replaced->cell(1, 0).blink);
+    QVERIFY(styled->cell(1, 0).blink);
+}
 
 void TerminalEngineTests::retainsProgressAcrossFragmentedReports()
 {

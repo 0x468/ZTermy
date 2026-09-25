@@ -15,6 +15,7 @@
 #include <QKeyEvent>
 #include <QMimeData>
 #include <QMouseEvent>
+#include <QQuickItemGrabResult>
 #include <QQuickWindow>
 #include <QSignalSpy>
 #include <QTest>
@@ -73,6 +74,9 @@ class TerminalItemTests final : public QObject
     Q_OBJECT
 
 private slots:
+    void reportsOptInFullPaintProfile();
+    void blinksOnlyUnselectedInkWithoutTextureUploads_data();
+    void blinksOnlyUnselectedInkWithoutTextureUploads();
     void positionsImeAtTerminalCursor();
     void skipsKeywordStylesWithoutRulesAndReportsScrollbarChanges();
     void tracksPreeditCursorWithoutSendingInput();
@@ -1484,6 +1488,155 @@ void TerminalItemTests::paintsColoredUnderlineStyles()
     QVERIFY2(greenPixels >= 3, "Double underline must use the terminal's separate underline color");
     window.close();
     QCoreApplication::processEvents();
+}
+
+void TerminalItemTests::reportsOptInFullPaintProfile()
+{
+    if (qEnvironmentVariableIntValue("ZTERMY_TEST_PAINT_PROFILE") != 1)
+        QSKIP("Opt-in renderer profiling; not part of normal regression timing");
+    for (bool ligatures : {false, true})
+        for (bool dense : {false, true})
+        {
+            QQuickWindow window;
+            auto *item = new TestableTerminalItem(window.contentItem());
+            item->setLigaturesEnabled(ligatures);
+            item->setTerminalCursorVisible(false);
+            item->setTextBlinkEnabled(false);
+            item->setPerformanceMetricsEnabled(true);
+            window.resize(1400, 900);
+            item->setSize(window.size());
+            auto snapshot = snapshotAt(0, 0);
+            snapshot->columns = 128;
+            snapshot->rows = 48;
+            snapshot->cells.resize(std::size_t{128} * 48);
+            snapshot->cursor.visible = false;
+            for (std::size_t i = 0; i < (dense ? snapshot->cells.size() : std::size_t{384}); ++i)
+            {
+                snapshot->cells[i].grapheme.assign(1, U'A' + static_cast<char32_t>(i % 26));
+                snapshot->cells[i].foreground = {.red = 220, .green = 220, .blue = 220};
+            }
+            item->setSnapshot(snapshot);
+            window.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&window));
+            std::vector<std::uint64_t> paintMicroseconds;
+            for (int frame = 0; frame < 72; ++frame)
+            {
+                QSignalSpy swapped(&window, &QQuickWindow::frameSwapped);
+                item->resetPerformanceMetrics();
+                item->setSnapshot(snapshot);
+                QVERIFY(swapped.wait(3000));
+                const auto metrics = item->performanceMetrics();
+                QCOMPARE(metrics.paintLatency.count, std::uint64_t{1});
+                if (frame >= 8)
+                    paintMicroseconds.push_back(metrics.paintLatency.maxMicroseconds);
+            }
+            std::ranges::sort(paintMicroseconds);
+            qInfo() << "full-paint-us" << "ligatures" << ligatures << "dense" << dense << "DPR"
+                    << window.devicePixelRatio() << "samples" << paintMicroseconds.size() << "median"
+                    << paintMicroseconds[32] << "p95" << paintMicroseconds[60] << "max" << paintMicroseconds.back();
+            window.close();
+        }
+}
+
+void TerminalItemTests::blinksOnlyUnselectedInkWithoutTextureUploads_data()
+{
+    QTest::addColumn<bool>("ligatures");
+    QTest::addColumn<bool>("selectedMiddle");
+    QTest::newRow("cell-ink") << false << true;
+    QTest::newRow("mixed-selection-run") << true << true;
+    QTest::newRow("mixed-blink-run") << true << false;
+}
+
+void TerminalItemTests::blinksOnlyUnselectedInkWithoutTextureUploads()
+{
+    QFETCH(bool, ligatures);
+    QFETCH(bool, selectedMiddle);
+    QQuickWindow window;
+    auto *item = new TestableTerminalItem(window.contentItem());
+    item->setFontPixelSize(28);
+    item->setLigaturesEnabled(ligatures);
+    item->setTerminalCursorVisible(false);
+    item->setTextBlinkEnabled(false);
+    item->setSelectionBackground(Qt::black);
+    item->setSelectionForeground(Qt::white);
+    auto snapshot = snapshotAt(0, 0);
+    snapshot->defaultBackground = {.red = 0, .green = 0, .blue = 0};
+    snapshot->defaultForeground = {.red = 255, .green = 255, .blue = 255};
+    snapshot->cursor.visible = false;
+    snapshot->selectionPresent = selectedMiddle;
+    for (std::size_t column = 0; column < 3; ++column)
+    {
+        snapshot->cells[column].grapheme = U"W";
+        snapshot->cells[column].foreground = snapshot->defaultForeground;
+        snapshot->cells[column].blink = column < 2;
+        snapshot->cells[column].selected = selectedMiddle && column == 1;
+    }
+    item->setSnapshot(snapshot);
+    window.resize(240, 100);
+    item->setSize(window.size());
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    const auto capture = [&]() -> QImage {
+        const auto grab = item->grabToImage();
+        if (!grab)
+            return {};
+        QSignalSpy ready(grab.data(), &QQuickItemGrabResult::ready);
+        if (grab->image().isNull() && !ready.wait(3000))
+            return {};
+        return grab->image();
+    };
+    const QImage shown = capture();
+    QVERIFY(!shown.isNull());
+    const QRectF cell = item->inputMethodQuery(Qt::ImCursorRectangle).toRectF();
+    const qreal scale = shown.devicePixelRatio();
+    const int stableLeft = qCeil((cell.left() + cell.width() * (selectedMiddle ? 1 : 2)) * scale);
+    const QRect stableArea(stableLeft, 0, shown.width() - stableLeft, shown.height());
+    item->setPerformanceMetricsEnabled(true);
+    item->resetPerformanceMetrics();
+    item->setTextBlinkEnabled(true);
+    QImage hidden;
+    const auto hiddenPhaseSeen = [&] {
+        hidden = capture();
+        return !hidden.isNull() && hidden != shown;
+    };
+    QTRY_VERIFY_WITH_TIMEOUT(hiddenPhaseSeen(), 2000);
+    QCOMPARE(hidden.copy(stableArea), shown.copy(stableArea));
+    const auto metrics = item->performanceMetrics();
+    QCOMPARE(metrics.uploadedBytes, std::uint64_t{0});
+    item->setTextBlinkEnabled(false);
+    QTRY_COMPARE(capture(), shown);
+    QTest::qWait(650);
+    QCOMPARE(capture(), shown);
+    QCOMPARE(item->performanceMetrics().uploadedBytes, std::uint64_t{0});
+    auto plain = std::make_shared<ztermy::terminal::TerminalSnapshot>(*snapshot);
+    for (auto &value : plain->cells)
+        value.blink = false;
+    QSignalSpy frames(&window, &QQuickWindow::frameSwapped);
+    item->setSnapshot(plain);
+    QTRY_VERIFY(!frames.isEmpty());
+    const auto plainImage = capture();
+    if (plainImage.size() == shown.size() && plainImage != shown)
+    {
+        int differences = 0;
+        int maximumDelta = 0;
+        for (int y = 0; y < shown.height(); ++y)
+            for (int x = 0; x < shown.width(); ++x)
+            {
+                const auto a = shown.pixelColor(x, y);
+                const auto b = plainImage.pixelColor(x, y);
+                if (a != b)
+                {
+                    ++differences;
+                    maximumDelta = std::max({maximumDelta, std::abs(a.red() - b.red()), std::abs(a.green() - b.green()),
+                                             std::abs(a.blue() - b.blue())});
+                    if (differences <= 3)
+                        qInfo() << x << y << a << b;
+                }
+            }
+        qInfo() << "blink/plain delta" << differences << maximumDelta << shown.devicePixelRatio();
+    }
+    QCOMPARE(plainImage, shown);
+    window.close();
 }
 
 void TerminalItemTests::keepsLigatureGeometryWhenSelectionChanges()

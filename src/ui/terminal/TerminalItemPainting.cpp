@@ -11,6 +11,7 @@
 #include <QLoggingCategory>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPicture>
 #include <QQuickWindow>
 #include <QSGSimpleTextureNode>
 #include <QSGTexture>
@@ -71,6 +72,8 @@ public:
     ztermy::terminal::TerminalSnapshotPtr previousDiagnosticSnapshot;
     QSGSimpleTextureNode *cursorNode = nullptr;
     QRectF cursorRect;
+    QSGSimpleTextureNode *blinkNode = nullptr;
+    QRectF blinkRect;
 
 private:
 #if !defined(NDEBUG)
@@ -263,8 +266,10 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
     QColor defaultBackgroundColor = m_backgroundOverride.isValid() ? m_backgroundOverride : color(defaultBackground);
     defaultBackgroundColor.setAlphaF(static_cast<float>(m_backgroundOpacity));
     const bool cursorOnlyPaint = !m_fullInvalidationPending && !node->image.isNull() && node->pixelSize == pixelSize
-                                 && m_snapshot && m_snapshot->cursor.row < m_snapshot->rows;
-    if (cursorOnlyPaint && m_preeditText.isEmpty())
+                                 && m_snapshot && m_snapshot->cursor.row < m_snapshot->rows && m_preeditText.isEmpty();
+    if (node->blinkNode)
+        node->blinkNode->setRect(textBlinkVisible() ? node->blinkRect : QRectF{});
+    if (cursorOnlyPaint)
     {
         if (node->cursorNode != nullptr)
         {
@@ -320,6 +325,9 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         phaseMarkNanoseconds = now;
     }
     QImage &image = node->image;
+    QPicture blinkInk;
+    QPainter blinkPainter(&blinkInk);
+    blinkPainter.setRenderHint(QPainter::TextAntialiasing);
 
     if (m_snapshot)
     {
@@ -433,8 +441,19 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         const double defaultBackgroundLuminance = relativeLuminance(defaultBackgroundColor);
         QHash<quint64, QColor> readableForegrounds;
         QString grapheme;
+        // Rasterize all ink against transparency before compositing. Otherwise
+        // Windows LCD/gamma blending changes when a run crosses a selection or
+        // blink boundary. Reuse one row buffer, not a second full viewport.
+        QImage rowInk(QSize{pixelSize.width(), qCeil(cellHeightValue * devicePixelRatio) + 1},
+                      QImage::Format_ARGB32_Premultiplied);
+        rowInk.setDevicePixelRatio(devicePixelRatio);
         for (quint16 row = firstRow; row < lastRow; ++row)
         {
+            QPainter textPainter;
+            const qreal rowTop =
+                qFloor((verticalPadding + row * cellHeightValue) * devicePixelRatio) / devicePixelRatio;
+            activeStyleBits = std::numeric_limits<std::size_t>::max();
+            activePen = QColor{};
             for (quint16 column = 0; column < m_snapshot->columns; ++column)
             {
                 const terminal::TerminalCell &cell = m_snapshot->cell(column, row);
@@ -450,6 +469,13 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                 {
                     continue;
                 }
+                if (!textPainter.isActive())
+                {
+                    rowInk.fill(Qt::transparent);
+                    textPainter.begin(&rowInk);
+                    textPainter.setRenderHint(QPainter::TextAntialiasing);
+                    textPainter.translate(0, -rowTop);
+                }
 
                 const bool hoverUnderline = cell.hyperlinkId != 0 && cell.hyperlinkId == m_hoveredLinkId;
                 const bool fontUnderline =
@@ -461,7 +487,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                                               | (cell.overline ? styleOverline : 0U);
                 if (styleBits != activeStyleBits)
                 {
-                    painter.setFont(styledFont(styleBits));
+                    textPainter.setFont(styledFont(styleBits));
                     activeStyleBits = styleBits;
                 }
                 const std::size_t styleIndex = (static_cast<std::size_t>(row) * m_snapshot->columns) + column;
@@ -501,7 +527,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                 const QColor pen = cell.selected ? selectedPen : normalPen;
                 if (pen != activePen)
                 {
-                    painter.setPen(pen);
+                    textPainter.setPen(pen);
                     activePen = pen;
                 }
 
@@ -513,6 +539,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                 quint16 runEnd = column;
                 int previousDisplayColumn = displayColumn;
                 bool mixedSelection = false;
+                bool mixedBlink = false;
                 if (m_ligaturesEnabled && ligatureRunCell(cell))
                 {
                     while (runEnd + 1 < m_snapshot->columns)
@@ -538,6 +565,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                         }
                         grapheme.append(QChar(static_cast<char16_t>(next.grapheme.front())));
                         mixedSelection = mixedSelection || next.selected != cell.selected;
+                        mixedBlink = mixedBlink || next.blink != cell.blink;
                         ++runEnd;
                         previousDisplayColumn = nextDisplayColumn;
                     }
@@ -546,54 +574,74 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                     && m_snapshot->cursor.column <= runEnd && runEnd > column)
                 {
                     cursorLigatureText = grapheme;
-                    cursorLigatureFont = painter.font();
+                    cursorLigatureFont = textPainter.font();
                     cursorLigatureStartColumn = column;
                 }
                 const QPointF baseline{horizontalPadding + (displayColumn * cellWidthValue),
                                        verticalPadding + (row * cellHeightValue) + ascent};
-                if (!mixedSelection)
+                if (!mixedSelection && !mixedBlink && !cell.blink)
                 {
-                    painter.drawText(baseline, grapheme);
+                    textPainter.drawText(baseline, grapheme);
                 }
                 else
                 {
                     // Shape the full run for both colors, then crop pixels per cell so selection cannot reshape it.
-                    const qreal runWidth = (runEnd - column + 1) * cellWidthValue;
-                    QImage runImage(QSize{std::max(1, qCeil(runWidth * devicePixelRatio)),
-                                          std::max(1, qCeil(cellHeightValue * devicePixelRatio))},
-                                    QImage::Format_ARGB32_Premultiplied);
+                    const qreal runWidth = std::max<int>(runEnd - column + 1, cell.displayWidth) * cellWidthValue;
+                    const qreal runTop = verticalPadding + row * cellHeightValue;
+                    const QPointF runOrigin{qFloor(baseline.x() * devicePixelRatio) / devicePixelRatio,
+                                            qFloor(runTop * devicePixelRatio) / devicePixelRatio};
+                    // Preserve the rasterizer's filtered coverage at the end of the run.
+                    QImage runImage(
+                        QSize{std::max(1, qCeil((baseline.x() + runWidth - runOrigin.x()) * devicePixelRatio)) + 2,
+                              std::max(1, qCeil((runTop + cellHeightValue - runOrigin.y()) * devicePixelRatio))},
+                        QImage::Format_ARGB32_Premultiplied);
                     runImage.setDevicePixelRatio(devicePixelRatio);
                     for (const bool selectedPass : {false, true})
                     {
+                        if (!mixedSelection && selectedPass != cell.selected)
+                            continue;
                         runImage.fill(Qt::transparent);
                         QPainter runPainter(&runImage);
                         runPainter.setRenderHint(QPainter::TextAntialiasing);
-                        runPainter.setFont(painter.font());
+                        runPainter.setFont(textPainter.font());
                         runPainter.setPen(selectedPass ? selectedPen : normalPen);
-                        runPainter.drawText(QPointF{0.0, ascent}, grapheme);
+                        runPainter.drawText(baseline - runOrigin, grapheme);
                         runPainter.end();
+                        if (!mixedSelection && !mixedBlink)
+                        {
+                            QPainter &ink = cell.blink && !cell.selected ? blinkPainter : textPainter;
+                            ink.drawImage(runOrigin, runImage);
+                            continue;
+                        }
 
                         const int runLast = runEnd;
                         int segmentStart = column;
                         while (segmentStart <= runLast)
                         {
                             const bool selected = m_snapshot->cell(static_cast<quint16>(segmentStart), row).selected;
+                            const bool blinking = m_snapshot->cell(static_cast<quint16>(segmentStart), row).blink;
                             int segmentEnd = segmentStart;
                             while (segmentEnd < runLast
-                                   && m_snapshot->cell(static_cast<quint16>(segmentEnd + 1), row).selected == selected)
+                                   && m_snapshot->cell(static_cast<quint16>(segmentEnd + 1), row).selected == selected
+                                   && m_snapshot->cell(static_cast<quint16>(segmentEnd + 1), row).blink == blinking)
                             {
                                 ++segmentEnd;
                             }
                             if (selected == selectedPass)
                             {
                                 const qreal offset = (segmentStart - column) * cellWidthValue;
-                                const qreal segmentWidth = (segmentEnd - segmentStart + 1) * cellWidthValue;
-                                painter.drawImage(
-                                    QRectF{baseline.x() + offset, verticalPadding + (row * cellHeightValue),
-                                           segmentWidth, cellHeightValue},
-                                    runImage,
-                                    QRectF{offset * devicePixelRatio, 0.0, segmentWidth * devicePixelRatio,
-                                           cellHeightValue * devicePixelRatio});
+                                const qreal segmentWidth =
+                                    segmentEnd == runLast
+                                        ? runOrigin.x() + runImage.width() / devicePixelRatio - baseline.x() - offset
+                                        : (segmentEnd - segmentStart + 1) * cellWidthValue;
+                                QPainter &ink = blinking && !selected ? blinkPainter : textPainter;
+                                ink.drawImage(QRectF{baseline.x() + offset, verticalPadding + (row * cellHeightValue),
+                                                     segmentWidth, cellHeightValue},
+                                              runImage,
+                                              QRectF{(baseline.x() + offset - runOrigin.x()) * devicePixelRatio,
+                                                     (runTop - runOrigin.y()) * devicePixelRatio,
+                                                     segmentWidth * devicePixelRatio,
+                                                     cellHeightValue * devicePixelRatio});
                             }
                             segmentStart = segmentEnd + 1;
                         }
@@ -606,9 +654,11 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                     while (segmentStart <= runLast)
                     {
                         const bool selected = m_snapshot->cell(static_cast<quint16>(segmentStart), row).selected;
+                        const bool blinking = m_snapshot->cell(static_cast<quint16>(segmentStart), row).blink;
                         int segmentEnd = segmentStart;
                         while (segmentEnd < runLast
-                               && m_snapshot->cell(static_cast<quint16>(segmentEnd + 1), row).selected == selected)
+                               && m_snapshot->cell(static_cast<quint16>(segmentEnd + 1), row).selected == selected
+                               && m_snapshot->cell(static_cast<quint16>(segmentEnd + 1), row).blink == blinking)
                             ++segmentEnd;
                         const QColor underlineInk = cell.underlineColor ? color(*cell.underlineColor)
                                                     : selected          ? selectedPen
@@ -616,12 +666,18 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                         const QRectF underlineRect{baseline.x() + ((segmentStart - column) * cellWidthValue),
                                                    verticalPadding + (row * cellHeightValue),
                                                    (segmentEnd - segmentStart + 1) * cellWidthValue, cellHeightValue};
-                        paintUnderline(painter, cell.underlineStyle, underlineInk, underlineRect, baseline.y(),
+                        QPainter &ink = blinking && !selected ? blinkPainter : textPainter;
+                        paintUnderline(ink, cell.underlineStyle, underlineInk, underlineRect, baseline.y(),
                                        devicePixelRatio);
                         segmentStart = segmentEnd + 1;
                     }
                 }
                 column = runEnd;
+            }
+            if (textPainter.isActive())
+            {
+                textPainter.end();
+                painter.drawImage(QPointF{0, rowTop}, rowInk);
             }
         }
         if (!cursorOnlyPaint && m_quickSelectActive)
@@ -746,6 +802,11 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                         m_snapshot->cell(m_snapshot->cursor.column, m_snapshot->cursor.row);
                     if (!cell.grapheme.empty() && !cell.invisible)
                     {
+                        QImage glyphImage(cursorPixelSize, QImage::Format_ARGB32_Premultiplied);
+                        glyphImage.setDevicePixelRatio(devicePixelRatio);
+                        glyphImage.fill(Qt::transparent);
+                        QPainter glyphPainter(&glyphImage);
+                        glyphPainter.setRenderHint(QPainter::TextAntialiasing);
                         QFont cursorFont = m_font;
                         cursorFont.setBold(cell.bold);
                         cursorFont.setItalic(cell.italic);
@@ -753,22 +814,22 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                                                 && !cell.underlineColor);
                         cursorFont.setStrikeOut(cell.strikethrough);
                         cursorFont.setOverline(cell.overline);
-                        cursorPainter.setFont(cursorFont);
-                        cursorPainter.setPen(m_backgroundOverride.isValid()
-                                                     && sameColor(cell.background, defaultBackground)
-                                                 ? m_backgroundOverride
-                                                 : color(cell.background));
+                        glyphPainter.setFont(cursorFont);
+                        glyphPainter.setPen(m_backgroundOverride.isValid()
+                                                    && sameColor(cell.background, defaultBackground)
+                                                ? m_backgroundOverride
+                                                : color(cell.background));
                         if (!cursorLigatureText.isEmpty())
                         {
                             const qreal offset =
                                 (m_snapshot->cursor.column - cursorLigatureStartColumn) * cellWidthValue;
-                            cursorPainter.setFont(cursorLigatureFont);
-                            cursorPainter.drawText(QPointF{cursorCell.left() - offset, cursorCell.top() + ascent},
-                                                   cursorLigatureText);
+                            glyphPainter.setFont(cursorLigatureFont);
+                            glyphPainter.drawText(QPointF{cursorCell.left() - offset, cursorCell.top() + ascent},
+                                                  cursorLigatureText);
                         }
                         else
                         {
-                            cursorPainter.drawText(
+                            glyphPainter.drawText(
                                 QPointF(cursorCell.left(), cursorCell.top() + ascent),
                                 QString::fromUcs4(cell.grapheme.data(), static_cast<qsizetype>(cell.grapheme.size())));
                         }
@@ -776,10 +837,12 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                             && (cell.underlineStyle != terminal::TerminalUnderlineStyle::single || cell.underlineColor))
                         {
                             const QColor underlineInk =
-                                cell.underlineColor ? color(*cell.underlineColor) : cursorPainter.pen().color();
-                            paintUnderline(cursorPainter, cell.underlineStyle, underlineInk, cursorCell,
+                                cell.underlineColor ? color(*cell.underlineColor) : glyphPainter.pen().color();
+                            paintUnderline(glyphPainter, cell.underlineStyle, underlineInk, cursorCell,
                                            cursorCell.top() + ascent, devicePixelRatio);
                         }
+                        glyphPainter.end();
+                        cursorPainter.drawImage(QPointF{}, glyphImage);
                     }
                     break;
                 }
@@ -812,6 +875,41 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         }
     }
 
+    blinkPainter.end();
+    const QRect blinkBounds = blinkInk.boundingRect().intersected(boundingRect().toAlignedRect());
+    std::uint64_t blinkPixels = 0;
+    if (!blinkBounds.isEmpty())
+    {
+        const int left = qFloor(blinkBounds.left() * devicePixelRatio);
+        const int top = qFloor(blinkBounds.top() * devicePixelRatio);
+        const QSize inkSize{qCeil((blinkBounds.x() + blinkBounds.width()) * devicePixelRatio) - left,
+                            qCeil((blinkBounds.y() + blinkBounds.height()) * devicePixelRatio) - top};
+        node->blinkRect = QRectF{left / devicePixelRatio, top / devicePixelRatio, inkSize.width() / devicePixelRatio,
+                                 inkSize.height() / devicePixelRatio};
+        QImage blinkImage(inkSize, QImage::Format_ARGB32_Premultiplied);
+        blinkImage.setDevicePixelRatio(devicePixelRatio);
+        blinkImage.fill(Qt::transparent);
+        QPainter ink(&blinkImage);
+        ink.translate(-node->blinkRect.topLeft());
+        ink.drawPicture(QPoint{}, blinkInk);
+        ink.end();
+        if (!node->blinkNode)
+        {
+            node->blinkNode = new QSGSimpleTextureNode;
+            node->blinkNode->setOwnsTexture(true);
+            node->blinkNode->setFiltering(QSGTexture::Nearest);
+            node->prependChildNode(node->blinkNode);
+        }
+        node->blinkNode->setTexture(window()->createTextureFromImage(blinkImage));
+        node->blinkNode->setRect(textBlinkVisible() ? node->blinkRect : QRectF{});
+        blinkPixels = static_cast<std::uint64_t>(blinkImage.width()) * blinkImage.height();
+    }
+    else if (node->blinkNode)
+    {
+        node->removeChildNode(node->blinkNode);
+        delete node->blinkNode;
+        node->blinkNode = nullptr;
+    }
     const qint64 paintNanoseconds = timingEnabled ? frameTimer.nsecsElapsed() : 0;
     if (collectPaintPhases)
     {
@@ -836,7 +934,8 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         const auto pixelCount =
             static_cast<std::uint64_t>(pixelSize.width()) * static_cast<std::uint64_t>(pixelSize.height());
         m_renderMetrics.recordFrame(std::chrono::nanoseconds{paintNanoseconds},
-                                    std::chrono::nanoseconds{textureNanoseconds}, pixelCount, damage, damagedRowCount);
+                                    std::chrono::nanoseconds{textureNanoseconds}, pixelCount + blinkPixels, damage,
+                                    damagedRowCount);
     }
 #if !defined(NDEBUG)
     node->recordTiming(paintNanoseconds, textureNanoseconds, pixelSize, damage, damagedRowCount);

@@ -403,6 +403,7 @@ Item {
                 selectionBackground: Theme.terminalSelectionBackground
                 selectionForeground: Theme.terminalSelectionForeground
                 cursorBlink: root.cursorBlink
+                textBlinkEnabled: Motion.enabled && !Motion.reduced
                 terminalCursorVisible: !!leaf.node.active && activeFocus && leaf.Window.window !== null && leaf.Window.window.active
                 copyOnSelect: root.copyOnSelect
                 keepSelectionAfterCopy: root.keepSelectionAfterCopy

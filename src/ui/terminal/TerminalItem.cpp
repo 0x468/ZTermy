@@ -111,18 +111,7 @@ TerminalItem::TerminalItem(QQuickItem *parent) : QQuickItem(parent)
     m_font.setFixedPitch(true);
     refreshFontMetrics();
 
-    m_cursorBlinkTimer.setInterval(530);
-    QObject::connect(&m_cursorBlinkTimer, &QTimer::timeout, this, [this] {
-        // Only the focused viewport blinks; the others keep a steady cursor.
-        if (!isVisible() || !hasActiveFocus() || !m_snapshot || !m_snapshot->cursor.visible)
-        {
-            return;
-        }
-        m_cursorBlinkPhase = !m_cursorBlinkPhase;
-        m_renderMetrics.recordCursorInvalidation();
-        invalidateRenderer(false);
-    });
-    m_cursorBlinkTimer.start();
+    initializeBlinkTimers();
 
     m_selectionAutoscrollTimer.setInterval(32);
     QObject::connect(&m_selectionAutoscrollTimer, &QTimer::timeout, this, [this] {
@@ -367,6 +356,7 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
         setHasSelection(false);
         const bool scrollbarWasVisible = scrollbarVisible();
         m_snapshot.reset();
+        refreshTextBlink();
         m_keywordStyles.clear();
         m_searchStyles.clear();
         m_searchStylesDirty = false;
@@ -409,6 +399,7 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
                                 || m_snapshot->scrollbar.offset != snapshot->scrollbar.offset
                                 || m_snapshot->scrollbar.visible != snapshot->scrollbar.visible;
     m_snapshot = std::move(snapshot);
+    refreshTextBlink();
     refreshKeywordStyles();
     m_searchStylesDirty = true;
     refreshSelectionMatchesKeywordHighlight();

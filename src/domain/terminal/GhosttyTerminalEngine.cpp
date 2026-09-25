@@ -2067,6 +2067,7 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
             cell.strikethrough = style.strikethrough;
             cell.overline = style.overline;
             cell.invisible = style.invisible;
+            cell.blink = style.blink;
             cell.selected =
                 selectionResult == GHOSTTY_SUCCESS && column >= rowSelection.start_x && column <= rowSelection.end_x;
             if (style.inverse)

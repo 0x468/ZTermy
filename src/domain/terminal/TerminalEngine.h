@@ -52,6 +52,7 @@ struct TerminalCell
     bool strikethrough = false;
     bool overline = false;
     bool invisible = false;
+    bool blink = false;
     bool selected = false;
     std::uint8_t displayWidth = 1;
     // Zero means no hyperlink. Non-zero values are one-based indexes into

@@ -36,6 +36,7 @@ class QDropEvent;
 
 namespace ztermy::ui
 {
+class TerminalTextBlink;
 
 class TerminalItem : public QQuickItem
 {
@@ -49,6 +50,7 @@ class TerminalItem : public QQuickItem
         qreal backgroundOpacity READ backgroundOpacity WRITE setBackgroundOpacity NOTIFY backgroundOpacityChanged)
     Q_PROPERTY(QString cursorPreference READ cursorPreference WRITE setCursorPreference NOTIFY cursorAppearanceChanged)
     Q_PROPERTY(bool cursorBlink READ cursorBlink WRITE setCursorBlink NOTIFY cursorAppearanceChanged)
+    Q_PROPERTY(bool textBlinkEnabled READ textBlinkEnabled WRITE setTextBlinkEnabled NOTIFY textBlinkEnabledChanged)
     Q_PROPERTY(bool terminalCursorVisible READ terminalCursorVisible WRITE setTerminalCursorVisible NOTIFY
                    cursorAppearanceChanged)
     Q_PROPERTY(bool copyOnSelect READ copyOnSelect WRITE setCopyOnSelect NOTIFY copyOnSelectChanged)
@@ -99,6 +101,8 @@ class TerminalItem : public QQuickItem
         QColor selectionForeground READ selectionForeground WRITE setSelectionForeground NOTIFY paletteOverrideChanged)
 
 public:
+    bool textBlinkEnabled() const;
+    void setTextBlinkEnabled(bool enabled);
     explicit TerminalItem(QQuickItem *parent = nullptr);
 
     [[nodiscard]] QString statusText() const;
@@ -195,6 +199,7 @@ public slots:
     Q_INVOKABLE void cancelCopyMode();
 
 signals:
+    void textBlinkEnabledChanged();
     void inputGenerated(const QByteArray &bytes);
     void keyEventGenerated(const ztermy::terminal::TerminalKeyEvent &event);
     void mouseEventGenerated(const ztermy::terminal::TerminalMouseEvent &event);
@@ -281,13 +286,11 @@ private:
     void refreshSearchStyles();
     [[nodiscard]] ztermy::terminal::TerminalCursorStyle effectiveCursorStyle() const noexcept;
     void setHasSelection(bool selected);
-    void showSelectionAction(const QPointF &position, const bool preferBelow)
-    {
-        m_selectionActionPosition = position;
-        m_selectionActionPreferBelow = preferBelow;
-        m_selectionActionVisible = true;
-        emit selectionActionChanged();
-    }
+    void showSelectionAction(const QPointF &position, bool preferBelow);
+    void initializeBlinkTimers();
+    void refreshTextBlink();
+    bool textBlinkVisible() const;
+    TerminalTextBlink *m_textBlink = nullptr;
     void refreshSelectionMatchesKeywordHighlight();
     void selectWordAt(const ztermy::terminal::TerminalPoint &point, const QPointF &position);
     void selectLineAt(quint16 row, const QPointF &position);
