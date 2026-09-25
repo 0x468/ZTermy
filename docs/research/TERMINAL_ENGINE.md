@@ -827,9 +827,98 @@ produces zero green placeholder pixels (red Sixel and blue Kitty remain visible)
 This is an unresolved end-to-end failure, not completed Unicode compatibility.
 Artifact: `build/msvc-dynamic-release/test-data/unicode-images-6c912f54f51d4e11a4dd4a7331527b15/terminal-images.png`.
 
-Still pending: storage metadata admission limits (pixel-byte limits alone do not
-bound image/placement counts), Unicode placeholder full-app acceptance, IME/selection-overlay
-priority around above-text images, resource/performance policy, and full-app
+That failure is now reproduced and fixed: the dependency's integer source
+rectangles rounded the one-pixel image's per-row source slices to zero. A new
+regression failed with zero placements before the fix; preserving fractional
+geometry produces the expected quarter-pixel slices without enlarging stored
+pixels. Existing coordinate inheritance, replacement, deletion and scrolling
+checks also pass. Hardware Qt item checks cover the magnified multi-row case at
+normal and 125% scale. The full PowerShell/ConPTY/application smoke now exits 0
+and its inspected screenshot contains red Sixel, blue Kitty and green Unicode
+images. No application or direct child remained after the smoke.
+Artifact: `build/msvc-dynamic-release/test-data/unicode-fractional-bcca95cc7d794cfba0dd3f9ea7eaae67/terminal-images.png`.
+
+Storage now independently caps images and placements at 4096 records per screen.
+An adversarial single-pixel stream reproduced the missing limit before the fix.
+The protocol-level test now verifies rejection, replacement while full, deletion
+and resumed admission for both maps; ordinary text still works afterwards.
+Replacing an explicit placement releases the previous tracked pin only after
+success. The focused engine group (10 cases plus init/cleanup) passes in 838 ms,
+and all four image-rendering cases pass. Long-running memory profiling of repeated
+replacement is still needed; a count-limited snapshot alone is not proof of it.
+
+Three hardware-rendered checks reproduced images covering IME preedit and
+selection backgrounds (above-text images covered both; below-text images covered
+selection). Protected local-interaction rectangles now preserve these regions
+without hiding the rest of the image. The checks include Chinese preedit,
+cancellation/selection clearing and restored image pixels, at normal and 125%
+scale. Adjacent tests confirm no premature or duplicate IME input. These Qt
+input-method event checks do not replace native candidate-window acceptance.
+
+Still pending: broader Unicode interoperability, resource/performance policy, and full-app
 runtime evidence. The current patch is not a claim of complete Kitty or Sixel
 support. Reference:
 [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/).
+
+### Image lifetime measurement (2026-09-26, dynamic Release)
+
+Build the opt-in `ztermy_terminal_image_memory_probe` target through
+`msvc-dynamic-release`, then run the resulting EXE with the matching Qt runtime
+on PATH. It is excluded from normal builds and CTest, uses only synthetic pixels,
+and starts no shell. CSV output includes private bytes, working set and Windows
+heap busy bytes/blocks. Heap walking is diagnostic-only and is not used in the
+application; these elapsed times include measurement overhead.
+
+The first three short runs showed a flat private-byte count between 5,000 and
+100,000 replacements of the same placement (5,586,944 / 5,607,424 / 5,582,848
+bytes respectively). Retaining sixteen old 1-MiB image snapshots increased memory
+as expected; releasing them expired every weak image reference. That alone did
+not prove full memory recovery: repeating the cycle continued to grow private
+bytes. An extended 20-cycle run, now also walking process heaps, measured:
+
+| After deleting the image | Private bytes | Heap busy bytes | Heap busy blocks |
+| --- | ---: | ---: | ---: |
+| Cycle 1 | 11,431,936 | 1,702,738 | 765 |
+| Cycle 10 | 15,630,336 | 1,702,738 | 765 |
+| Cycle 20 | 21,274,624 | 1,702,738 | 765 |
+
+After engine destruction, private bytes remained 19,279,872. The benchmark
+still owns its fixed base64 source buffer at that point. Stable heap busy counts
+and expired snapshot references narrow the investigation but do **not** prove
+that all allocations are freed: direct virtual allocations and allocator caches
+are outside that heap census. Isolating transport parsing, image loading and
+snapshot capture, then accounting for the native allocator, was the next step.
+
+The probe now accepts `retain`, `upload-only`, `no-retain`, `image-only`,
+`metadata-only` and `iterator-only`; an optional second argument selects 1–200
+cycles (default 20). `image-only` bypasses text render-state updates;
+`metadata-only` also omits copying pixels; `iterator-only` repeats enumeration of
+one fixed tiny image without uploading. These are diagnostic comparisons, not
+alternative application behaviors. The extra native terminal in the isolated
+modes makes their absolute baseline different; compare trends within each mode.
+
+Before iterator reuse, upload-only stabilized by cycle 10 (12,775,424 bytes),
+whereas no-retain grew from 11,460,608 to 21,311,488 bytes between cycles 1 and 20.
+Image-only and metadata-only both grew as well, but 1,000 iterator-only operations
+were flat. This isolated the problematic allocation **pattern**, not a leaked
+pixel owner: repeatedly creating/freeing iterators interleaved with uploads.
+The snapshot adapter now owns one reusable iterator, with reset/rebind on every
+capture. The pinned default allocator may use Zig's slab allocator when libc is
+not linked; we do not label all retained private bytes as live allocations.
+
+After this change, the no-retain 100-cycle run (1,600 uploads) measured:
+
+| Cycle, after deleting image | Private bytes | Heap busy bytes | Heap busy blocks |
+| --- | ---: | ---: | ---: |
+| 1 | 11,403,264 | 1,697,491 | 766 |
+| 10 | 13,307,904 | 1,697,491 | 766 |
+| 20 | 13,307,904 | 1,697,491 | 766 |
+| 50 | 13,307,904 | 1,697,491 | 766 |
+| 100 | 13,193,216 | 1,694,347 | 760 |
+
+The retained-frame and image-only repeats likewise plateaued between cycles 10
+and 20. This provides bounded-workload evidence of improvement, not a proof of
+zero allocator retention or a bound on process-wide GPU/session memory.
+Focused engine and Qt image/selection/preedit checks passed. Full-app local
+PowerShell image smoke exited 0; the inspected capture contains all three image
+fixtures: `build/msvc-dynamic-release/test-data/image-lifetime-259275fe76a34797872766a5ecdb7d52/terminal-images.png`.

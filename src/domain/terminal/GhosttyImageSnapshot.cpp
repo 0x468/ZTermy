@@ -12,12 +12,6 @@ namespace
 constexpr std::size_t maximumSnapshotBytes = std::size_t{32} * 1024 * 1024;
 constexpr std::size_t maximumPlacements = 4096;
 
-struct IteratorOwner
-{
-    GhosttyKittyGraphicsPlacementIterator value = nullptr;
-    ~IteratorOwner() { ghostty_kitty_graphics_placement_iterator_free(value); }
-};
-
 GhosttyResult readImage(GhosttyKittyGraphicsImage handle, TerminalImage &image, std::size_t budget)
 {
     GhosttyKittyImageFormat format{};
@@ -61,6 +55,11 @@ GhosttyResult readImage(GhosttyKittyGraphicsImage handle, TerminalImage &image, 
 }
 } // namespace
 
+GhosttyImageSnapshot::~GhosttyImageSnapshot()
+{
+    ghostty_kitty_graphics_placement_iterator_free(m_iterator);
+}
+
 GhosttyResult GhosttyImageSnapshot::capture(GhosttyTerminal terminal, std::vector<TerminalImagePlacement> &placements,
                                             bool &changed)
 {
@@ -85,12 +84,14 @@ GhosttyResult GhosttyImageSnapshot::capture(GhosttyTerminal terminal, std::vecto
         m_generation = 0;
         return GHOSTTY_SUCCESS;
     }
-    IteratorOwner iterator;
-    result = ghostty_kitty_graphics_placement_iterator_new(nullptr, &iterator.value);
-    if (result != GHOSTTY_SUCCESS)
-        return result;
+    if (!m_iterator)
+    {
+        result = ghostty_kitty_graphics_placement_iterator_new(nullptr, &m_iterator);
+        if (result != GHOSTTY_SUCCESS)
+            return result;
+    }
     result = ghostty_kitty_graphics_get(graphics, GHOSTTY_KITTY_GRAPHICS_DATA_PLACEMENT_ITERATOR,
-                                        static_cast<void *>(&iterator.value));
+                                        static_cast<void *>(&m_iterator));
     if (result != GHOSTTY_SUCCESS)
         return result;
     try
@@ -127,11 +128,11 @@ GhosttyResult GhosttyImageSnapshot::capture(GhosttyTerminal terminal, std::vecto
             return GHOSTTY_SUCCESS;
         };
         bool hasVirtual = false;
-        while (ghostty_kitty_graphics_placement_next(iterator.value) && placements.size() < maximumPlacements)
+        while (ghostty_kitty_graphics_placement_next(m_iterator) && placements.size() < maximumPlacements)
         {
             bool isVirtual = false;
-            result = ghostty_kitty_graphics_placement_get(iterator.value,
-                                                          GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_IS_VIRTUAL, &isVirtual);
+            result = ghostty_kitty_graphics_placement_get(m_iterator, GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_IS_VIRTUAL,
+                                                          &isVirtual);
             if (result != GHOSTTY_SUCCESS)
                 return result;
             if (isVirtual)
@@ -144,18 +145,21 @@ GhosttyResult GhosttyImageSnapshot::capture(GhosttyTerminal terminal, std::vecto
                 GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_IMAGE_ID, GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_PLACEMENT_ID,
                 GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_Z, GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_X_OFFSET,
                 GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_Y_OFFSET};
-            std::array<void *, keys.size()> values{&placement.imageId, &placement.placementId, &placement.z,
-                                                   &placement.offsetX, &placement.offsetY};
-            result = ghostty_kitty_graphics_placement_get_multi(iterator.value, keys.size(), keys.data(), values.data(),
+            std::uint32_t offsetX = 0, offsetY = 0;
+            std::array<void *, keys.size()> values{&placement.imageId, &placement.placementId, &placement.z, &offsetX,
+                                                   &offsetY};
+            result = ghostty_kitty_graphics_placement_get_multi(m_iterator, keys.size(), keys.data(), values.data(),
                                                                 nullptr);
             if (result != GHOSTTY_SUCCESS)
                 return result;
+            placement.offsetX = offsetX;
+            placement.offsetY = offsetY;
             const auto handle = ghostty_kitty_graphics_image(graphics, placement.imageId);
             if (!handle)
                 continue;
             GhosttyKittyGraphicsPlacementRenderInfo info{};
             info.size = sizeof(info);
-            result = ghostty_kitty_graphics_placement_render_info(iterator.value, handle, terminal, &info);
+            result = ghostty_kitty_graphics_placement_render_info(m_iterator, handle, terminal, &info);
             if (result != GHOSTTY_SUCCESS)
                 return result;
             if (!info.viewport_visible)

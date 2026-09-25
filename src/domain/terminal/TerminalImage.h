@@ -32,13 +32,14 @@ struct TerminalImagePlacement final
     std::int32_t column = 0;
     std::int32_t row = 0;
     std::int32_t z = 0;
-    std::uint32_t offsetX = 0;
-    std::uint32_t offsetY = 0;
-    std::uint32_t width = 0;
-    std::uint32_t height = 0;
-    std::uint32_t sourceX = 0;
-    std::uint32_t sourceY = 0;
-    std::uint32_t sourceWidth = 0;
-    std::uint32_t sourceHeight = 0;
+    // Fractional texels are necessary when a small raster spans multiple rows.
+    double offsetX = 0;
+    double offsetY = 0;
+    double width = 0;
+    double height = 0;
+    double sourceX = 0;
+    double sourceY = 0;
+    double sourceWidth = 0;
+    double sourceHeight = 0;
 };
 } // namespace ztermy::terminal

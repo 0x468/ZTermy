@@ -29,6 +29,24 @@ ztermy_replace_ghostty_text("src/terminal/kitty/graphics_exec.zig"
     "        try loading.addData(alloc, cmd.data);"
     "        loading.addData(alloc, cmd.data) catch |err| {\n            loading.deinit(alloc);\n            alloc.destroy(loading);\n            storage.loading = null;\n            return err;\n        };")
 
+# Pixel budgets alone do not bound tiny-image metadata or tracked placements.
+# Existing IDs may still be replaced at capacity; deletion restores admission.
+ztermy_replace_ghostty_text("src/terminal/kitty/graphics_storage.zig"
+    "        if (img.data.len > self.total_limit) return error.OutOfMemory;"
+    "        if (img.data.len > self.total_limit) return error.OutOfMemory;\n        if (self.images.count() >= 4096 and !self.images.contains(img.id)) return error.OutOfMemory;")
+ztermy_replace_ghostty_text("src/terminal/kitty/graphics_storage.zig"
+    "        const gop = try self.placements.getOrPut(alloc, key);"
+    "        if (self.placements.count() >= 4096 and !self.placements.contains(key)) return error.OutOfMemory;\n        const gop = try self.placements.getOrPut(alloc, key);")
+
+# Storage replaces the value but cannot release a screen-owned pin itself.
+# Release the old pin only after successful replacement, not on admission failure.
+ztermy_replace_ghostty_text("src/terminal/kitty/graphics_exec.zig"
+    "    storage.addPlacement(\n"
+    "    const previous_placement = if (result.placement_id != 0) storage.placements.get(.{\n        .image_id = img.id,\n        .placement_id = .{ .tag = .external, .id = result.placement_id },\n    }) else null;\n    storage.addPlacement(\n")
+ztermy_replace_ghostty_text("src/terminal/kitty/graphics_exec.zig"
+    "    // Apply cursor movement setting. This only applies to pin placements."
+    "    if (previous_placement) |previous| previous.deinit(terminal.screens.active);\n\n    // Apply cursor movement setting. This only applies to pin placements.")
+
 configure_file("${CMAKE_CURRENT_LIST_DIR}/ghostty/ztermy_image.zig"
     "${GHOSTTY_SOURCE_DIR}/src/terminal/c/ztermy_image.zig" COPYONLY)
 ztermy_replace_ghostty_text("src/lib_vt.zig"
@@ -49,6 +67,10 @@ string(REPLACE
     "    DEPENDS \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_image.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_exec.zig\"\n"
     "    DEPENDS \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_image.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_exec.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/lib_vt.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/c/ztermy_image.zig\"\n"
     updated_wrapper "${updated_wrapper}")
+string(REPLACE
+    "\"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/c/ztermy_image.zig\"\n"
+    "\"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/c/ztermy_image.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_storage.zig\"\n"
+    updated_wrapper "${updated_wrapper}")
 if(NOT updated_wrapper STREQUAL wrapper)
     file(WRITE "${wrapper_path}" "${updated_wrapper}")
 endif()
@@ -57,4 +79,4 @@ endif()
 # Zig source changes. This dependency is specific to our patched policy file.
 ztermy_replace_ghostty_text("CMakeLists.txt"
     "    COMMENT \"Building libghostty-vt via zig build...\""
-    "    DEPENDS \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_image.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_exec.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/lib_vt.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/c/ztermy_image.zig\"\n    COMMENT \"Building libghostty-vt via zig build...\"")
+    "    DEPENDS \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_image.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_exec.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/lib_vt.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/c/ztermy_image.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_storage.zig\"\n    COMMENT \"Building libghostty-vt via zig build...\"")

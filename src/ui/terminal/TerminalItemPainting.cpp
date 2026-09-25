@@ -331,6 +331,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
     QPainter blinkPainter(&blinkInk);
     blinkPainter.setRenderHint(QPainter::TextAntialiasing);
     TerminalImageOverlay imageOverlay;
+    std::vector<QRectF> imageProtectedRegions;
 
     if (m_snapshot)
     {
@@ -429,6 +430,8 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                     std::max<qreal>(1.0, cell.displayWidth) * cellWidthValue,
                     cellHeightValue,
                 };
+                if (cell.selected && !m_snapshot->images.empty())
+                    imageProtectedRegions.push_back(cellRect);
                 if (runColor.isValid() && runColor == background && qFuzzyCompare(runRect.right(), cellRect.left()))
                 {
                     runRect.setRight(cellRect.right());
@@ -449,6 +452,10 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 
         paintTerminalImages(painter, m_snapshot->images, TerminalImageLayer::belowText, imageCell, imageOrigin,
                             imageViewport);
+        // Selection is local interaction, not an application's image z-order.
+        for (const QRectF &region : imageProtectedRegions)
+            painter.fillRect(region,
+                             m_snapshot->searchSelectionPresent ? m_searchCurrentBackground : selectionBackground);
         std::size_t activeStyleBits = std::numeric_limits<std::size_t>::max();
         QColor activePen;
         // The default pane is transparent, so use its palette RGB as the contrast reference even without a fill.
@@ -750,6 +757,9 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         {
             const qreal compositionLeft = horizontalPadding + (m_snapshot->cursor.column * cellWidthValue);
             const qreal compositionTop = verticalPadding + (m_snapshot->cursor.row * cellHeightValue);
+            if (!imageOverlay.image.isNull())
+                imageProtectedRegions.emplace_back(compositionLeft, compositionTop,
+                                                   insertedColumns * cellWidthValue + 2.0, cellHeightValue);
             QFont compositionFont = m_font;
             compositionFont.setUnderline(true);
             painter.setFont(compositionFont);
@@ -892,6 +902,14 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
     std::uint64_t imageOverlayPixels = 0;
     if (!imageOverlay.image.isNull())
     {
+        if (!imageProtectedRegions.empty())
+        {
+            QPainter protection(&imageOverlay.image);
+            protection.translate(-imageOverlay.rectangle.topLeft());
+            protection.setCompositionMode(QPainter::CompositionMode_Clear);
+            for (const QRectF &region : imageProtectedRegions)
+                protection.fillRect(region, Qt::transparent);
+        }
         if (!node->imageOverlayNode)
         {
             node->imageOverlayNode = new QSGSimpleTextureNode;

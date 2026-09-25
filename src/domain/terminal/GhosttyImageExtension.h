@@ -10,16 +10,16 @@ struct ZtermyGhosttyUnicodePlacement final
     std::uint32_t placementId;
     std::int32_t column;
     std::int32_t row;
-    std::uint32_t offsetX;
-    std::uint32_t offsetY;
-    std::uint32_t width;
-    std::uint32_t height;
-    std::uint32_t sourceX;
-    std::uint32_t sourceY;
-    std::uint32_t sourceWidth;
-    std::uint32_t sourceHeight;
+    double offsetX;
+    double offsetY;
+    double width;
+    double height;
+    double sourceX;
+    double sourceY;
+    double sourceWidth;
+    double sourceHeight;
 };
-static_assert(sizeof(ZtermyGhosttyUnicodePlacement) == 48);
+static_assert(sizeof(ZtermyGhosttyUnicodePlacement) == 80);
 
 extern "C" GhosttyResult ztermy_ghostty_unicode_placements(GhosttyTerminal terminal,
                                                            ZtermyGhosttyUnicodePlacement *placements,

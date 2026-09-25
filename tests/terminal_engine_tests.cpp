@@ -78,6 +78,8 @@ private slots:
     void tracksKittyPlacementAcrossScreenAndScrollChanges();
     void rendersUnicodeImageFragmentsWithInheritedCoordinates();
     void resolvesUnicodeImageIdentityAndReleasesSnapshotPixels();
+    void enlargesSinglePixelUnicodeImageAcrossRows();
+    void boundsImageMetadataAndAllowsRecovery();
     void preservesBlinkAttributesWithoutChangingText();
     void retainsProgressAcrossFragmentedReports();
     void boundsAndThrottlesProgramNotifications();
@@ -744,6 +746,62 @@ void TerminalEngineTests::rendersUnicodeImageFragmentsWithInheritedCoordinates()
     QVERIFY(second != resized->images.end());
     QCOMPARE(second->width, std::uint32_t{20});
     QCOMPARE(second->height, std::uint32_t{10});
+}
+
+void TerminalEngineTests::boundsImageMetadataAndAllowsRecovery()
+{
+    auto created = ztermy::terminal::GhosttyTerminalEngine::create(
+        {.columns = 8, .rows = 4, .cellWidthPixels = 8, .cellHeightPixels = 8});
+    QVERIFY(created);
+    auto &engine = **created;
+    const auto send = [&](const std::string &command) {
+        const auto error = engine.feed(std::as_bytes(std::span(command)));
+        const auto bytes = engine.takePtyWrite();
+        return error ? std::string("feed failed")
+                     : std::string(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+    };
+    // Tiny rasters bypass byte-budget pressure. Limit storage, not merely the
+    // number returned by a viewport snapshot; inspect the protocol response.
+    for (int id = 1; id <= 4096; ++id)
+        QVERIFY(send("\x1b_Ga=t,f=24,s=1,v=1,i=" + std::to_string(id) + ";/wAA\x1b\\").contains("OK"));
+    QVERIFY(send("\x1b_Ga=t,f=24,s=1,v=1,i=5000;/wAA\x1b\\").contains("ENOMEM"));
+    QVERIFY(send("\x1b_Ga=t,f=24,s=1,v=1,i=1;AP8A\x1b\\").contains("OK"));
+    send("\x1b_Ga=d,d=I,i=4096;\x1b\\");
+    QVERIFY(send("\x1b_Ga=t,f=24,s=1,v=1,i=5000;/wAA\x1b\\").contains("OK"));
+    for (int id = 1; id <= 4096; ++id)
+        QVERIFY(send("\x1b_Ga=p,i=1,C=1,p=" + std::to_string(id) + ";\x1b\\").contains("OK"));
+    QVERIFY(send("\x1b_Ga=p,i=1,C=1,p=5000;\x1b\\").contains("ENOMEM"));
+    QVERIFY(send("\x1b_Ga=p,i=1,C=1,p=1;\x1b\\").contains("OK"));
+    send("\x1b_Ga=d,d=i,i=1,p=4096;\x1b\\");
+    QVERIFY(send("\x1b_Ga=p,i=1,C=1,p=5000;\x1b\\").contains("OK"));
+    send("\x1b_Ga=d,d=A;\x1b\\healthy");
+    QCOMPARE(engine.snapshot()->cursor.column, std::uint16_t{7});
+}
+
+void TerminalEngineTests::enlargesSinglePixelUnicodeImageAcrossRows()
+{
+    auto created = ztermy::terminal::GhosttyTerminalEngine::create(
+        {.columns = 8, .rows = 4, .cellWidthPixels = 8, .cellHeightPixels = 8});
+    QVERIFY(created);
+    auto &engine = **created;
+    const auto command = QByteArray("\x1b_Ga=T,f=24,s=1,v=1,i=992,U=1,c=4,r=4,q=2;AP8A\x1b\\\x1b[38;2;0;3;224m")
+                         + QString::fromUcs4(U"\U0010eeee\u0305\U0010eeee\U0010eeee\U0010eeee\r\n"
+                                             U"\U0010eeee\u030d\U0010eeee\U0010eeee\U0010eeee")
+                               .toUtf8();
+    QVERIFY(!engine.feed(std::as_bytes(std::span(command.data(), static_cast<std::size_t>(command.size())))));
+    const auto snapshot = engine.snapshot();
+    QVERIFY(snapshot);
+    // Magnifying one pixel into four rows must not round each quarter-pixel
+    // source slice down to zero. The two rows are adjacent portions of one image.
+    QCOMPARE(snapshot->images.size(), std::size_t{2});
+    for (const auto &placement : snapshot->images)
+    {
+        QCOMPARE(placement.width, 32.0);
+        QCOMPARE(placement.height, 8.0);
+        QCOMPARE(placement.sourceWidth, 1.0);
+        QCOMPARE(placement.sourceHeight, 0.25);
+        QCOMPARE(placement.sourceY, placement.row * 0.25);
+    }
 }
 
 void TerminalEngineTests::resolvesUnicodeImageIdentityAndReleasesSnapshotPixels()

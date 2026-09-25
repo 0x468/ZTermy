@@ -3414,6 +3414,13 @@ if(BUILD_TESTING)
     qt_add_executable(ztermy_terminal_engine_tests
         tests/terminal_engine_tests.cpp
     )
+    if(WIN32)
+        add_executable(ztermy_terminal_image_memory_probe EXCLUDE_FROM_ALL
+            tools/terminal_image_memory_probe.cpp)
+        target_compile_features(ztermy_terminal_image_memory_probe PRIVATE cxx_std_23)
+        target_link_libraries(ztermy_terminal_image_memory_probe PRIVATE
+            ztermy_terminal_engine ghostty-vt-static Qt6::Core Psapi)
+    endif()
 
     target_compile_features(ztermy_terminal_engine_tests PRIVATE cxx_std_23)
     target_link_libraries(ztermy_terminal_engine_tests PRIVATE

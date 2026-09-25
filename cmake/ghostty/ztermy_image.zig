@@ -12,18 +12,19 @@ pub const UnicodePlacement = extern struct {
     placement_id: u32,
     column: i32,
     row: i32,
-    offset_x: u32,
-    offset_y: u32,
-    width: u32,
-    height: u32,
-    source_x: u32,
-    source_y: u32,
-    source_width: u32,
-    source_height: u32,
+    offset_x: f64,
+    offset_y: f64,
+    width: f64,
+    height: f64,
+    source_x: f64,
+    source_y: f64,
+    source_width: f64,
+    source_height: f64,
 };
 
 // Borrow only the pinned engine's existing placeholder iterator. It handles
-// palette IDs, combining marks, inherited coordinates and aspect-fit fragments.
+// palette IDs, combining marks and inherited coordinates. Geometry stays in
+// floating point: the upstream integer render rectangle loses magnified texels.
 pub fn unicodePlacements(
     handle: terminal_c.Terminal,
     output: ?[*]UnicodePlacement,
@@ -46,23 +47,52 @@ pub fn unicodePlacements(
     while (written.* < capacity) {
         const placement = iterator.next() orelse break;
         const image = screen.kitty_images.imageById(placement.image_id) orelse continue;
-        const render = placement.renderPlacement(&screen.kitty_images, &image, cell_width, cell_height) catch continue;
-        if (render.dest_width == 0 or render.dest_height == 0 or
-            render.source_width == 0 or render.source_height == 0) continue;
-        const point = screen.pages.pointFromPin(.viewport, render.top_left) orelse continue;
+        const prototype = prototype: {
+            if (placement.placement_id != 0) {
+                break :prototype screen.kitty_images.placements.get(.{
+                    .image_id = placement.image_id,
+                    .placement_id = .{ .tag = .external, .id = placement.placement_id },
+                }) orelse continue;
+            }
+            var candidates = screen.kitty_images.placements.iterator();
+            while (candidates.next()) |candidate| {
+                if (candidate.key_ptr.image_id == placement.image_id and candidate.value_ptr.location == .virtual)
+                    break :prototype candidate.value_ptr.*;
+            }
+            continue;
+        };
+        if (prototype.location != .virtual or image.width == 0 or image.height == 0) continue;
+        const columns = if (prototype.columns != 0) prototype.columns else (image.width + cell_width - 1) / cell_width;
+        const rows = if (prototype.rows != 0) prototype.rows else (image.height + cell_height - 1) / cell_height;
+        if (columns == 0 or rows == 0 or columns > 65535 or rows > 65535) continue;
+        const grid_w = @as(f64, @floatFromInt(columns)) * @as(f64, @floatFromInt(cell_width));
+        const grid_h = @as(f64, @floatFromInt(rows)) * @as(f64, @floatFromInt(cell_height));
+        const image_w: f64 = @floatFromInt(image.width);
+        const image_h: f64 = @floatFromInt(image.height);
+        const scale = @min(grid_w / image_w, grid_h / image_h);
+        const left = (grid_w - image_w * scale) / 2;
+        const top = (grid_h - image_h * scale) / 2;
+        const fragment_x = @as(f64, @floatFromInt(placement.col)) * @as(f64, @floatFromInt(cell_width));
+        const fragment_y = @as(f64, @floatFromInt(placement.row)) * @as(f64, @floatFromInt(cell_height));
+        const x = @max(fragment_x, left);
+        const y = @max(fragment_y, top);
+        const right = @min(fragment_x + @as(f64, @floatFromInt(placement.width)) * @as(f64, @floatFromInt(cell_width)), left + image_w * scale);
+        const bottom_edge = @min(fragment_y + @as(f64, @floatFromInt(placement.height)) * @as(f64, @floatFromInt(cell_height)), top + image_h * scale);
+        if (right <= x or bottom_edge <= y) continue;
+        const point = screen.pages.pointFromPin(.viewport, placement.pin) orelse continue;
         destination[written.*] = .{
             .image_id = placement.image_id,
             .placement_id = placement.placement_id,
             .column = @intCast(point.viewport.x),
             .row = @intCast(point.viewport.y),
-            .offset_x = render.offset_x,
-            .offset_y = render.offset_y,
-            .width = render.dest_width,
-            .height = render.dest_height,
-            .source_x = render.source_x,
-            .source_y = render.source_y,
-            .source_width = render.source_width,
-            .source_height = render.source_height,
+            .offset_x = x - fragment_x,
+            .offset_y = y - fragment_y,
+            .width = right - x,
+            .height = bottom_edge - y,
+            .source_x = (x - left) / scale,
+            .source_y = (y - top) / scale,
+            .source_width = (right - x) / scale,
+            .source_height = (bottom_edge - y) / scale,
         };
         written.* += 1;
     }

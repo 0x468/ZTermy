@@ -27,12 +27,31 @@ limit but uses a separate 400-MiB loader/inflater limit.
   can be silent or leave later images stuck behind the failed transmission.
 - Limit image storage to 32 MiB per terminal screen. Primary and alternate
   screens are separate; this is not a process-wide 32-MiB budget.
+- Independently cap stored image records and placement records at 4096 each
+  per screen. Tiny images otherwise bypass the pixel-byte budget. Reject new
+  records at capacity with the existing ENOMEM reply; permit replacement of
+  existing IDs and resume admission after deletion. A successful explicit
+  placement replacement also releases its previous screen-owned tracked pin.
 - Limit APC buffers to 16 KiB. Kitty tools must use chunked direct transmission
   (the protocol's 4096-byte base64 chunks fit). Disable filesystem, temporary
   filesystem and shared-memory media explicitly.
 - PNG has an additional 8-MiB encoded-input limit and metadata is not inflated.
   Sixel also has explicit decoder input/work budgets. Snapshot ownership remains
   immutable across worker/render threads and cache references are weak.
+- Reuse one native placement iterator per snapshot adapter, rebinding it before
+  each capture and freeing it with the adapter. Per-frame creation/free mixed
+  with image upload caused native allocator footprint growth in the Windows
+  probe, despite released pixel references and stable Windows heap busy counts.
+- Unicode placeholder IDs, diacritics and inheritance use the pinned engine's
+  iterator. ztermy computes aspect-fit fragment rectangles in floating point
+  and preserves fractional source texels through the domain snapshot to Qt.
+  The dependency's integer render rectangles round a quarter-pixel slice to
+  zero when a one-pixel image is enlarged over four rows. Raster pixels remain
+  shared; enlarging a placement must not allocate an enlarged source image.
+- Local selection and IME preedit take precedence over image z-order. Restore
+  selection backgrounds after below-text images, and clear only the protected
+  selection/preedit rectangles from the above-text image overlay. The image
+  remains visible outside those rectangles and returns after interaction ends.
 
 ## Consequences and unfinished validation
 

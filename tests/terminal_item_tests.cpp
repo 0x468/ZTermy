@@ -80,6 +80,8 @@ private slots:
     void rendersInlineImageProtocolSnapshot();
     void rendersImageLayersAndReclaimsOverlay_data();
     void rendersImageLayersAndReclaimsOverlay();
+    void keepsInputAndSelectionVisibleOverImages_data();
+    void keepsInputAndSelectionVisibleOverImages();
     void reportsOptInFullPaintProfile();
     void blinksOnlyUnselectedInkWithoutTextureUploads_data();
     void blinksOnlyUnselectedInkWithoutTextureUploads();
@@ -126,12 +128,90 @@ private slots:
     void analyzesTerminalRowReuse();
 };
 
+void TerminalItemTests::keepsInputAndSelectionVisibleOverImages_data()
+{
+    QTest::addColumn<bool>("composition");
+    QTest::addColumn<int>("z");
+    QTest::newRow("ime-above-text") << true << 1;
+    QTest::newRow("selection-above-text") << false << 1;
+    QTest::newRow("selection-below-text") << false << -1;
+}
+
+void TerminalItemTests::keepsInputAndSelectionVisibleOverImages()
+{
+    QFETCH(bool, composition);
+    QFETCH(int, z);
+    QQuickWindow window;
+    auto *item = new TestableTerminalItem(window.contentItem());
+    item->setFontPixelSize(24);
+    item->setTerminalCursorVisible(false);
+    auto snapshot = snapshotAt(0, 0);
+    item->setSnapshot(snapshot);
+    const QRectF cell = item->inputMethodQuery(Qt::ImCursorRectangle).toRectF();
+    auto pixels = std::make_shared<ztermy::terminal::TerminalImage>();
+    pixels->width = pixels->height = 1;
+    pixels->pixels = {255, 0, 0, 255};
+    snapshot->images.push_back({.image = pixels,
+                                .z = z,
+                                .width = cell.width() * 4,
+                                .height = cell.height(),
+                                .sourceWidth = 1,
+                                .sourceHeight = 1});
+    if (!composition)
+    {
+        snapshot->cells[0].selected = true;
+        snapshot->cells[0].grapheme = U"W";
+    }
+    item->setSnapshot(std::make_shared<ztermy::terminal::TerminalSnapshot>(*snapshot));
+    if (composition)
+    {
+        QInputMethodEvent event(QStringLiteral("中"), {});
+        item->inputMethodEvent(&event);
+    }
+    window.resize(240, 110);
+    item->setSize(window.size());
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    const auto capture = [&]() -> QImage {
+        const auto grab = item->grabToImage();
+        if (!grab)
+            return {};
+        QSignalSpy ready(grab.data(), &QQuickItemGrabResult::ready);
+        if (grab->image().isNull() && !ready.wait(3000))
+            return {};
+        return grab->image();
+    };
+    QImage rendered = capture();
+    QVERIFY(!rendered.isNull());
+    const auto sample = [&](qreal column) {
+        return rendered.pixelColor(qRound((cell.left() + column * cell.width()) * rendered.devicePixelRatio()),
+                                   qRound((cell.top() + cell.height() * 0.5) * rendered.devicePixelRatio()));
+    };
+    QVERIFY(sample(0.5) != QColor(Qt::red)); // Local interaction must remain visible.
+    QCOMPARE(sample(3.5), QColor(Qt::red));  // Do not hide the whole image.
+    if (composition)
+    {
+        QInputMethodEvent cancel;
+        item->inputMethodEvent(&cancel);
+    }
+    else
+    {
+        snapshot->cells[0].selected = false;
+        snapshot->cells[0].grapheme.clear();
+        item->setSnapshot(std::make_shared<ztermy::terminal::TerminalSnapshot>(*snapshot));
+    }
+    rendered = capture();
+    QVERIFY(!rendered.isNull());
+    QCOMPARE(sample(0.5), QColor(Qt::red)); // Removing interaction restores image pixels.
+}
+
 void TerminalItemTests::rendersInlineImageProtocolSnapshot_data()
 {
     QTest::addColumn<int>("protocol");
     QTest::newRow("kitty") << 0;
     QTest::newRow("sixel") << 1;
     QTest::newRow("kitty-unicode") << 2;
+    QTest::newRow("kitty-unicode-magnified") << 3;
 }
 
 void TerminalItemTests::rendersInlineImageProtocolSnapshot()
@@ -166,16 +246,19 @@ void TerminalItemTests::rendersInlineImageProtocolSnapshot()
         command += "\x1b\\";
         QVERIFY(feed(command));
     }
-    else if (protocol == 2)
+    else if (protocol >= 2)
     {
-        QVERIFY(feed("\x1b_Ga=T,f=24,s=1,v=1,i=73,U=1,c=2,r=1,q=2;/wAA\x1b\\\x1b[38;5;73m"));
+        QVERIFY(feed(protocol == 2 ? "\x1b_Ga=T,f=24,s=1,v=1,i=73,U=1,c=2,r=1,q=2;/wAA\x1b\\\x1b[38;5;73m"
+                                   : "\x1b_Ga=T,f=24,s=1,v=1,i=73,U=1,c=2,r=2,q=2;/wAA\x1b\\\x1b[38;5;73m"));
         QVERIFY(feed(QString::fromUcs4(U"\U0010eeee\u0305\U0010eeee").toStdString()));
+        if (protocol == 3)
+            QVERIFY(feed(QString::fromUcs4(U"\x1b[3;4H\U0010eeee\u030d\U0010eeee").toStdString()));
     }
     else
         QVERIFY(feed("\x1b_Ga=T,f=24,s=1,v=1,i=73,c=2,r=1,C=1;/wAA\x1b\\"));
     auto result = engine.snapshot();
     QVERIFY(result);
-    QCOMPARE(result->images.size(), std::size_t{1});
+    QCOMPARE(result->images.size(), protocol == 3 ? std::size_t{2} : std::size_t{1});
     item->setSnapshot(std::make_shared<ztermy::terminal::TerminalSnapshot>(*result));
     window.resize(240, 140);
     item->setSize(window.size());
@@ -192,10 +275,15 @@ void TerminalItemTests::rendersInlineImageProtocolSnapshot()
     };
     const auto rendered = capture();
     QVERIFY(!rendered.isNull());
-    const QPoint sample(qRound((cell.left() + 4 * cell.width()) * rendered.devicePixelRatio()),
-                        qRound((cell.top() + 1.5 * cell.height()) * rendered.devicePixelRatio()));
+    const QPoint sample(
+        qRound((cell.left() + 4 * cell.width()) * rendered.devicePixelRatio()),
+        qRound((cell.top() + (protocol == 3 ? 1.85 : 1.5) * cell.height()) * rendered.devicePixelRatio()));
     QCOMPARE(rendered.pixelColor(sample), QColor(Qt::red));
-    QVERIFY(feed(protocol == 2 ? "\x1b[2;4H\x1b[2X" : "\x1b_Ga=d,d=A;\x1b\\"));
+    if (protocol == 3)
+        QCOMPARE(
+            rendered.pixelColor(sample.x(), qRound((cell.top() + 2.15 * cell.height()) * rendered.devicePixelRatio())),
+            QColor(Qt::red));
+    QVERIFY(feed(protocol >= 2 ? "\x1b[2;4H\x1b[2X\x1b[3;4H\x1b[2X" : "\x1b_Ga=d,d=A;\x1b\\"));
     result = engine.snapshot();
     QVERIFY(result);
     item->setSnapshot(std::make_shared<ztermy::terminal::TerminalSnapshot>(*result));
@@ -240,8 +328,8 @@ void TerminalItemTests::rendersImageLayersAndReclaimsOverlay()
     // Crop away the blue half. Cover three cells, including the W's right-hand overhang.
     snapshot->images.push_back({.image = pixels,
                                 .z = z,
-                                .width = static_cast<std::uint32_t>(qCeil(cell.width() * 3)),
-                                .height = static_cast<std::uint32_t>(qCeil(cell.height())),
+                                .width = static_cast<double>(qCeil(cell.width() * 3)),
+                                .height = static_cast<double>(qCeil(cell.height())),
                                 .sourceWidth = 1,
                                 .sourceHeight = 1});
     item->setSnapshot(std::make_shared<ztermy::terminal::TerminalSnapshot>(*snapshot));
