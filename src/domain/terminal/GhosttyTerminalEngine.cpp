@@ -1836,6 +1836,17 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
         return std::unexpected(ghosttyError(workingDirectoryResult));
     }
 
+    GhosttyString windowTitle{};
+    const GhosttyResult titleResult = ghostty_terminal_get(m_impl->terminal, GHOSTTY_TERMINAL_DATA_TITLE, &windowTitle);
+    if (titleResult == GHOSTTY_SUCCESS && windowTitle.ptr != nullptr && windowTitle.len <= 4096U)
+    {
+        const std::string_view title(reinterpret_cast<const char *>(windowTitle.ptr), windowTitle.len);
+        if (validUtf8(title))
+            result.windowTitle.assign(title);
+    }
+    else if (titleResult != GHOSTTY_SUCCESS && titleResult != GHOSTTY_NO_VALUE)
+        return std::unexpected(ghosttyError(titleResult));
+
     bool cursorInViewport = false;
     bool cursorVisible = false;
     ghostty_render_state_get(m_impl->renderState, GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_HAS_VALUE,

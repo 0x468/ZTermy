@@ -43,6 +43,7 @@ private slots:
     void encodesMouseAndFocusEventsFromLiveTerminalModes();
     void reportsAlternateScrollMode();
     void exposesShellWorkingDirectorySequences();
+    void preservesTransientTitlesAcrossFragmentedOutput();
     void exposesExplicitOsc8Hyperlinks();
     void detectsAutomaticHttpLinksWithoutOverridingOsc8();
     void drainsBoundedOsc52ClipboardWrites();
@@ -54,6 +55,32 @@ private slots:
     void pagesThroughScrollback();
     void quotesDroppedPathsForShellDialects();
 };
+
+void TerminalEngineTests::preservesTransientTitlesAcrossFragmentedOutput()
+{
+    auto created = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 10, .rows = 3});
+    QVERIFY(created);
+    auto &engine = **created;
+    const auto feed = [&](std::string_view text) {
+        return !engine.feed(std::as_bytes(std::span(text)));
+    };
+    QVERIFY(feed("x\x1b]0;first\x07"));
+    const auto first = engine.snapshot();
+    QVERIFY(first);
+    QCOMPARE(first->windowTitle, std::string("first"));
+    QVERIFY(feed("\x1b]2;second"));
+    QCOMPARE(engine.snapshot()->windowTitle, std::string("first"));
+    QVERIFY(feed("\x1b"));
+    QCOMPARE(engine.snapshot()->windowTitle, std::string("first"));
+    QVERIFY(feed("\\"));
+    const auto second = engine.snapshot();
+    QVERIFY(second);
+    QCOMPARE(second->windowTitle, std::string("second"));
+    QCOMPARE(second->cell(0, 0).grapheme, std::u32string(U"x"));
+    QCOMPARE(first->windowTitle, std::string("first"));
+    QVERIFY(feed("\x1b]2;\x07"));
+    QVERIFY(engine.snapshot()->windowTitle.empty());
+}
 
 void TerminalEngineTests::tracksSynchronizedOutputMode()
 {

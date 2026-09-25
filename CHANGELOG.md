@@ -6,6 +6,9 @@ Release assets are published through GitHub Releases.
 
 ## Unreleased
 
+- Reuse action presentation data instead of rebuilding every action for each
+  shortcut lookup during pane/tab changes. Refresh it on shortcut edits,
+  resets and language changes; keep terminal availability states distinct.
 - Batch “close other tabs” and “close tabs to the right” into one layout update
   and save, avoiding repeated intermediate tab activation and UI rebuilds.
   Preserve window scope and recently closed tab ordering.

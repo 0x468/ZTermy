@@ -1,4 +1,5 @@
 #include "application/AppController.h"
+#include "application/terminal/TabLifecycleTiming.h"
 #include "ui/terminal/TerminalItem.h"
 
 #include <QUuid>
@@ -9,18 +10,26 @@ namespace ztermy
 {
 void AppController::emitActiveTerminalContextChanged(const bool refreshViewports)
 {
+    TabLifecycleTiming timing("active-context");
     updateTelemetryVisibility();
+    timing.mark("telemetry-visibility");
     emit activeTerminalTabChanged();
+    timing.mark("active-tab");
     emit activeTerminalTabPinnedChanged();
     emit terminalWorkspaceChanged();
+    timing.mark("workspace");
     emit remoteTelemetryChanged();
     emit sshActiveChanged();
     emit terminalSearchChanged();
     emit terminalHistoryChanged();
+    timing.mark("terminal-context");
     emit sftpChanged();
+    timing.mark("sftp");
     emit aiConversationChanged();
+    timing.mark("ai");
     if (refreshViewports)
         showActiveTab();
+    timing.mark("viewports");
 }
 
 bool AppController::moveTerminalTab(const QString &id, const int targetIndex)

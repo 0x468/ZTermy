@@ -351,7 +351,10 @@ with every mainstream terminal. Suggested follow-up order:
 2. Approved on 2026-09-26: transient OSC titles and shell progress/notifications.
    Terminal-controlled titles have a setting; manual renaming pins the title
    regardless of that setting, until explicitly cleared by the user. The pin
-   must survive layout restoration. Implementation is pending.
+   must survive layout restoration. The engine snapshot now carries a bounded
+   transient OSC 0/2 title, including title-only output and explicit clearing.
+   Display precedence, the setting and persisted pin state are still pending;
+   this is not yet a shipped automatic-title feature.
 3. Approved on 2026-09-26: both Kitty and Sixel inline images, plus SGR text
    blink, with memory/accessibility budgets. These are not yet shipped
    capabilities; approval must not be mistaken for implementation evidence.
@@ -412,3 +415,48 @@ a controlled performance benchmark suitable for a universal speedup claim.
 Dynamic Release builds, targeted clang-tidy on the three changed translation
 units (warnings as errors), formatting, diff checks, and the unchanged source
 size/dependency gate pass. No full-suite regression was run for this iteration.
+
+## Large-pane close and action presentation: 2026-09-26
+
+The opt-in lifecycle path `ZTERMY_TEST_PANE_CLOSE=1` builds four/eight running
+local panes, then measures closing one active pane and closing the workspace.
+A 5 ms GUI heartbeat covers the call and another 500 ms of event processing,
+so a queued stall is not hidden by measuring only the synchronous return.
+`ZTERMY_TAB_TIMING=1` separates state/retirement, active-context notifications,
+and finished-session destruction; it remains off during normal use.
+
+The initial eight-pane single close took 258/264 ms: state update and session
+retirement took 6–9 ms, while UI notification took 249/258 ms. Finished-session
+destruction was below the millisecond timer resolution. Further timing isolated
+the expensive notifications to terminal-list and active-tab changes rather
+than SFTP, AI, or viewport delivery.
+
+Those notifications invalidate shortcut labels. QML indexed `controller.actions`
+repeatedly, and every property read rebuilt all action QVariant maps and their
+translated labels. Merely assigning that reference to a local QML variable
+left eight-pane single-close time at 238 ms. The implemented fix caches the two
+action presentations (terminal available/unavailable) in `ActionRegistry` and
+invalidates them on accepted shortcut edits, reset/import, and UI retranslation.
+QML shortcut lookup now uses one `find` expression rather than repeatedly
+fetching the property. Returned lists retain Qt's copy-on-write value semantics.
+
+| Scenario | Baseline close ms | Cached close ms, two runs | Cached max GUI gap ms, two runs |
+|---|---:|---:|---:|
+| 4 panes, close one | 185 / 185 | 28 / 26 | 28 / 26 |
+| 4 panes, close workspace | 204 / 210 | 50 / 52 | 58 / 60 |
+| 8 panes, close one | 258 / 264 | 30 / 32 | 30 / 33 |
+| 8 panes, close workspace | 282 / 302 | 62 / 58 | 75 / 75 |
+
+Evidence directories: `build/runtime-checks/pane-close-{baseline,context,snapshot,
+cache,cache-repeat}-20260926`. All runs exited 0. The setup uses idle local shells
+and nested splits at 1120×800; it does not establish equivalent latency for
+huge scrollback, a different GPU/DPI configuration, or SSH teardown. Residual
+workspace-close cost remains measurable; no claim of universally frame-perfect
+teardown is made.
+
+Focused tests cover cached shortcut updates/unbinding/reset/import, context
+availability, retained snapshots, and controller retranslation after an already
+read action list. The existing shortcut dispatch and adjacent bulk/window-scope
+tests pass. Dynamic Release, QML formatting/lint, targeted clang-tidy (warnings
+as errors), source-size/dependency and diff checks pass. Test processes and
+direct children were confirmed gone. No full suite was run for this iteration.

@@ -502,12 +502,8 @@ Rectangle {
     }
 
     function shortcutFor(actionId) {
-        for (let index = 0; index < controller.actions.length; ++index) {
-            if (controller.actions[index].id === actionId) {
-                return controller.actions[index].shortcut;
-            }
-        }
-        return "";
+        const action = controller.actions.find(candidate => candidate.id === actionId);
+        return action ? action.shortcut : "";
     }
 
     function executeAction(actionId) {

@@ -1,4 +1,5 @@
 #include "application/AppController.h"
+#include "application/terminal/TabLifecycleTiming.h"
 #include "application/workbench/RemoteShellHistoryReader.h"
 
 #include "application/ai/AiNativeToolCatalog.h"
@@ -121,37 +122,6 @@ constexpr qsizetype maximumAiImageAttachmentBytes = qsizetype{5} * 1024 * 1024;
 constexpr qsizetype maximumAiImageAttachmentTotalBytes = qsizetype{12} * 1024 * 1024;
 constexpr qsizetype maximumAiImageAttachmentFiles = 4;
 constexpr quint64 maximumAiImagePixels = quint64{40} * 1024 * 1024;
-
-class TabLifecycleTiming final
-{
-public:
-    explicit TabLifecycleTiming(const char *operation)
-        : m_operation(operation), m_enabled(qEnvironmentVariableIntValue("ZTERMY_TAB_TIMING") > 0)
-    {
-        if (m_enabled)
-        {
-            m_timer.start();
-        }
-    }
-
-    void mark(const char *stage)
-    {
-        if (!m_enabled)
-        {
-            return;
-        }
-        const qint64 elapsed = m_timer.elapsed();
-        qCInfo(appControllerLog) << "Terminal tab timing" << "operation=" << m_operation << "stage=" << stage
-                                 << "stageMs=" << elapsed - m_previousElapsed << "elapsedMs=" << elapsed;
-        m_previousElapsed = elapsed;
-    }
-
-private:
-    const char *m_operation;
-    bool m_enabled = false;
-    QElapsedTimer m_timer;
-    qint64 m_previousElapsed = 0;
-};
 
 struct AiTextAttachmentLoadResult final
 {
@@ -4654,6 +4624,7 @@ void AppController::appendAiDebugTrace(const QString &event, const QJsonObject &
 
 void AppController::retranslateUiState()
 {
+    m_actionRegistry.invalidatePresentationCache();
     for (const auto &tab : m_tabs)
     {
         if (tab->kind == TerminalTabKind::Local)
@@ -5522,6 +5493,7 @@ bool AppController::closeActiveTerminalPane()
 
 bool AppController::closeTerminalPane(const QString &paneId)
 {
+    TabLifecycleTiming timing("close-pane");
     TerminalTab *tab = findTabForPane(paneId);
     workbench::TerminalWorkspaceLayout *workspace = tab == nullptr ? nullptr : findTerminalWorkspace(tab->workspaceId);
     if (tab == nullptr || workspace == nullptr)
@@ -5553,11 +5525,13 @@ bool AppController::closeTerminalPane(const QString &paneId)
         m_terminal = nullptr;
     }
     retireTerminalTab(std::move(removed));
+    timing.mark("state-and-retire");
     emit terminalTabsChanged();
     if (closingFocusedPane)
     {
         emitActiveTerminalContextChanged();
     }
+    timing.mark("ui-published");
     return true;
 }
 
@@ -8542,6 +8516,7 @@ void AppController::retireTerminalTab(std::unique_ptr<TerminalTab> tab)
 
 void AppController::reapClosedTerminalTabs()
 {
+    TabLifecycleTiming timing("reap-closed");
     std::erase_if(m_closingTabs, [](const auto &tab) {
         if ((tab->local && !tab->local->stopFinished()) || (tab->ssh && !tab->ssh->stopFinished()))
             return false;
@@ -8549,6 +8524,7 @@ void AppController::reapClosedTerminalTabs()
             tab->semanticObserver->finish(terminal::CommandCompletionReason::disconnect);
         return true;
     });
+    timing.mark("resources-released");
     if (!m_closingTabs.empty() && !m_shutdownStarted)
         QTimer::singleShot(16, this, &AppController::reapClosedTerminalTabs);
 }

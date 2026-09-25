@@ -528,6 +528,9 @@ namespace ztermy::actions
 
 QVariantList ActionRegistry::actions(const bool terminalAvailable) const
 {
+    auto &cached = m_cachedActions[terminalAvailable ? 1U : 0U];
+    if (!cached.isEmpty())
+        return cached;
     QVariantList result;
     result.reserve(static_cast<qsizetype>(::actions.size()));
     for (const ActionDescriptor &descriptor : ::actions)
@@ -548,7 +551,14 @@ QVariantList ActionRegistry::actions(const bool terminalAvailable) const
             {QStringLiteral("autoRepeat"), descriptor.autoRepeat},
         });
     }
+    cached = result;
     return result;
+}
+
+void ActionRegistry::invalidatePresentationCache()
+{
+    for (auto &cached : m_cachedActions)
+        cached.clear();
 }
 
 QString ActionRegistry::effectiveShortcut(const QString &actionId) const
@@ -618,6 +628,7 @@ ShortcutValidation ActionRegistry::setShortcut(const QString &actionId, const QS
     ShortcutValidation validation = validateShortcut(actionId, shortcut);
     if (validation.valid())
     {
+        invalidatePresentationCache();
         const ActionDescriptor *descriptor = findDescriptor(actionId);
         Q_ASSERT(descriptor != nullptr);
         if (validation.normalized == QLatin1StringView(descriptor->defaultShortcut))
@@ -634,6 +645,7 @@ ShortcutValidation ActionRegistry::setShortcut(const QString &actionId, const QS
 
 bool ActionRegistry::resetShortcut(const QString &actionId)
 {
+    invalidatePresentationCache();
     return contains(actionId) && m_overrides.remove(actionId) > 0;
 }
 
@@ -644,11 +656,13 @@ bool ActionRegistry::resetAllShortcuts()
         return false;
     }
     m_overrides.clear();
+    invalidatePresentationCache();
     return true;
 }
 
 void ActionRegistry::setOverrides(const QMap<QString, QString> &overrides)
 {
+    invalidatePresentationCache();
     QMap<QString, QString> candidates;
     for (auto entry = overrides.cbegin(); entry != overrides.cend(); ++entry)
     {

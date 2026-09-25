@@ -21,6 +21,77 @@ namespace ztermy::ui
     return position != tabs.end() && position->toMap().value(QStringLiteral("running")).toBool();
 }
 
+[[nodiscard]] inline bool runPaneCloseRuntimeSmoke(AppController &controller)
+{
+    const auto runningPanes = [](const auto &self, const QVariantMap &node) -> int {
+        if (node.contains(QStringLiteral("tab")))
+            return node.value(QStringLiteral("tab")).toMap().value(QStringLiteral("running")).toBool() ? 1 : 0;
+        if (node.isEmpty())
+            return 0;
+        return self(self, node.value(QStringLiteral("first")).toMap())
+               + self(self, node.value(QStringLiteral("second")).toMap());
+    };
+    for (const int panes : {4, 8})
+    {
+        for (const bool wholeWorkspace : {false, true})
+        {
+            const QString id = controller.startLocalTerminal();
+            if (id.isEmpty()
+                || !processWindowEventsUntil(
+                    [&] {
+                        return terminalTabRunning(controller, id);
+                    },
+                    std::chrono::seconds{5}))
+                return false;
+            for (int count = 1; count < panes; ++count)
+            {
+                if (!controller.splitActiveTerminal(
+                        count % 2 ? QStringLiteral("horizontal") : QStringLiteral("vertical"), true)
+                    || !processWindowEventsUntil(
+                        [&] {
+                            return runningPanes(
+                                       runningPanes,
+                                       controller.activeTerminalWorkspace().value(QStringLiteral("root")).toMap())
+                                   == count + 1;
+                        },
+                        std::chrono::seconds{5}))
+                    return false;
+            }
+            processWindowEventsFor(std::chrono::milliseconds{300});
+            QElapsedTimer heartbeatClock;
+            heartbeatClock.start();
+            qint64 previousBeat = 0;
+            qint64 maximumGap = 0;
+            QTimer heartbeat;
+            heartbeat.setTimerType(Qt::PreciseTimer);
+            QObject::connect(&heartbeat, &QTimer::timeout, &heartbeat, [&] {
+                const auto now = heartbeatClock.elapsed();
+                maximumGap = std::max(maximumGap, now - previousBeat);
+                previousBeat = now;
+            });
+            heartbeat.start(5);
+            QElapsedTimer closeClock;
+            closeClock.start();
+            const bool closed = wholeWorkspace ? controller.closeTerminalTab(id) : controller.closeActiveTerminalPane();
+            const auto closeMs = closeClock.elapsed();
+            processWindowEventsFor(std::chrono::milliseconds{500});
+            heartbeat.stop();
+            qCInfo(applicationLog) << "Pane close runtime measurement" << "panes=" << panes
+                                   << "wholeWorkspace=" << wholeWorkspace << "closeMs=" << closeMs
+                                   << "maximumGuiGapMs=" << maximumGap;
+            if (!closed
+                || (wholeWorkspace
+                        ? !controller.terminalTabs().isEmpty()
+                        : controller.activeTerminalWorkspace().value(QStringLiteral("paneCount")).toInt() != panes - 1))
+                return false;
+            if (!wholeWorkspace && !controller.closeTerminalTab(id))
+                return false;
+            processWindowEventsFor(std::chrono::milliseconds{500});
+        }
+    }
+    return true;
+}
+
 [[nodiscard]] inline bool runLifecycleRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller)
 {
     window.resize(QSize{1120, 800});
@@ -36,6 +107,11 @@ namespace ztermy::ui
         processWindowEventsFor(std::chrono::milliseconds{100});
     };
 
+    if (qEnvironmentVariableIntValue("ZTERMY_TEST_PANE_CLOSE") > 0)
+    {
+        showTerminalPage();
+        return runPaneCloseRuntimeSmoke(controller);
+    }
     constexpr int sequentialCycles = 8;
     qint64 maximumCloseMilliseconds = 0;
     for (int cycle = 0; cycle < sequentialCycles; ++cycle)

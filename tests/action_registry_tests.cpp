@@ -31,7 +31,34 @@ private slots:
     void rejectsConflictsAndTerminalTextKeys();
     void ignoresUnknownAndInvalidPersistedOverrides();
     void restoresDefaults();
+    void presentationTracksShortcutChangesAndContext();
 };
+
+void ActionRegistryTests::presentationTracksShortcutChangesAndContext()
+{
+    ztermy::actions::ActionRegistry registry;
+    const QString id = QStringLiteral("terminal.copy");
+    const auto initial = registry.actions(true);
+    const auto initialWithoutTerminal = registry.actions(false);
+    QVERIFY(!actionById(initialWithoutTerminal, id).value(QStringLiteral("enabled")).toBool());
+    const auto shortcut = [&](bool terminal) {
+        return actionById(registry.actions(terminal), id).value(QStringLiteral("shortcut")).toString();
+    };
+    QVERIFY(registry.setShortcut(id, QString{}).valid());
+    QVERIFY(shortcut(true).isEmpty());
+    QVERIFY(shortcut(false).isEmpty());
+    QVERIFY(!actionById(initial, id).value(QStringLiteral("shortcut")).toString().isEmpty());
+    QVERIFY(registry.resetShortcut(id));
+    QCOMPARE(shortcut(true), registry.defaultShortcut(id));
+    QCOMPARE(shortcut(false), registry.defaultShortcut(id));
+    registry.setOverrides({{id, QString{}}});
+    QVERIFY(shortcut(true).isEmpty());
+    QVERIFY(shortcut(false).isEmpty());
+    QVERIFY(registry.resetAllShortcuts());
+    QCOMPARE(shortcut(true), registry.defaultShortcut(id));
+    QCOMPARE(shortcut(false), registry.defaultShortcut(id));
+    QVERIFY(actionById(registry.actions(true), id).value(QStringLiteral("enabled")).toBool());
+}
 
 void ActionRegistryTests::exposesStableMetadataAndContext()
 {

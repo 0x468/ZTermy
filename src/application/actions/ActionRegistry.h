@@ -4,6 +4,7 @@
 #include <QString>
 #include <QVariantList>
 
+#include <array>
 #include <cstdint>
 
 namespace ztermy::actions
@@ -34,6 +35,7 @@ public:
     ActionRegistry() = default;
 
     [[nodiscard]] QVariantList actions(bool terminalAvailable) const;
+    void invalidatePresentationCache();
     [[nodiscard]] QString defaultShortcut(const QString &actionId) const;
     [[nodiscard]] QString effectiveShortcut(const QString &actionId) const;
     [[nodiscard]] bool contains(const QString &actionId) const noexcept;
@@ -51,6 +53,7 @@ public:
 
 private:
     QMap<QString, QString> m_overrides;
+    mutable std::array<QVariantList, 2> m_cachedActions;
 };
 
 } // namespace ztermy::actions

@@ -28,6 +28,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
+#include <QTranslator>
 #include <QUrl>
 #include <QUuid>
 #include <QVariantMap>
@@ -258,6 +259,7 @@ private slots:
     void routesAiModelDiscoveryThroughCustomProxy();
     void managesMcpServerConfiguration();
     void managesActionShortcutsAndDispatchContext();
+    void retranslatesPreviouslyReadActions();
     void restoresCompleteAgentPresentationFromHistory();
     void exposesProviderFailureRecoveryActions();
     void retriesProviderResponseWithoutRepeatingCompletedTool();
@@ -1233,6 +1235,45 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(reloaded.languagePreference(), QStringLiteral("system"));
     QVERIFY(!reloaded.closeToTray());
     QVERIFY(reloaded.aiWebSearchAvailable());
+}
+
+void AppControllerTests::retranslatesPreviouslyReadActions()
+{
+    class ActionTranslator final : public QTranslator
+    {
+    public:
+        [[nodiscard]] bool isEmpty() const override { return false; }
+        QString translate(const char *context, const char *source, const char *, int) const override
+        {
+            if (QByteArray(context) == "ActionRegistry" && QByteArray(source) == "Command palette")
+                return QStringLiteral("Translated command palette");
+            return {};
+        }
+    } translator;
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")));
+    const auto paletteLabel = [&] {
+        for (const auto &value : controller.actions())
+        {
+            const auto action = value.toMap();
+            if (action.value(QStringLiteral("id")) == QStringLiteral("application.commandPalette"))
+                return action.value(QStringLiteral("label")).toString();
+        }
+        return QString{};
+    };
+    const QString initial = paletteLabel();
+    QVERIFY(!initial.isEmpty());
+    QVERIFY(QCoreApplication::installTranslator(&translator));
+    const auto removeTranslator = qScopeGuard([&] {
+        QCoreApplication::removeTranslator(&translator);
+    });
+    controller.retranslateUiState();
+    QCOMPARE(paletteLabel(), QStringLiteral("Translated command palette"));
+    QCoreApplication::removeTranslator(&translator);
+    controller.retranslateUiState();
+    QCOMPARE(paletteLabel(), initial);
 }
 
 void AppControllerTests::managesActionShortcutsAndDispatchContext()

@@ -224,6 +224,8 @@ struct TerminalSnapshot
     // Raw value emitted by OSC 7 / OSC 9 / OSC 1337. Consumers must
     // validate and normalize it before treating it as a filesystem path.
     std::string workingDirectory;
+    // Transient OSC 0/2 title, never a user-owned persisted name.
+    std::string windowTitle;
 
     [[nodiscard]] const TerminalCell &cell(const std::uint16_t column, const std::uint16_t row) const
     {
