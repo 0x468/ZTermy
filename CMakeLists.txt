@@ -1337,6 +1337,10 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS TerminalTabAction.qml
 )
 set_source_files_properties(
+    src/ui/qml/TerminalRenameDialog.qml
+    PROPERTIES QT_RESOURCE_ALIAS TerminalRenameDialog.qml
+)
+set_source_files_properties(
     src/ui/qml/TitleTabOverflow.qml
     PROPERTIES QT_RESOURCE_ALIAS TitleTabOverflow.qml
 )
@@ -1484,6 +1488,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/StatePanel.qml
         src/ui/qml/StatusMessage.qml
         src/ui/qml/TerminalTabAction.qml
+        src/ui/qml/TerminalRenameDialog.qml
         src/ui/qml/TitleTabOverflow.qml
         src/ui/qml/TerminalSessionStateOverlay.qml
         src/ui/qml/TelemetrySparkline.qml

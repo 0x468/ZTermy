@@ -8,6 +8,7 @@
 #include <QDir>
 #include <QPointer>
 #include <QQuickItem>
+#include <QQuickItemGrabResult>
 #include <vector>
 
 namespace ztermy::ui
@@ -26,21 +27,23 @@ namespace ztermy::ui
     return nullptr;
 }
 
-inline bool verifyDetachedCaptionStateRoundTrip(QQuickWindow &detached, const QString &paneId,
-                                                const QString &outputDirectory)
+inline bool verifyDetachedCaptionStateRoundTrip(QQuickWindow &detached, const QString &outputDirectory)
 {
     using namespace std::chrono_literals;
     const auto handle = reinterpret_cast<HWND>(detached.winId()); // NOLINT(performance-no-int-to-ptr)
-    const auto clickCaption = [&detached, &paneId, handle](const QString &kind) {
-        const QString name = QStringLiteral("detachedWindowAction-") + kind + QLatin1Char('-') + paneId;
+    const auto clickCaption = [&detached, handle](const QString &kind) {
+        const QString name = QStringLiteral("detachedWindowAction-") + kind;
         auto *button = detachedVisualQuickItem(detached.contentItem(), name);
         if (button == nullptr)
             return false;
         if (kind == QStringLiteral("maximize"))
         {
             const QPointF center = button->mapToScene({button->width() / 2, button->height() / 2});
-            const QPoint screen = detached.mapToGlobal(center.toPoint());
-            const LPARAM position = MAKELPARAM(screen.x(), screen.y());
+            POINT screen{.x = qRound(center.x() * detached.devicePixelRatio()),
+                         .y = qRound(center.y() * detached.devicePixelRatio())};
+            if (!ClientToScreen(handle, &screen))
+                return false;
+            const LPARAM position = MAKELPARAM(screen.x, screen.y);
             const bool nativeHit = SendMessageW(handle, WM_NCHITTEST, 0, position) == HTMAXBUTTON;
             PostMessageW(handle, WM_NCLBUTTONDOWN, HTMAXBUTTON, position);
             processWindowEventsFor(50ms);
@@ -49,7 +52,7 @@ inline bool verifyDetachedCaptionStateRoundTrip(QQuickWindow &detached, const QS
             processWindowEventsFor(50ms);
             const bool released = !detached.property("nativeMaximizeButtonPressed").toBool();
             qInfo() << "Detached maximize exposes native Snap hit target:" << nativeHit << pressForwarded << released;
-            return nativeHit && released;
+            return nativeHit && pressForwarded && released;
         }
         return QMetaObject::invokeMethod(button, "activated");
     };
@@ -61,8 +64,15 @@ inline bool verifyDetachedCaptionStateRoundTrip(QQuickWindow &detached, const QS
                                },
                                3s);
     qInfo() << "Detached caption maximize:" << maximized;
+    const auto capture = detached.contentItem()->grabToImage();
     const bool captured =
-        detached.grabWindow().save(QDir(outputDirectory).filePath(QStringLiteral("detached-pane-maximized.png")));
+        capture
+        && settleWindowUntil(
+            [&] {
+                return !capture->image().isNull();
+            },
+            3s)
+        && capture->image().save(QDir(outputDirectory).filePath(QStringLiteral("detached-pane-maximized.png")));
     const bool minimizedKeepsMaximize = clickCaption(QStringLiteral("minimize"))
                                         && settleWindowUntil(
                                             [&detached, handle] {

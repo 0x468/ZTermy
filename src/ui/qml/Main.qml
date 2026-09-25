@@ -35,7 +35,6 @@ Rectangle {
     property string currentPage: "hosts"
     property string workspaceSection: "hosts"
     property bool settingsTabOpen: false
-    property string renameTerminalTabId: ""
     property string settingsReturnPage: "hosts"
     property bool startupVaultPromptPresented: false
     property real pageReveal: 1.0
@@ -480,9 +479,7 @@ Rectangle {
     }
 
     function openTerminalRename(tabId, title) {
-        renameTerminalTabId = tabId;
-        renameTerminalTitleField.text = title;
-        renameTerminalDialog.open();
+        renameTerminalDialog.openFor(tabId, title);
     }
 
     function activateRelativeTerminalTab(offset) {
@@ -1475,79 +1472,9 @@ Rectangle {
         onAccepted: root.controller.importOpenSshConfig(selectedFile.toString())
     }
 
-    Dialog {
+    TerminalRenameDialog {
         id: renameTerminalDialog
-
-        anchors.centerIn: parent
-        width: Math.min(420, Math.max(0, root.width - 48))
-        modal: true
-        dim: true
-        focus: true
-        closePolicy: Popup.CloseOnEscape
-        padding: 20
-        onOpened: {
-            renameTerminalTitleField.forceActiveFocus(Qt.PopupFocusReason);
-            renameTerminalTitleField.selectAll();
-        }
-        onClosed: root.renameTerminalTabId = ""
-
-        Overlay.modal: Rectangle {
-            color: Theme.modalScrim
-        }
-
-        background: AppSurface {
-            elevation: 3
-        }
-
-        contentItem: ColumnLayout {
-            spacing: 14
-
-            Text {
-                Layout.fillWidth: true
-                text: qsTr("Rename terminal tab")
-                color: Theme.text
-                font.family: Theme.uiFont
-                font.pixelSize: 18
-                font.weight: Font.DemiBold
-            }
-
-            AppTextField {
-                id: renameTerminalTitleField
-
-                objectName: "renameTerminalTitleField"
-                Layout.fillWidth: true
-                accessibleName: qsTr("Terminal tab title")
-                maximumLength: 256
-                onAccepted: renameTerminalAccept.clicked()
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-
-                Item {
-                    Layout.fillWidth: true
-                }
-
-                ActionButton {
-                    text: qsTr("Cancel")
-                    accessibleName: text
-                    onClicked: renameTerminalDialog.close()
-                }
-
-                ActionButton {
-                    id: renameTerminalAccept
-
-                    text: qsTr("Rename")
-                    accessibleName: text
-                    variant: "primary"
-                    onClicked: {
-                        if (root.controller.setTerminalTabTitle(root.renameTerminalTabId, renameTerminalTitleField.text)) {
-                            renameTerminalDialog.close();
-                        }
-                    }
-                }
-            }
-        }
+        controller: root.controller
     }
 
     RowLayout {
@@ -2793,7 +2720,7 @@ Rectangle {
 
     DropTargetIndicator {
         z: 90
-        target: terminalWindows.dropTarget
+        target: !terminalWindows.dropTarget.windowId || terminalWindows.dropTarget.windowId === "main" ? terminalWindows.dropTarget : ({})
     }
 
     HostKeyPrompt {

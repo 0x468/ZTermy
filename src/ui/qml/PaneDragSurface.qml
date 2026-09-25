@@ -17,7 +17,7 @@ MouseArea {
         onPointChanged: {
             if (control.pressed)
                 return;
-            const global = control.hostRoot.mapToGlobal(point.position.x, point.position.y);
+            const global = control.mapToGlobal(point.position.x, point.position.y);
             overDragSource = !!control.dragSourceAt(global);
         }
         onHoveredChanged: {

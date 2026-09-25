@@ -140,9 +140,6 @@ bool AppController::detachTerminalWorkspace(const QString &workspaceId)
         return false;
     if (found->windowId != "main")
         return true;
-    // Detached windows currently expose one pane, not another tab workspace.
-    if (found->restoreIntents.size() != 1)
-        return false;
     found->windowId = newLayoutId();
     found->returnWorkspaceId.clear();
     if (!saveWorkspaceStateCandidate(candidate))
@@ -186,9 +183,15 @@ bool AppController::reattachTerminalWorkspace(const QString &workspaceId)
     return true;
 }
 
-bool AppController::insertTerminalWorkspace(const QString &workspaceId, const int targetIndex)
+bool AppController::insertTerminalWorkspace(const QString &workspaceId, const int targetIndex, const QString &windowId)
 {
     if (!terminalWorkspaceCanTransfer(workspaceId) || targetIndex < 0)
+        return false;
+    const auto destinationWindow = windowId.toStdString();
+    if (destinationWindow != "main"
+        && std::ranges::none_of(m_workspaceState.terminalWorkspaces, [&](const auto &layout) {
+               return layout.windowId == destinationWindow;
+           }))
         return false;
     auto candidate = m_workspaceState;
     const auto found = std::ranges::find(candidate.terminalWorkspaces, workspaceId.toStdString(),
@@ -197,12 +200,13 @@ bool AppController::insertTerminalWorkspace(const QString &workspaceId, const in
         return false;
     auto moved = std::move(*found);
     candidate.terminalWorkspaces.erase(found);
-    moved.windowId = "main";
-    moved.returnWorkspaceId.clear();
+    if (moved.windowId != destinationWindow)
+        moved.returnWorkspaceId.clear();
+    moved.windowId = destinationWindow;
     auto destination = candidate.terminalWorkspaces.end();
     int index = 0;
     for (auto it = candidate.terminalWorkspaces.begin(); it != candidate.terminalWorkspaces.end(); ++it)
-        if (it->windowId == "main" && index++ == targetIndex)
+        if (it->windowId == destinationWindow && index++ == targetIndex)
         {
             destination = it;
             break;
@@ -303,9 +307,6 @@ bool AppController::mergeTerminalWorkspace(const QString &workspaceId, const QSt
 {
     const auto *target = findTabForPane(targetPaneId);
     if (!target || (orientation != QStringLiteral("horizontal") && orientation != QStringLiteral("vertical")))
-        return false;
-    const auto *targetLayout = findTerminalWorkspace(target->workspaceId);
-    if (!targetLayout || targetLayout->windowId != "main")
         return false;
     return applyTerminalTransfer({.kind = workbench::TerminalTransferKind::MergeWorkspace,
                                   .sourceWorkspaceId = workspaceId.toStdString(),

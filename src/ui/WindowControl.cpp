@@ -1,10 +1,16 @@
 #include "ui/WindowControl.h"
 
 #include "core/windowing/WindowPresenter.h"
+#include "platform/windows/DetachedWindowNativeFrame.h"
 
 namespace ztermy::ui
 {
 WindowControl::WindowControl(QObject *parent) : QObject(parent) {}
+
+bool WindowControl::acceptsDropAt(QWindow *window, const QPointF localPosition, QWindow *movingWindow) const
+{
+    return window && windowing::isUnobscuredDropTarget(*window, localPosition, movingWindow);
+}
 
 void WindowControl::minimize(QWindow *window) const
 {

@@ -876,9 +876,11 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                 node->cursorNode = new QSGSimpleTextureNode;
                 node->cursorNode->setOwnsTexture(true);
                 node->cursorNode->setFiltering(QSGTexture::Nearest);
-                node->appendChildNode(node->cursorNode);
             }
             node->cursorNode->setTexture(window()->createTextureFromImage(cursorImage));
+            // The software renderer inspects texture nodes synchronously on insertion.
+            if (!node->cursorNode->parent())
+                node->appendChildNode(node->cursorNode);
         }
         if (node->cursorNode != nullptr)
         {
@@ -915,13 +917,16 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
             node->imageOverlayNode = new QSGSimpleTextureNode;
             node->imageOverlayNode->setOwnsTexture(true);
             node->imageOverlayNode->setFiltering(QSGTexture::Nearest);
+        }
+        node->imageOverlayNode->setTexture(window()->createTextureFromImage(imageOverlay.image));
+        node->imageOverlayNode->setRect(imageOverlay.rectangle);
+        if (!node->imageOverlayNode->parent())
+        {
             if (node->cursorNode)
                 node->insertChildNodeBefore(node->imageOverlayNode, node->cursorNode);
             else
                 node->appendChildNode(node->imageOverlayNode);
         }
-        node->imageOverlayNode->setTexture(window()->createTextureFromImage(imageOverlay.image));
-        node->imageOverlayNode->setRect(imageOverlay.rectangle);
         imageOverlayPixels = static_cast<std::uint64_t>(imageOverlay.image.width()) * imageOverlay.image.height();
     }
     else if (node->imageOverlayNode)
@@ -953,10 +958,11 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
             node->blinkNode = new QSGSimpleTextureNode;
             node->blinkNode->setOwnsTexture(true);
             node->blinkNode->setFiltering(QSGTexture::Nearest);
-            node->prependChildNode(node->blinkNode);
         }
         node->blinkNode->setTexture(window()->createTextureFromImage(blinkImage));
         node->blinkNode->setRect(textBlinkVisible() ? node->blinkRect : QRectF{});
+        if (!node->blinkNode->parent())
+            node->prependChildNode(node->blinkNode);
         blinkPixels = static_cast<std::uint64_t>(blinkImage.width()) * blinkImage.height();
     }
     else if (node->blinkNode)

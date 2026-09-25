@@ -21,5 +21,6 @@ public:
     Q_INVOKABLE void toggleMaximize(QWindow *window) const;
     Q_INVOKABLE void reveal(QWindow *window) const;
     Q_INVOKABLE void present(QWindow *window) const;
+    Q_INVOKABLE bool acceptsDropAt(QWindow *window, QPointF localPosition, QWindow *movingWindow) const;
 };
 } // namespace ztermy::ui

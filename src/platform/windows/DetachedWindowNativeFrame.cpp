@@ -1,10 +1,54 @@
 #include "platform/windows/DetachedWindowNativeFrame.h"
 
+#include <dwmapi.h>
 #include <windowsx.h>
 #include <algorithm>
+#include <cmath>
 
 namespace ztermy::windowing
 {
+bool isUnobscuredDropTarget(QWindow &window, const QPointF localPosition, QWindow *movingWindow)
+{
+    if (!window.isVisible() || window.windowState() == Qt::WindowMinimized || &window == movingWindow
+        || !std::isfinite(localPosition.x()) || !std::isfinite(localPosition.y()) || localPosition.x() < 0
+        || localPosition.y() < 0 || localPosition.x() >= window.width() || localPosition.y() >= window.height())
+        return false;
+    const auto handle = reinterpret_cast<HWND>(window.winId()); // NOLINT(performance-no-int-to-ptr)
+    const auto ignored = movingWindow
+                             ? reinterpret_cast<HWND>(movingWindow->winId()) // NOLINT(performance-no-int-to-ptr)
+                             : nullptr;
+    POINT point{.x = qRound(localPosition.x() * window.devicePixelRatio()),
+                .y = qRound(localPosition.y() * window.devicePixelRatio())};
+    if (!ClientToScreen(handle, &point))
+        return false;
+    struct Probe
+    {
+        HWND target;
+        HWND ignored;
+        POINT point;
+        bool found = false;
+    } probe{.target = handle, .ignored = ignored, .point = point};
+    EnumWindows(
+        [](HWND candidate, LPARAM context) -> BOOL {
+            auto &probe = *reinterpret_cast<Probe *>(context); // NOLINT(performance-no-int-to-ptr)
+            if (candidate == probe.ignored || !IsWindowVisible(candidate) || IsIconic(candidate))
+                return TRUE;
+            DWORD cloaked = 0;
+            if (SUCCEEDED(DwmGetWindowAttribute(candidate, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked)
+                return TRUE;
+            RECT bounds{};
+            if (FAILED(DwmGetWindowAttribute(candidate, DWMWA_EXTENDED_FRAME_BOUNDS, &bounds, sizeof(bounds)))
+                && !GetWindowRect(candidate, &bounds))
+                return TRUE;
+            if (!PtInRect(&bounds, probe.point))
+                return TRUE;
+            probe.found = candidate == probe.target;
+            return FALSE;
+        },
+        reinterpret_cast<LPARAM>(&probe)); // NOLINT(performance-no-int-to-ptr)
+    return probe.found;
+}
+
 LRESULT toNativeHitArea(const HitArea area) noexcept
 {
     using enum HitArea;

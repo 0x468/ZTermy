@@ -922,3 +922,102 @@ zero allocator retention or a bound on process-wide GPU/session memory.
 Focused engine and Qt image/selection/preedit checks passed. Full-app local
 PowerShell image smoke exited 0; the inspected capture contains all three image
 fixtures: `build/msvc-dynamic-release/test-data/image-lifetime-259275fe76a34797872766a5ecdb7d52/terminal-images.png`.
+
+### Detached window ownership groundwork (2026-09-26)
+
+The QML coordinator now indexes native windows by the domain's `windowId`, not
+workspace/Tab ID. A detached window has a reusable Tab strip, its own selected
+workspace, window caption controls and the shared pane drag surface. Basic
+multi-Tab grouping is implemented; complete detached-window acceptance and
+restart restoration are still pending.
+
+The controller now permits detaching an entire split tree, inserting/reordering
+a Tab within an existing detached window, and merging into a chosen pane of a
+detached workspace. Existing two-argument insertion still targets the main
+window. Unknown destination windows are rejected without changing ownership;
+failed persistence leaves both order and membership unchanged. Moving a Tab
+within its current window preserves its return destination.
+
+The split-tree detachment check failed before the change. Four focused dynamic
+Release controller cases now pass (493 ms), covering session identity, preserved
+tree and manual title, target-window order, specific-pane merge, invalid target,
+failed save and main-window selection on detached close. These use fake session
+backends and start no terminal processes. Targeted clang-tidy, formatting and
+code-health checks pass. This is controller evidence only, not native-window UX
+or restart-restoration acceptance.
+
+The new `--terminal-render-smoke --workspace-transfers-only --detached-tabs-only`
+runtime check opens real local sessions in an isolated data directory. On the
+software backend it verified one native window for two Tabs, switching to the
+two-pane Tab, independent selection while the main window changes, preserving
+the window when one Tab closes, and closing only that window's group. The process
+exited 0 and no direct children remained. Its inspected asynchronous capture is
+`build/msvc-dynamic-release/test-data/detached-tabs-bbc01997f1e841b189362ce34332cdb2/detached-multi-tab.png`.
+
+The first run exposed a software-renderer crash: texture children were attached
+before receiving their textures, and Qt inspected them synchronously during
+insertion. Cursor, image-overlay and blink nodes now initialize their textures
+before attachment. The same real-window scenario and eleven focused image,
+selection, preedit and cursor cases pass on the software backend. This does not
+substitute for hardware/native-window acceptance.
+
+Remaining UI work includes real mouse Tab/Pane transfer acceptance, SSH reconnect UI acceptance,
+visible native Snap flyout acceptance, and persistent geometry/layout restoration.
+
+Main and detached windows now share `TerminalRenameDialog`, retaining the
+existing `Main` translation context. Each popup belongs to the window where it
+was invoked. Detached Tab duplication uses the existing session duplication
+operation and inserts the resulting Tab into the same window; SSH reconnect is
+wired to the existing controller operation. The extended real-window smoke
+verified popup window ownership, title submission, duplicate-window membership,
+and the previous grouping/closing checks. It exited 0 with no remaining direct
+child processes; the inspected capture is
+`build/msvc-dynamic-release/test-data/detached-menu-21fa65915aa745e991f8ff68152e3a0b/detached-multi-tab.png`.
+QML formatting/lint and translation call-site checks pass. No live SSH server
+was contacted, so this run is not SSH reconnect acceptance evidence.
+
+Cross-window target resolution now checks Windows z-order in the platform layer.
+Invisible, minimized and cloaked windows are skipped, while an unrelated visible
+window covering the point blocks the drop. Only the native window currently
+being moved is ignored. Client-local Qt coordinates are mapped to physical
+screen coordinates before testing the window stack. QML still determines the
+specific leaf and insertion edge; native window discovery does not change focus.
+
+The real-window smoke verified exact leaf/owner identification, no target under
+a covering native window, ignoring only the moving source, and reacquiring the
+target after the cover hides. It passed at normal and forced 125% scale, with
+exit 0 and no remaining direct children. Evidence directories:
+`build/msvc-dynamic-release/test-data/detached-occlusion-d648859fdc44474abb78291aaf2b9bd0`
+and `build/msvc-dynamic-release/test-data/detached-occlusion-125-5f5b78af84344065aecf9475aa70774c`.
+The scaled run logged DirectWrite fallback warnings for `MS Sans Serif`; these
+are not treated as a font-rendering acceptance pass. Forced scale and target
+resolution do not replace a mixed-DPI native mouse-drag acceptance run. Targeted
+platform/UI clang-tidy, QML checks and code-health checks pass.
+
+The final pre-commit software-backend smoke at forced 125% scale also passed
+native maximization hit testing, pressed/released state, and the sequence
+maximize, minimize, present (still maximized), restore. Window caption hover no
+longer reveals every pane toolbar. Evidence:
+`build/msvc-dynamic-release/test-data/detached-commit-94eac70ec12940809cf01d43c39fa7ff`.
+The process exited 0 with no remaining direct children. This verifies native
+hit/state handling, not visual appearance of Windows' Snap flyout.
+
+### Remaining terminal topic execution order
+
+The existing active goal remains authoritative; this checkpoint does not mark
+the broader terminal/window work complete.
+
+1. Finish detached Tab drag and exact-pane transfers using real mouse gestures;
+   audit selection after close, pane zoom and window-local actions. Check native
+   Snap UI and mixed-monitor DPI without relying only on synthetic signals.
+2. Persist each window's selected Tab, normal geometry and maximized state, with
+   an independent detached-window restore switch under session-layout restore.
+   Migrate schemas forward, clamp windows to available screens, and retain the
+   existing local reopen/remote reconnect policies.
+3. Add Profile-specific Tab icons and finish detached progress/notification UX.
+4. Complete Kitty/Sixel interoperability and unsupported-operation policy,
+   resource/animation limits and focused performance evidence. Existing bounded
+   image support is not a claim of full Kitty protocol conformance.
+5. Reconcile translations, ADRs and this status document; run only the affected
+   module/integration and runtime checks. Report remaining manual acceptance
+   explicitly instead of treating unit tests as native UI acceptance.

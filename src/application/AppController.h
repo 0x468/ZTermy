@@ -276,7 +276,6 @@ public:
                   config::StorageMode storageMode, LocalTerminalSessionFactory localSessionFactory,
                   QObject *parent = nullptr);
     ~AppController() override;
-
     AppController(const AppController &) = delete;
     AppController &operator=(const AppController &) = delete;
 
@@ -488,7 +487,8 @@ public:
     Q_INVOKABLE QString detachTerminalPane(const QString &paneId);
     Q_INVOKABLE bool detachTerminalWorkspace(const QString &workspaceId);
     Q_INVOKABLE bool reattachTerminalWorkspace(const QString &workspaceId);
-    Q_INVOKABLE bool insertTerminalWorkspace(const QString &workspaceId, int targetIndex);
+    Q_INVOKABLE bool insertTerminalWorkspace(const QString &workspaceId, int targetIndex,
+                                             const QString &windowId = QStringLiteral("main"));
     Q_INVOKABLE bool terminalWorkspaceHasActiveSessions(const QString &workspaceId) const;
     Q_INVOKABLE bool mergeTerminalWorkspace(const QString &workspaceId, const QString &targetPaneId,
                                             const QString &orientation, bool placeAfter);

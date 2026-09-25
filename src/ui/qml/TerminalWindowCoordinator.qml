@@ -3,7 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 
 QtObject {
-    id: coordinator
+    id: windowCoordinator
     required property var hostRoot
     required property var titleTabs
     required property var newTabButton
@@ -15,16 +15,17 @@ QtObject {
     property var preparedWindow: null
     property Component windowComponent: Component {
         DetachedTerminalWindow {
-            hostRoot: coordinator.hostRoot
+            hostRoot: windowCoordinator.hostRoot
+            coordinator: windowCoordinator
         }
     }
     property Connections controllerSignals: Connections {
-        target: coordinator.hostRoot.controller
+        target: windowCoordinator.hostRoot.controller
         function onTerminalTabsChanged() {
-            Qt.callLater(coordinator.syncWindows);
+            Qt.callLater(windowCoordinator.syncWindows);
         }
         function onTerminalWorkspaceChanged() {
-            Qt.callLater(coordinator.syncWindows);
+            Qt.callLater(windowCoordinator.syncWindows);
         }
     }
 
@@ -51,17 +52,19 @@ QtObject {
     }
 
     function finishPreparation(id) {
-        if (!id || windows[id]) {
+        const owner = id ? hostRoot.controller.terminalWorkspace(id).windowId : "";
+        if (!owner || windows[owner]) {
             preparedWindow.destroy();
             preparedWindow = null;
         } else {
-            windows[id] = preparedWindow;
+            windows[owner] = preparedWindow;
+            preparedWindow.ownerWindowId = owner;
             preparedWindow.workspaceId = id;
             preparedWindow = null;
         }
         syncWindows();
-        if (id && windows[id])
-            WindowControl.present(windows[id]);
+        if (owner && windows[owner])
+            WindowControl.present(windows[owner]);
     }
 
     function syncWindows() {
@@ -69,21 +72,33 @@ QtObject {
         for (const tab of hostRoot.controller.terminalTabs) {
             if (!tab.windowId || tab.windowId === "main")
                 continue;
-            live[tab.id] = true;
-            if (!windows[tab.id]) {
+            if (!live[tab.windowId])
+                live[tab.windowId] = [];
+            live[tab.windowId].push(tab);
+        }
+        for (const id in live) {
+            if (!windows[id]) {
                 const created = windowComponent.createObject(hostRoot, {
-                    workspaceId: tab.id
+                    ownerWindowId: id
                 });
                 if (!created) {
-                    hostRoot.controller.reattachTerminalWorkspace(tab.id);
+                    for (const tab of live[id])
+                        hostRoot.controller.insertTerminalWorkspace(tab.id, hostRoot.mainTerminalTabs.length);
                     continue;
                 }
-                windows[tab.id] = created;
+                windows[id] = created;
                 hostRoot.windowChrome.configureDetachedWindow(created);
             }
-            windows[tab.id].workspace = hostRoot.controller.terminalWorkspace(tab.id);
-            if (!windows[tab.id].visible)
-                WindowControl.reveal(windows[tab.id]);
+            const window = windows[id];
+            window.tabs = live[id];
+            const activeId = hostRoot.controller.activeTerminalTabId;
+            if (live[id].some(tab => tab.id === activeId))
+                window.workspaceId = activeId;
+            else if (!live[id].some(tab => tab.id === window.workspaceId))
+                window.workspaceId = live[id][0].id;
+            window.workspace = hostRoot.controller.terminalWorkspace(window.workspaceId);
+            if (!window.visible)
+                WindowControl.reveal(window);
         }
         for (const id in windows) {
             if (!live[id]) {
@@ -101,8 +116,11 @@ QtObject {
 
     function activateWorkspace(workspaceId) {
         syncWindows();
-        if (windows[workspaceId])
-            WindowControl.present(windows[workspaceId]);
+        const owner = hostRoot.controller.terminalWorkspace(workspaceId).windowId;
+        if (windows[owner]) {
+            windows[owner].selectWorkspace(workspaceId);
+            WindowControl.present(windows[owner]);
+        }
     }
 
     function viewportAt(item, globalPosition, prefix = "terminalViewport-") {
@@ -128,9 +146,70 @@ QtObject {
     }
 
     function updateDropTarget(globalPosition) {
+        dropTarget = ({});
+        for (const id in windows) {
+            const window = windows[id];
+            if (window === movingWindow || !window.visible)
+                continue;
+            const p = window.contentItem.mapFromGlobal(globalPosition.x, globalPosition.y);
+            if (p.x < 0 || p.y < 0 || p.x >= window.width || p.y >= window.height)
+                continue;
+            if (!WindowControl.acceptsDropAt(window, p, movingWindow))
+                continue;
+            if (p.y < 32 && p.x < window.width - 96) {
+                dropTarget = {
+                    mode: "insert",
+                    windowId: id,
+                    index: window.tabInsertionIndex(globalPosition),
+                    x: p.x,
+                    y: 4,
+                    width: 3,
+                    height: 24
+                };
+            } else {
+                const view = viewportAt(window.contentItem, globalPosition);
+                if (view)
+                    dropTarget = paneDropTarget(view, globalPosition, window.contentItem, id);
+            }
+            return;
+        }
+        updateMainDropTarget(globalPosition);
+        if (dropTarget.mode)
+            dropTarget = Object.assign({}, dropTarget, {
+                windowId: "main"
+            });
+    }
+
+    function paneDropTarget(view, globalPosition, surface, windowId) {
+        const p = view.mapFromGlobal(globalPosition.x, globalPosition.y);
+        const paneId = String(view.objectName).substring("terminalViewport-".length);
+        if (paneId === draggedPaneId)
+            return ({});
+        const horizontal = p.x < view.width * 0.25 || p.x > view.width * 0.75;
+        const swap = draggedPaneId.length > 0 && !horizontal && p.y >= view.height * 0.25 && p.y <= view.height * 0.75;
+        const after = horizontal ? p.x > view.width / 2 : p.y > view.height / 2;
+        const origin = view.mapToItem(surface, 0, 0);
+        const width = horizontal ? view.width / 2 : view.width;
+        const height = horizontal || swap ? view.height : view.height / 2;
+        return {
+            mode: swap ? "swap" : "merge",
+            windowId: windowId,
+            paneId: paneId,
+            orientation: horizontal ? "horizontal" : "vertical",
+            after: after,
+            x: origin.x + (horizontal && after ? width : 0),
+            y: origin.y + (!horizontal && !swap && after ? height : 0),
+            width: width,
+            height: height
+        };
+    }
+
+    function updateMainDropTarget(globalPosition) {
         const point = hostRoot.mapFromGlobal(globalPosition.x, globalPosition.y);
         dropTarget = ({});
         if (!hostRoot.visible || point.x < 0 || point.y < 0 || point.x >= hostRoot.width || point.y >= hostRoot.height)
+            return;
+        if (!WindowControl.acceptsDropAt(hostRoot.windowChrome, point, movingWindow))
             return;
         const tabs = hostRoot.mainTerminalTabs;
         if (point.y < hostRoot.titleBarHeight) {
@@ -195,26 +274,16 @@ QtObject {
         const view = viewportAt(terminalArea, globalPosition);
         if (!view)
             return;
-        const p = view.mapFromGlobal(globalPosition.x, globalPosition.y);
-        const paneId = String(view.objectName).substring("terminalViewport-".length);
-        if (paneId === draggedPaneId)
-            return;
-        const horizontal = p.x < view.width * 0.25 || p.x > view.width * 0.75;
-        const swap = draggedPaneId.length > 0 && !horizontal && p.y >= view.height * 0.25 && p.y <= view.height * 0.75;
-        const after = horizontal ? p.x > view.width / 2 : p.y > view.height / 2;
-        const origin = view.mapToItem(hostRoot, 0, 0);
-        const width = horizontal ? view.width / 2 : view.width;
-        const height = horizontal || swap ? view.height : view.height / 2;
-        dropTarget = {
-            mode: swap ? "swap" : "merge",
-            paneId: paneId,
-            orientation: horizontal ? "horizontal" : "vertical",
-            after: after,
-            x: origin.x + (horizontal && after ? width : 0),
-            y: origin.y + (!horizontal && !swap && after ? height : 0),
-            width: width,
-            height: height
-        };
+        dropTarget = paneDropTarget(view, globalPosition, hostRoot, "main");
+    }
+
+    function presentTarget(target) {
+        if (target.windowId && target.windowId !== "main")
+            activateWorkspace(hostRoot.controller.activeTerminalTabId);
+        else {
+            hostRoot.activateMainTerminal(hostRoot.controller.activeTerminalTabId);
+            WindowControl.present(hostRoot.windowChrome);
+        }
     }
 
     function finishPaneDrop(paneId, outside) {
@@ -226,9 +295,10 @@ QtObject {
             if (target.mode === "insert") {
                 const id = hostRoot.controller.extractTerminalPaneToTab(paneId);
                 if (id.length > 0) {
-                    const oldIndex = hostRoot.mainTerminalTabs.findIndex(tab => tab.id === id);
+                    const targetTabs = hostRoot.controller.terminalTabs.filter(tab => tab.windowId === target.windowId);
+                    const oldIndex = targetTabs.findIndex(tab => tab.id === id);
                     const index = target.index - (oldIndex >= 0 && oldIndex < target.index ? 1 : 0);
-                    ok = hostRoot.controller.insertTerminalWorkspace(id, index);
+                    ok = hostRoot.controller.insertTerminalWorkspace(id, index, target.windowId || "main");
                 }
             } else if (target.mode && target.paneId !== paneId) {
                 ok = hostRoot.controller.moveTerminalPane(paneId, target.paneId, target.mode === "swap" ? "swap" : target.orientation, target.after);
@@ -237,7 +307,7 @@ QtObject {
                 return;
             }
             if (ok)
-                hostRoot.activateMainTerminal(hostRoot.controller.activeTerminalTabId);
+                presentTarget(target);
         });
     }
 
@@ -252,11 +322,9 @@ QtObject {
         if (cancelled || !target.mode)
             return;
         Qt.callLater(() => {
-            const ok = target.mode === "insert" ? hostRoot.controller.insertTerminalWorkspace(id, target.index) : hostRoot.controller.mergeTerminalWorkspace(id, target.paneId, target.orientation, target.after);
-            if (ok) {
-                hostRoot.activateMainTerminal(hostRoot.controller.activeTerminalTabId);
-                WindowControl.present(hostRoot.windowChrome);
-            }
+            const ok = target.mode === "insert" ? hostRoot.controller.insertTerminalWorkspace(id, target.index, target.windowId || "main") : hostRoot.controller.mergeTerminalWorkspace(id, target.paneId, target.orientation, target.after);
+            if (ok)
+                presentTarget(target);
         });
     }
 }

@@ -3,6 +3,7 @@
 #include "application/AppController.h"
 #include "platform/windows/NativeWindow.h"
 #include "ui/WindowStateRuntimeSmoke.h"
+#include "ui/terminal/DetachedMultiTabRuntimeSmoke.h"
 #include "ui/terminal/DetachedPaneWindowRuntimeSmoke.h"
 #include "ui/terminal/TerminalItem.h"
 
@@ -286,35 +287,35 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
         const auto handle = reinterpret_cast<HWND>(detached->winId()); // NOLINT(performance-no-int-to-ptr)
         auto *actions = detached->findChild<QQuickItem *>(QStringLiteral("terminalPaneActions-") + paneId);
         const bool toolbarHidden = actions && actions->opacity() < 0.01;
-        auto *maximizeAction =
-            visualQuickItem(detached->contentItem(),
-                            (QStringLiteral("detachedWindowAction-maximize-") + paneId).toLatin1().constData());
+        auto *maximizeAction = visualQuickItem(detached->contentItem(), "detachedWindowAction-maximize");
         bool nativeSnapHit = false;
         if (maximizeAction)
         {
             const QPointF center =
                 maximizeAction->mapToScene({maximizeAction->width() / 2, maximizeAction->height() / 2});
-            const QPoint screen = detached->mapToGlobal(center.toPoint());
-            const LPARAM position = MAKELPARAM(screen.x(), screen.y());
+            POINT screen{.x = qRound(center.x() * detached->devicePixelRatio()),
+                         .y = qRound(center.y() * detached->devicePixelRatio())};
+            ClientToScreen(handle, &screen);
+            const LPARAM position = MAKELPARAM(screen.x, screen.y);
             nativeSnapHit = SendMessageW(handle, WM_NCHITTEST, 0, position) == HTMAXBUTTON;
         }
-        detached->setProperty("nativeMaximizeButtonHovered", true);
+        const QPointF toolbarOrigin = actions ? actions->mapToScene(QPointF{}) : QPointF{-1, -1};
+        sendMouse(*detached, toolbarOrigin + QPointF{12, 12}, Qt::NoButton, Qt::NoButton, QEvent::MouseMove);
         processWindowEventsFor(std::chrono::milliseconds{120});
-        const bool toolbarRevealed =
-            actions && actions->opacity() > 0.99 && detached->property("nativeMaximizeButtonHovered").toBool();
+        const bool toolbarRevealed = actions && actions->opacity() > 0.99;
         const auto *toolbarSurface = visualQuickItem(
             detached->contentItem(), (QStringLiteral("terminalPaneToolbarSurface-") + paneId).toLatin1().constData());
         const bool unifiedToolbarSurface = toolbarSurface && toolbarSurface->opacity() > 0.8;
-        detached->setProperty("nativeMaximizeButtonHovered", false);
+        sendMouse(*detached, {40, 200}, Qt::NoButton, Qt::NoButton, QEvent::MouseMove);
         processWindowEventsFor(std::chrono::milliseconds{120});
         const bool toolbarHiddenAgain = actions && actions->opacity() < 0.01;
         qInfo() << "Detached pane toolbar reveals only on hover:" << toolbarHidden << toolbarRevealed
                 << toolbarHiddenAgain << "surface=" << unifiedToolbarSurface << "snap=" << nativeSnapHit;
         passed =
             passed && toolbarHidden && toolbarRevealed && toolbarHiddenAgain && unifiedToolbarSurface && nativeSnapHit;
-        const QPointF toolbarOrigin = actions ? actions->mapToScene(QPointF{}) : QPointF{-1, -1};
-        const bool controlsFlush = actions && qAbs(toolbarOrigin.y()) < 1
-                                   && qAbs(toolbarOrigin.x() + actions->width() - detached->width()) < 1;
+        const QPointF captionOrigin = maximizeAction ? maximizeAction->mapToScene(QPointF{}) : QPointF{-1, -1};
+        const bool controlsFlush = maximizeAction && qAbs(captionOrigin.y()) < 1
+                                   && qAbs(captionOrigin.x() + 2 * maximizeAction->width() - detached->width()) < 1;
         qInfo() << "Detached window controls align with top and right edges:" << controlsFlush;
         passed = passed && controlsFlush;
         passed = passed && GetWindow(handle, GW_OWNER) == nullptr
@@ -325,7 +326,7 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
         passed =
             detached->grabWindow().save(QDir(outputDirectory).filePath(QStringLiteral("detached-pane-resized.png")))
             && passed;
-        passed = verifyDetachedCaptionStateRoundTrip(*detached, paneId, outputDirectory) && passed;
+        passed = verifyDetachedCaptionStateRoundTrip(*detached, outputDirectory) && passed;
         detached->resize(originalSize);
         controller.activateTerminalTab(otherId);
         settle();
@@ -351,6 +352,8 @@ inline bool runWorkspaceTransferRuntimeSmoke(NativeWindow &window, AppController
         return false;
     window.rootObject()->setProperty("currentPage", QStringLiteral("terminal"));
     settleWindowLayout(window);
+    if (QCoreApplication::arguments().contains(QStringLiteral("--detached-tabs-only")))
+        return verifyDetachedTabGrouping(window, controller, outputDirectory);
     if (QCoreApplication::arguments().contains(QStringLiteral("--workspace-merge-only")))
     {
         const auto workspaceId = controller.activeTerminalTabId();
