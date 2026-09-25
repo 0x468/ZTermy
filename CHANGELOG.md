@@ -6,6 +6,9 @@ Release assets are published through GitHub Releases.
 
 ## Unreleased
 
+- Batch “close other tabs” and “close tabs to the right” into one layout update
+  and save, avoiding repeated intermediate tab activation and UI rebuilds.
+  Preserve window scope and recently closed tab ordering.
 - Make the detached-window merge runtime check destruction-safe. The previous
   harness dereferenced its QML window after a successful merge had destroyed
   it, producing `0xC0000409` after the success log even though the product

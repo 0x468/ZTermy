@@ -276,6 +276,7 @@ private slots:
     void transfersTerminalTreesWithoutRestartingSessions();
     void closingDetachedWorkspacePreservesMainSelection();
     void scopesTabCommandsToTheirOwningWindow();
+    void bulkClosePublishesOnlyTheFinalWorkspace();
     void resolvesWorkspaceIdsAfterOriginalSessionMoves();
     void importsExportsAndQuarantinesFailedWorkspaceRestore();
     void importsOpenSshProfilesAndJumpRoutes();
@@ -3239,6 +3240,47 @@ void AppControllerTests::scopesTabCommandsToTheirOwningWindow()
     QVERIFY(controller.closeTerminalTabsToRight(c));
     QCOMPARE(sessions[1]->stops, 1);
     QCOMPARE(sessions[2]->stops, 0);
+}
+
+void AppControllerTests::bulkClosePublishesOnlyTheFinalWorkspace()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const auto state = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")), [state] {
+                                         return std::make_unique<FakeLocalTerminalSession>(state);
+                                     });
+    const auto kept = controller.startLocalTerminal();
+    const auto detached = controller.startLocalTerminal();
+    QVERIFY(controller.detachTerminalWorkspace(detached));
+    const auto closedFirst = controller.startLocalTerminal();
+    const auto closedLast = controller.startLocalTerminal();
+    QVERIFY(controller.setTerminalTabTitle(closedFirst, QStringLiteral("first closed")));
+    QVERIFY(controller.setTerminalTabTitle(closedLast, QStringLiteral("last closed")));
+    QSignalSpy tabsChanged(&controller, &ztermy::AppController::terminalTabsChanged);
+    QStringList observedActive;
+    const auto observation = connect(&controller, &ztermy::AppController::terminalTabsChanged, &controller, [&] {
+        observedActive.push_back(controller.activeTerminalTabId());
+        QVERIFY(controller.terminalWorkspace(closedFirst).isEmpty());
+        QVERIFY(controller.terminalWorkspace(closedLast).isEmpty());
+    });
+    const auto stopObserving = qScopeGuard([observation] {
+        QObject::disconnect(observation);
+    });
+
+    QVERIFY(controller.closeOtherTerminalTabs(kept));
+    disconnect(observation);
+    QCOMPARE(tabsChanged.count(), 1);
+    QCOMPARE(observedActive, QStringList{kept});
+    QCOMPARE(controller.terminalTabs().size(), 2);
+    QVERIFY(!controller.terminalWorkspace(detached).isEmpty());
+    QCOMPARE(state->stops, 2);
+    const auto persisted =
+        ztermy::workbench::WorkspaceStateStore(directory.filePath(QStringLiteral("workspace_state.json"))).load();
+    QVERIFY(persisted.has_value());
+    QCOMPARE(persisted->terminalWorkspaces.size(), std::size_t{2});
+    QCOMPARE(persisted->activeTerminalWorkspaceId, kept.toStdString());
 }
 
 void AppControllerTests::managesSessionAppearanceAndStructuredRecording()

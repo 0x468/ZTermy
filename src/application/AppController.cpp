@@ -4968,7 +4968,7 @@ bool AppController::activateTerminalTab(const QString &id)
 
 bool AppController::closeTerminalTab(const QString &id, const QString &successorId)
 {
-    return closeTerminalTabInternal(id, true, successorId);
+    return closeTabsInternal({id}, true, successorId);
 }
 
 void AppController::recordClosedTerminal(const QString &workspaceId)
@@ -4999,35 +4999,38 @@ void AppController::recordClosedTerminal(const QString &workspaceId)
     }
 }
 
-bool AppController::closeTerminalTabInternal(const QString &id, const bool recordClosed, const QString &successorId)
+bool AppController::closeTabsInternal(const QStringList &ids, const bool recordClosed, const QString &successorId)
 {
     TabLifecycleTiming timing("close");
-    QString workspaceId = id;
-    if (const TerminalTab *session = findTab(id); session != nullptr && findTerminalWorkspace(id) == nullptr)
+    QSet<QString> closingIds;
+    for (auto id : ids)
     {
-        workspaceId = session->workspaceId;
+        if (const auto *session = findTab(id); session != nullptr && findTerminalWorkspace(id) == nullptr)
+            id = session->workspaceId;
+        if (findTerminalWorkspace(id) == nullptr || closingIds.contains(id))
+            continue;
+        closingIds.insert(id);
+        if (recordClosed && !m_shutdownStarted)
+            recordClosedTerminal(id);
     }
-    const auto workspacePosition = std::ranges::find(m_workspaceState.terminalWorkspaces, utf8String(workspaceId),
-                                                     &workbench::TerminalWorkspaceLayout::id);
-    if (workspacePosition == m_workspaceState.terminalWorkspaces.end())
-    {
+    if (closingIds.empty())
         return false;
-    }
-    if (recordClosed && !m_shutdownStarted)
-    {
-        recordClosedTerminal(workspaceId);
-    }
-    const bool closingActive = workspaceId == m_activeTabId;
+    const bool closingActive = closingIds.contains(m_activeTabId);
+    const auto workspacePosition = std::ranges::find(m_workspaceState.terminalWorkspaces, utf8String(m_activeTabId),
+                                                     &workbench::TerminalWorkspaceLayout::id);
     const auto workspaceIndex =
         static_cast<std::size_t>(std::distance(m_workspaceState.terminalWorkspaces.begin(), workspacePosition));
     std::vector<std::unique_ptr<TerminalTab>> removed;
     for (auto &tab : m_tabs)
-        if (tab->workspaceId == workspaceId)
+        if (closingIds.contains(tab->workspaceId))
             removed.push_back(std::move(tab));
     std::erase(m_tabs, nullptr);
     timing.mark("sessions-detached");
-    m_workspaceState.terminalWorkspaces.erase(workspacePosition);
-    m_pinnedTerminalWorkspaceIds.remove(workspaceId);
+    std::erase_if(m_workspaceState.terminalWorkspaces, [&closingIds](const auto &workspace) {
+        return closingIds.contains(utf8QString(workspace.id));
+    });
+    for (const auto &id : closingIds)
+        m_pinnedTerminalWorkspaceIds.remove(id);
     // Publish no callbacks while the container has moved-from entries.
     if (closingActive)
         m_terminal = nullptr;
@@ -5136,7 +5139,7 @@ bool AppController::closeOtherTerminalTabs(const QString &id)
     {
         return false;
     }
-    std::vector<QString> toClose;
+    QStringList toClose;
     for (const auto &terminalWorkspace : std::views::reverse(m_workspaceState.terminalWorkspaces))
     {
         if (terminalWorkspace.id != utf8String(workspaceId) && terminalWorkspace.windowId == owner->windowId)
@@ -5144,11 +5147,7 @@ bool AppController::closeOtherTerminalTabs(const QString &id)
             toClose.push_back(utf8QString(terminalWorkspace.id));
         }
     }
-    for (const QString &candidate : toClose)
-    {
-        static_cast<void>(closeTerminalTab(candidate));
-    }
-    return !toClose.empty();
+    return closeTabsInternal(toClose, true, workspaceId);
 }
 
 bool AppController::closeTerminalTabsToRight(const QString &id)
@@ -5164,18 +5163,14 @@ bool AppController::closeTerminalTabsToRight(const QString &id)
     {
         return false;
     }
-    std::vector<QString> toClose;
+    QStringList toClose;
     for (auto candidate = m_workspaceState.terminalWorkspaces.rbegin(); candidate.base() != std::next(position);
          ++candidate)
     {
         if (candidate->windowId == position->windowId)
             toClose.push_back(utf8QString(candidate->id));
     }
-    for (const QString &candidate : toClose)
-    {
-        static_cast<void>(closeTerminalTab(candidate));
-    }
-    return !toClose.empty();
+    return closeTabsInternal(toClose, true, workspaceId);
 }
 
 bool AppController::toggleActiveTerminalTabPinned()
@@ -7961,7 +7956,7 @@ bool AppController::startSshConnection(ssh::SshConnectionRequest request, QStrin
     timing.mark("session-started");
     if (error)
     {
-        static_cast<void>(closeTerminalTabInternal(tabId, false));
+        static_cast<void>(closeTabsInternal({tabId}, false));
         return false;
     }
     if (m_terminal != nullptr)

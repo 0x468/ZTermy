@@ -345,13 +345,16 @@ The protocol/interaction/performance audit is complete for the pinned adapter
 and measured scenarios, with explicit limitations rather than a claim of parity
 with every mainstream terminal. Suggested follow-up order:
 
-1. Reproduce the reported no-ligature drift on the affected font/DPI combination
-   using the visual-only procedure above; it has not been declared fixed.
-2. If a concrete workflow needs them, design transient OSC titles and shell
-   progress/notification presentation without overwriting user-owned names.
-3. Treat inline images and SGR text blink as separate product decisions with
-   memory/accessibility budgets. They are not part of the shipped capability
-   claims of this change.
+1. Closed by owner confirmation on 2026-09-26: the reported no-ligature drift
+   is fixed in current use. The earlier visual-only procedure remains historical
+   diagnostic guidance, not an outstanding acceptance requirement.
+2. Approved on 2026-09-26: transient OSC titles and shell progress/notifications.
+   Terminal-controlled titles have a setting; manual renaming pins the title
+   regardless of that setting, until explicitly cleared by the user. The pin
+   must survive layout restoration. Implementation is pending.
+3. Approved on 2026-09-26: both Kitty and Sixel inline images, plus SGR text
+   blink, with memory/accessibility budgets. These are not yet shipped
+   capabilities; approval must not be mistaken for implementation evidence.
 
 No engine replacement or broad rendering rewrite is justified by the measured
 results. The actionable failures in this work were host integration and
@@ -363,3 +366,49 @@ Primary protocol references: the pinned
 defines the callback boundary; Ghostty's
 [VT reference](https://ghostty.org/docs/vt/reference) describes the upstream
 sequence surface, which may evolve independently of this pin.
+
+## Bulk tab close: 2026-09-26
+
+`closeOtherTerminalTabs` and `closeTerminalTabsToRight` previously called the
+single-tab close operation repeatedly. Each iteration changed active context,
+published the tab list, and saved the workspace. Closing sessions was already
+asynchronous; moving that stop operation to another thread would not remove
+the measured UI notification cost.
+
+The close operation now detaches all selected workspaces before publishing one
+final active context/tab list and persisting once. Recent-close descriptions
+retain their previous order; tabs belonging to other windows remain untouched.
+The focused regression observes the published state, not just final tab count,
+so an intermediate activation/rebuild is detectable.
+
+The lifecycle harness now waits for each new tab's viewport-backed startup
+before selecting another tab. Previously, its concurrent stage could leave
+the first two tabs pending and fail without exercising concurrent teardown.
+The harness lives in `src/ui/TerminalLifecycleRuntimeSmoke.h`.
+
+Dynamic Release comparison, same binary and isolated fresh data directories:
+each run opens/closes eight sequential sessions, then starts eight concurrent
+local sessions and closes seven. `ZTERMY_TEST_SEQUENTIAL_TAB_CLOSE=1` composes
+the public single-tab API in the old reverse order; the default exercises the
+batch API. `ZTERMY_TAB_TIMING=1` is enabled in both arms.
+
+| Run order | Close method | Synchronous close time | Shutdown |
+|---|---|---:|---:|
+| 1 | Individual | 1068 ms | 164 ms |
+| 2 | Batch | 133 ms | 239 ms |
+| 3 | Batch | 124 ms | 164 ms |
+| 4 | Individual | 1082 ms | 166 ms |
+
+All four lifecycle runs exited 0. Logs are in
+`build/runtime-checks/close-{sequential,batch}{,-repeat}-20260926/logs/`.
+Five related controller cases pass, including window scope, reopening,
+detached-close selection and moved-session ID resolution. Test PIDs and direct
+children were confirmed gone. These are small-sample local measurements of
+synchronous API duration, not a frame-latency distribution or proof that every
+large-Pane teardown stall is resolved. Background compilation overlapped part
+of the second batch run, so these numbers are supporting evidence rather than
+a controlled performance benchmark suitable for a universal speedup claim.
+
+Dynamic Release builds, targeted clang-tidy on the three changed translation
+units (warnings as errors), formatting, diff checks, and the unchanged source
+size/dependency gate pass. No full-suite regression was run for this iteration.

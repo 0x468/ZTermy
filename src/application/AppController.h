@@ -962,7 +962,7 @@ private:
     void setCredentialOperationError(QString message);
     [[nodiscard]] QString startLocalTerminalAt(const QString &workingDirectory, const QString &preferredTitle = {},
                                                const QString &shellPreference = {});
-    [[nodiscard]] bool closeTerminalTabInternal(const QString &id, bool recordClosed, const QString &successorId = {});
+    [[nodiscard]] bool closeTabsInternal(const QStringList &ids, bool recordClosed, const QString &successorId = {});
     [[nodiscard]] bool closeTerminalPane(const QString &paneId);
     void recordClosedTerminal(const QString &workspaceId);
     [[nodiscard]] bool startSshConnection(ssh::SshConnectionRequest request, QString sourceProfileId = {});
