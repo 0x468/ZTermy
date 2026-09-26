@@ -91,6 +91,20 @@ struct TerminalWorkspaceLayout final
     [[nodiscard]] friend bool operator==(const TerminalWorkspaceLayout &, const TerminalWorkspaceLayout &) = default;
 };
 
+struct TerminalWindowState final
+{
+    std::string id;
+    std::string selectedWorkspaceId;
+    std::string screenName;
+    int x = 0;
+    int y = 0;
+    int width = 920;
+    int height = 620;
+    bool maximized = false;
+
+    [[nodiscard]] friend bool operator==(const TerminalWindowState &, const TerminalWindowState &) = default;
+};
+
 struct WorkspaceState final
 {
     std::vector<ProfileWorkspaceState> profiles;
@@ -99,6 +113,7 @@ struct WorkspaceState final
     std::string activeTerminalWorkspaceId;
     std::vector<std::string> quarantinedRestoreIntentIds;
     std::string restoreAttemptIntentId;
+    std::vector<TerminalWindowState> terminalWindows;
 
     [[nodiscard]] friend bool operator==(const WorkspaceState &, const WorkspaceState &) = default;
 };

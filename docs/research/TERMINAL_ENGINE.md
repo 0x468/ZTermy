@@ -1004,6 +1004,60 @@ hit/state handling, not visual appearance of Windows' Snap flyout.
 
 ### Remaining terminal topic execution order
 
+Workspace schema 10 now serializes bounded per-window normal geometry,
+maximization, selected workspace and screen hints (ADR 0132). Schema-9 fixtures
+retain pinned names, local Shell identity, detached ownership and recovery
+quarantine. Store checks cover negative monitor coordinates, round-trip state,
+stale selection, malformed/fractional dimensions, duplicate owners, unchanged
+files on invalid save, backups and future-schema refusal: 20 QtTest cases
+including setup/cleanup passed in 158 ms. Targeted domain/store clang-tidy passed.
+Geometry capture/application is now connected through the coordinator and
+WindowControl. Placement updates coalesce in controller memory; ordinary layout
+saves and the final shutdown snapshot persist them. Focused tests verify 100
+updates without intermediate store writes, the final shutdown snapshot, screen
+bounds and hidden/maximized transitions. Dynamic Release, QML formatting/lint
+and targeted controller static analysis pass. Native restart and mixed-screen
+acceptance remain unfinished; no UI restore completion is claimed from these
+persistence and offscreen checks.
+
+The detached restore switch is now implemented (application settings schema 40,
+schema-39 fixture). On startup, master-off discards saved sessions; detached-off
+keeps restored Tab/Pane topology in the main window; both on retain window IDs.
+Local reopen and SSH reconnect remain separate policies. All 36 application
+settings cases and four focused controller cases (six including setup/cleanup)
+passed. They cover the four switch combinations, no unintended local process
+starts, original Shell restoration and SSH startup policy. QML/translation gates
+passed (2,397 catalog entries). These are controller/configuration checks, not
+native restart placement or interactive settings acceptance.
+
+Detached Tab delegates now connect pointer movement and release to window-aware
+drop resolution, with Escape/cancellation clearing the pending target. In-strip
+insertion accounts for removal of the source Tab. Tearing a Tab out of an
+already detached group now assigns a new native-window owner; re-detaching a
+single-Tab window remains a no-op. Focused controller checks cover this distinction
+and preserve original session start/stop counts.
+
+A Windows `SendInput` drag from the first detached Tab past the second verified
+the resulting controller order and completed the existing grouping/caption
+smoke (exit 0, no direct children remaining):
+`build/msvc-dynamic-release/test-data/detached-native-drag-3510caa9bad5416a93f79d28512ee531`.
+Earlier Qt-synthesized pointer runs did not activate the drag handler and are
+recorded as failed checks, not UX evidence. Cross-window gestures, overflow
+scrolling and canceled drags still need their own native-pointer checks.
+
+Main-window Tab drags now route outside their own title strip through the same
+window-aware coordinator, retaining local strip reordering. An overlapping
+detached window takes precedence over the main strip's geometric rectangle.
+The extended smoke includes Escape cancellation and a two-window round trip,
+but these new checks are **not yet accepted**. The current desktop run could
+not make the source window the foreground pointer target, so a guard stopped
+before sending mouse buttons. This is an unavailable native-input prerequisite,
+not a passing drag check; the earlier unguarded attempt also failed. Evidence:
+`build/msvc-dynamic-release/test-data/cross-tab-guarded-1f8d8f844a5d436cad9cb942d42ddd07`
+(exit 1, process and direct children gone). Compilation, QML quality, formatting
+and translation checks passed for this iteration. Do not bypass the foreground
+guard or weaken native acceptance to make the smoke green.
+
 The existing active goal remains authoritative; this checkpoint does not mark
 the broader terminal/window work complete.
 

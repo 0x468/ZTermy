@@ -36,6 +36,8 @@ TitleTab {
     signal moveLeftRequested
     signal moveRightRequested
     signal dragMoved(real sceneX)
+    signal dragPositionChanged(point globalPosition)
+    signal dragCanceled
     signal dragFinished(real sceneX, real sceneY)
 
     iconSize: 14
@@ -130,8 +132,10 @@ TitleTab {
         dragThreshold: 8
         enabled: control.workspaceId.length > 0
         onCentroidChanged: {
-            if (active)
+            if (active && !control.dropCompleted) {
                 control.dragMoved(centroid.scenePosition.x);
+                control.dragPositionChanged(control.mapToGlobal(centroid.position.x, centroid.position.y));
+            }
         }
         onActiveChanged: {
             if (active) {
@@ -142,6 +146,7 @@ TitleTab {
         }
         onCanceled: {
             control.dropCompleted = true;
+            control.dragCanceled();
         }
     }
 
@@ -150,6 +155,7 @@ TitleTab {
         enabled: reorderDrag.active
         onActivated: {
             control.dropCompleted = true;
+            control.dragCanceled();
         }
     }
 

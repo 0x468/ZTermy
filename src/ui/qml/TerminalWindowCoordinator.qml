@@ -13,6 +13,30 @@ QtObject {
     property var movingWindow: null
     property string draggedPaneId: ""
     property var preparedWindow: null
+    property var placementCache: ({})
+    property bool trackingPlacement: false
+    property Timer placementTimer: Timer {
+        interval: 200
+        onTriggered: windowCoordinator.capturePlacements()
+    }
+    property Connections mainPlacementSignals: Connections {
+        target: windowCoordinator.hostRoot.windowChrome
+        function onXChanged() {
+            windowCoordinator.schedulePlacement();
+        }
+        function onYChanged() {
+            windowCoordinator.schedulePlacement();
+        }
+        function onWidthChanged() {
+            windowCoordinator.schedulePlacement();
+        }
+        function onHeightChanged() {
+            windowCoordinator.schedulePlacement();
+        }
+        function onWindowStateChanged() {
+            windowCoordinator.schedulePlacement();
+        }
+    }
     property Component windowComponent: Component {
         DetachedTerminalWindow {
             hostRoot: windowCoordinator.hostRoot
@@ -23,16 +47,55 @@ QtObject {
         target: windowCoordinator.hostRoot.controller
         function onTerminalTabsChanged() {
             Qt.callLater(windowCoordinator.syncWindows);
+            windowCoordinator.schedulePlacement();
         }
         function onTerminalWorkspaceChanged() {
             Qt.callLater(windowCoordinator.syncWindows);
+            windowCoordinator.schedulePlacement();
+        }
+        function onTerminalWindowStateRequested() {
+            windowCoordinator.capturePlacements();
         }
     }
 
-    Component.onCompleted: Qt.callLater(syncWindows)
+    Component.onCompleted: {
+        const saved = restorePlacement(hostRoot.windowChrome, "main");
+        if (hostRoot.mainTerminalTabs.some(tab => tab.id === saved.selectedWorkspaceId))
+            hostRoot.requestedMainWorkspaceId = saved.selectedWorkspaceId;
+        trackingPlacement = true;
+        Qt.callLater(syncWindows);
+        schedulePlacement();
+    }
     Component.onDestruction: {
         for (const id in windows)
             windows[id].destroy();
+    }
+
+    function restorePlacement(window, id) {
+        const saved = hostRoot.controller.terminalWindowState(id);
+        placementCache[id] = WindowControl.restorePlacement(window, saved);
+        return saved;
+    }
+    function schedulePlacement() {
+        if (trackingPlacement)
+            placementTimer.restart();
+    }
+    function capturePlacements() {
+        if (!trackingPlacement)
+            return;
+        const capture = (window, id, selected) => {
+            const value = WindowControl.placement(window, placementCache[id] || ({}));
+            if (!value.width || !value.height)
+                return;
+            placementCache[id] = value;
+            hostRoot.controller.rememberTerminalWindow(Object.assign({}, value, {
+                id: id,
+                selectedWorkspaceId: selected
+            }));
+        };
+        capture(hostRoot.windowChrome, "main", hostRoot.mainWorkspaceId);
+        for (const id in windows)
+            capture(windows[id], id, windows[id].workspaceId);
     }
 
     function prepareWindow() {
@@ -91,6 +154,11 @@ QtObject {
             }
             const window = windows[id];
             window.tabs = live[id];
+            if (!placementCache[id]) {
+                const saved = restorePlacement(window, id);
+                if (live[id].some(tab => tab.id === saved.selectedWorkspaceId))
+                    window.workspaceId = saved.selectedWorkspaceId;
+            }
             const activeId = hostRoot.controller.activeTerminalTabId;
             if (live[id].some(tab => tab.id === activeId))
                 window.workspaceId = activeId;
@@ -105,6 +173,7 @@ QtObject {
                 windows[id].hide();
                 windows[id].destroy();
                 delete windows[id];
+                delete placementCache[id];
             }
         }
     }
@@ -304,6 +373,28 @@ QtObject {
                 ok = hostRoot.controller.moveTerminalPane(paneId, target.paneId, target.mode === "swap" ? "swap" : target.orientation, target.after);
             } else if (!target.mode && outside) {
                 hostRoot.detachTerminalPane(paneId);
+                return;
+            }
+            if (ok)
+                presentTarget(target);
+        });
+    }
+
+    function finishTabDrop(id, outside) {
+        const target = dropTarget;
+        dropTarget = ({});
+        Qt.callLater(() => {
+            let ok = false;
+            if (target.mode === "insert") {
+                const owner = target.windowId || "main";
+                const tabs = hostRoot.controller.terminalTabs.filter(tab => tab.windowId === owner);
+                const oldIndex = tabs.findIndex(tab => tab.id === id);
+                const index = target.index - (oldIndex >= 0 && oldIndex < target.index ? 1 : 0);
+                ok = hostRoot.controller.insertTerminalWorkspace(id, index, owner);
+            } else if (target.mode === "merge") {
+                ok = hostRoot.controller.mergeTerminalWorkspace(id, target.paneId, target.orientation, target.after);
+            } else if (outside && prepareWindow()) {
+                finishPreparation(hostRoot.controller.detachTerminalWorkspace(id) ? id : "");
                 return;
             }
             if (ok)

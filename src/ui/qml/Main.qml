@@ -1147,9 +1147,25 @@ Rectangle {
                     onMoveLeftRequested: root.controller.moveTerminalTab(modelData.id, modelData.tabIndex - 1)
                     onMoveRightRequested: root.controller.moveTerminalTab(modelData.id, modelData.tabIndex + 1)
                     onDragMoved: sceneX => titleTerminalTabs.updateTabDrag(modelData.id, sceneX)
+                    onDragPositionChanged: globalPosition => {
+                        const p = root.mapFromGlobal(globalPosition.x, globalPosition.y);
+                        if (p.x >= 0 && p.x < root.width && p.y >= 0 && p.y < root.titleBarHeight && WindowControl.acceptsDropAt(root.windowChrome, p, null))
+                            terminalWindows.dropTarget = ({});
+                        else
+                            terminalWindows.updateDropTarget(globalPosition);
+                    }
+                    onDragCanceled: {
+                        root.draggedTerminalTabId = "";
+                        terminalWindows.dropTarget = ({});
+                    }
                     onDragFinished: (sceneX, sceneY) => {
-                        if (!dropCompleted && sceneY >= 0 && sceneY <= root.titleBarHeight)
-                            titleTerminalTabs.finishTabDrag(modelData.id, sceneX);
+                        if (!dropCompleted) {
+                            const outside = sceneX < 0 || sceneY < 0 || sceneX >= root.width || sceneY >= root.height;
+                            if (terminalWindows.dropTarget.mode || outside)
+                                terminalWindows.finishTabDrop(modelData.id, outside);
+                            else if (sceneY >= 0 && sceneY <= root.titleBarHeight)
+                                titleTerminalTabs.finishTabDrag(modelData.id, sceneX);
+                        }
                         root.draggedTerminalTabId = "";
                     }
                     onReconnectRequested: {

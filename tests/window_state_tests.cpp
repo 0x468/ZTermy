@@ -16,6 +16,8 @@ private slots:
     void presentShowsHiddenWindowWithItsStates();
     void revealShowsHiddenWindowWithoutChangingItsState();
     void toggleMaximizeRoundTripsVisibleWindow();
+    void restoreGeometryStaysOnAvailableScreen();
+    void restorePlacementDoesNotRevealOrKeepMinimization();
 };
 
 void WindowStateTests::minimizedStatesKeepEveryOtherFlag()
@@ -101,6 +103,36 @@ void WindowStateTests::toggleMaximizeRoundTripsVisibleWindow()
     ztermy::windowing::toggleMaximize(window);
     QCOMPARE(window.windowStates(), Qt::WindowStates{Qt::WindowNoState});
     QVERIFY(window.isVisible());
+}
+
+void WindowStateTests::restoreGeometryStaysOnAvailableScreen()
+{
+    using ztermy::windowing::boundedRestoreGeometry;
+    const QRect leftScreen{-1920, -200, 1920, 1040};
+    const QRect unchanged{-1800, -100, 900, 600};
+    QCOMPARE(boundedRestoreGeometry(unchanged, leftScreen, {480, 320}), unchanged);
+    // A removed left monitor must not leave an inaccessible title bar.
+    QCOMPARE(boundedRestoreGeometry(unchanged, {0, 40, 1366, 728}, {480, 320}), QRect(0, 40, 900, 600));
+    // A smaller work area (including a top taskbar) bounds both size and origin.
+    QCOMPARE(boundedRestoreGeometry({3000, 2000, 2560, 1440}, {0, 40, 1366, 728}, {480, 320}), QRect(0, 40, 1366, 728));
+    QCOMPARE(boundedRestoreGeometry({1200, 700, 1, 1}, {0, 0, 1366, 768}, {480, 320}), QRect(886, 448, 480, 320));
+    // A screen smaller than the application's preferred minimum remains usable.
+    QCOMPARE(boundedRestoreGeometry({-99, -99, 900, 600}, {10, 20, 320, 200}, {480, 320}), QRect(10, 20, 320, 200));
+}
+
+void WindowStateTests::restorePlacementDoesNotRevealOrKeepMinimization()
+{
+    QWindow window;
+    window.setWindowStates(Qt::WindowMinimized | Qt::WindowMaximized);
+    const QRect normal{70, 80, 640, 480};
+    ztermy::windowing::restorePlacement(window, normal, true);
+    QVERIFY(!window.isVisible());
+    QCOMPARE(window.geometry(), normal);
+    QCOMPARE(window.windowStates(), Qt::WindowStates{Qt::WindowMaximized});
+    ztermy::windowing::restorePlacement(window, normal, false);
+    QVERIFY(!window.isVisible());
+    QCOMPARE(window.geometry(), normal);
+    QCOMPARE(window.windowStates(), Qt::WindowStates{Qt::WindowNoState});
 }
 
 QTEST_MAIN(WindowStateTests)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QVariantMap>
 #include <QWindow>
 #include <QtQml/qqmlregistration.h>
 
@@ -22,5 +23,7 @@ public:
     Q_INVOKABLE void reveal(QWindow *window) const;
     Q_INVOKABLE void present(QWindow *window) const;
     Q_INVOKABLE bool acceptsDropAt(QWindow *window, QPointF localPosition, QWindow *movingWindow) const;
+    Q_INVOKABLE QVariantMap placement(QWindow *window, const QVariantMap &previous) const;
+    Q_INVOKABLE QVariantMap restorePlacement(QWindow *window, const QVariantMap &saved) const;
 };
 } // namespace ztermy::ui

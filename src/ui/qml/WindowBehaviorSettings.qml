@@ -13,6 +13,7 @@ SectionCard {
     property alias performanceMode: performanceModeSwitch.checked
     property alias singleInstance: singleInstanceSwitch.checked
     property alias allowTerminalTitleChanges: terminalTitleSwitch.checked
+    property alias restoreDetachedWindows: restoreDetachedWindowsSwitch.checked
     property alias tabDoubleClickIndex: tabDoubleClickBox.currentIndex
     property alias tabCloseButtonIndex: tabCloseButtonBox.currentIndex
     signal performanceModeEdited(bool enabled)
@@ -24,6 +25,7 @@ SectionCard {
     function loadInteraction(values) {
         singleInstance = values.singleInstance;
         allowTerminalTitleChanges = values.allowTerminalTitleChanges;
+        restoreDetachedWindows = values.restoreDetachedWindows;
         tabDoubleClickIndex = ["rename", "close", "none"].indexOf(values.tabDoubleClick);
         tabCloseButtonIndex = ["always", "hover", "hidden"].indexOf(values.tabCloseButton);
     }
@@ -32,6 +34,7 @@ SectionCard {
         return {
             singleInstance: singleInstance,
             allowTerminalTitleChanges: allowTerminalTitleChanges,
+            restoreDetachedWindows: restoreDetachedWindows,
             tabDoubleClick: ["rename", "close", "none"][tabDoubleClickIndex],
             tabCloseButton: ["always", "hover", "hidden"][tabCloseButtonIndex]
         };
@@ -74,6 +77,17 @@ SectionCard {
             objectName: "settingsPreserveTerminalSessionsSwitch"
             Layout.fillWidth: true
             text: qsTr("Restore terminal tabs and pane layouts on the next launch")
+            accessibleName: text
+        }
+
+        AppSwitch {
+            id: restoreDetachedWindowsSwitch
+
+            objectName: "settingsRestoreDetachedWindowsSwitch"
+            Layout.fillWidth: true
+            leftPadding: 24
+            enabled: preserveTerminalSessionsSwitch.checked
+            text: qsTr("Restore detached windows on the next launch")
             accessibleName: text
         }
 

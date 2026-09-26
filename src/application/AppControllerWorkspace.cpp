@@ -172,4 +172,69 @@ void AppController::applyOpenSshConfigImport(const QVariantList &hosts, const QS
     emit workspaceOperationChanged();
 }
 
+QVariantMap AppController::terminalWindowState(const QString &id) const
+{
+    if (!m_settings.preserveTerminalSessions)
+        return {};
+    const auto found =
+        std::ranges::find(m_workspaceState.terminalWindows, utf8String(id), &workbench::TerminalWindowState::id);
+    if (found == m_workspaceState.terminalWindows.end())
+        return {};
+    return {{QStringLiteral("id"), id},
+            {QStringLiteral("selectedWorkspaceId"), utf8QString(found->selectedWorkspaceId)},
+            {QStringLiteral("screenName"), utf8QString(found->screenName)},
+            {QStringLiteral("x"), found->x},
+            {QStringLiteral("y"), found->y},
+            {QStringLiteral("width"), found->width},
+            {QStringLiteral("height"), found->height},
+            {QStringLiteral("maximized"), found->maximized}};
+}
+
+bool AppController::rememberTerminalWindow(const QVariantMap &state)
+{
+    if (m_shutdownStarted)
+        return false;
+    const auto id = utf8String(state.value(QStringLiteral("id")).toString());
+    const auto isLive = [this](const std::string &windowId) {
+        return windowId == "main"
+               || std::ranges::any_of(m_workspaceState.terminalWorkspaces, [&windowId](const auto &layout) {
+                      return layout.windowId == windowId;
+                  });
+    };
+    if (!isLive(id))
+        return false;
+    for (const auto &key :
+         {QStringLiteral("x"), QStringLiteral("y"), QStringLiteral("width"), QStringLiteral("height")})
+    {
+        bool valid = false;
+        const double number = state.value(key).toDouble(&valid);
+        if (!valid || number != state.value(key).toInt())
+            return false;
+    }
+    workbench::TerminalWindowState window{
+        .id = id,
+        .selectedWorkspaceId = utf8String(state.value(QStringLiteral("selectedWorkspaceId")).toString()),
+        .screenName = utf8String(state.value(QStringLiteral("screenName")).toString()),
+        .x = state.value(QStringLiteral("x")).toInt(),
+        .y = state.value(QStringLiteral("y")).toInt(),
+        .width = state.value(QStringLiteral("width")).toInt(),
+        .height = state.value(QStringLiteral("height")).toInt(),
+        .maximized = state.value(QStringLiteral("maximized")).toBool()};
+    workbench::WorkspaceState validation;
+    validation.terminalWindows.push_back(window);
+    if (!workbench::validWorkspaceState(validation))
+        return false;
+    auto &windows = m_workspaceState.terminalWindows;
+    std::erase_if(windows, [&isLive](const auto &entry) {
+        return !isLive(entry.id);
+    });
+    const auto found = std::ranges::find(windows, id, &workbench::TerminalWindowState::id);
+    if (found == windows.end())
+        windows.push_back(std::move(window));
+    else
+        *found = std::move(window);
+    // No disk I/O on geometry changes: topology saves and orderly shutdown persist this snapshot.
+    return true;
+}
+
 } // namespace ztermy

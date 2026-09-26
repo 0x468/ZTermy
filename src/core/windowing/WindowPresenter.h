@@ -1,5 +1,8 @@
 #pragma once
 
+#include <QRect>
+#include <QSize>
+
 class QWindow;
 
 namespace ztermy::windowing
@@ -16,4 +19,7 @@ void minimize(QWindow &window);
 void toggleMaximize(QWindow &window);
 void reveal(QWindow &window);
 void present(QWindow &window);
+[[nodiscard]] QRect boundedRestoreGeometry(QRect normalGeometry, QRect availableGeometry, QSize minimumSize);
+// Apply placement before revealing a window; do not activate it or restore minimization.
+void restorePlacement(QWindow &window, QRect normalGeometry, bool maximized);
 } // namespace ztermy::windowing

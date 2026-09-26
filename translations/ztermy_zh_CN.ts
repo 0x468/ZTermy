@@ -9655,6 +9655,10 @@ Click to unpin · Double-click pins the whole window</source>
 <context>
     <name>WindowBehaviorSettings</name>
     <message>
+        <source>Restore detached windows on the next launch</source>
+        <translation>下次启动时恢复独立窗口</translation>
+    </message>
+    <message>
         <source>Allow terminals to change titles</source>
         <translation>允许终端修改标题</translation>
     </message>

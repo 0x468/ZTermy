@@ -180,6 +180,7 @@ struct ApplicationSettings final
     bool reopenLocalSessions = true;
     bool reconnectRemoteSessions = false;
     bool allowTerminalTitleChanges = true;
+    bool restoreDetachedWindows = true;
     EffectsTier effectsTier = EffectsTier::full;
     // Id of a TerminalThemeCatalog theme; unknown ids resolve to the built-in default.
     QString terminalTheme = QStringLiteral("ztermy-dark");

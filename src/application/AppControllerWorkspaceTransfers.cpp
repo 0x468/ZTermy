@@ -138,7 +138,10 @@ bool AppController::detachTerminalWorkspace(const QString &workspaceId)
                                          &workbench::TerminalWorkspaceLayout::id);
     if (found == candidate.terminalWorkspaces.end())
         return false;
-    if (found->windowId != "main")
+    if (found->windowId != "main"
+        && std::ranges::count(candidate.terminalWorkspaces, found->windowId,
+                              &workbench::TerminalWorkspaceLayout::windowId)
+               == 1)
         return true;
     found->windowId = newLayoutId();
     found->returnWorkspaceId.clear();

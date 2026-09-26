@@ -459,6 +459,8 @@ public:
     [[nodiscard]] QObject *localFiles() const noexcept;
 
     Q_INVOKABLE QString startLocalTerminal();
+    Q_INVOKABLE QVariantMap terminalWindowState(const QString &id) const;
+    Q_INVOKABLE bool rememberTerminalWindow(const QVariantMap &state);
     Q_INVOKABLE QString startLocalTerminalWithShell(const QString &shellId);
     Q_INVOKABLE bool activateTerminalTab(const QString &id);
     Q_INVOKABLE bool closeTerminalTab(const QString &id, const QString &successorId = {});
@@ -767,6 +769,7 @@ signals:
     void activeTerminalTabChanged();
     void activeTerminalTabPinnedChanged();
     void terminalWorkspaceChanged();
+    void terminalWindowStateRequested();
     void terminalSearchChanged();
     void remoteTelemetryChanged();
     void applicationSettingsChanged();

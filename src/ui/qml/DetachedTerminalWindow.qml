@@ -55,6 +55,11 @@ Window {
     minimumWidth: 480
     minimumHeight: 320
     visible: false
+    onXChanged: coordinator.schedulePlacement()
+    onYChanged: coordinator.schedulePlacement()
+    onWidthChanged: coordinator.schedulePlacement()
+    onHeightChanged: coordinator.schedulePlacement()
+    onWindowStateChanged: coordinator.schedulePlacement()
     onActiveChanged: {
         if (active && workspaceId.length > 0)
             hostRoot.controller.activateTerminalTab(workspaceId);
@@ -88,6 +93,7 @@ Window {
             width: Math.max(0, parent.width - 160)
             height: parent.height
             contentWidth: tabRow.width
+            interactive: contentWidth > width
             clip: true
             flickableDirection: Flickable.HorizontalFlick
             Row {
@@ -127,6 +133,14 @@ Window {
                                 detachedTerminalWindow.controller.insertTerminalWorkspace(detachedTerminalWindow.controller.activeTerminalTabId, modelData.tabIndex + 1, detachedTerminalWindow.ownerWindowId);
                         }
                         onMoveLeftRequested: detachedTerminalWindow.controller.moveTerminalTab(modelData.id, modelData.tabIndex - 1)
+                        onDragPositionChanged: globalPosition => detachedTerminalWindow.coordinator.updateDropTarget(globalPosition)
+                        onDragCanceled: detachedTerminalWindow.coordinator.dropTarget = ({})
+                        onDragFinished: (sceneX, sceneY) => {
+                            if (!dropCompleted) {
+                                const outside = sceneX < 0 || sceneY < 0 || sceneX >= detachedTerminalWindow.width || sceneY >= detachedTerminalWindow.height;
+                                detachedTerminalWindow.coordinator.finishTabDrop(modelData.id, outside);
+                            }
+                        }
                         onMoveRightRequested: detachedTerminalWindow.controller.moveTerminalTab(modelData.id, modelData.tabIndex + 1)
                         onCloseOthersRequested: detachedTerminalWindow.controller.closeOtherTerminalTabs(modelData.id)
                         onCloseToRightRequested: detachedTerminalWindow.controller.closeTerminalTabsToRight(modelData.id)

@@ -269,6 +269,8 @@ private slots:
     void managesMultipleLocalTerminalTabs();
     void usesUnnumberedLocalShellTitles();
     void managesTerminalSessionLifecyclePreferences();
+    void restoresDetachedOwnershipOnlyWhenEnabled();
+    void coalescesWindowPlacementUntilLayoutSave();
     void unifiesThemePolicyAndSystemAppearance();
     void closesMultipleWorkspacesWithReentrantObservers();
     void tracksTemporaryTerminalWorkspacePins();
@@ -2273,6 +2275,106 @@ void AppControllerTests::managesTerminalSessionLifecyclePreferences()
     QTRY_VERIFY(controller.terminalTabs().isEmpty());
 }
 
+void AppControllerTests::restoresDetachedOwnershipOnlyWhenEnabled()
+{
+    for (const bool preserve : {false, true})
+        for (const bool detached : {false, true})
+        {
+            QTemporaryDir directory;
+            const auto settingsPath = directory.filePath(QStringLiteral("settings.json"));
+            ztermy::config::ApplicationSettings settings;
+            settings.preserveTerminalSessions = preserve;
+            settings.restoreDetachedWindows = detached;
+            settings.reopenLocalSessions = false;
+            QVERIFY(ztermy::config::ApplicationSettingsStore(settingsPath).save(settings));
+            ztermy::workbench::WorkspaceState workspace;
+            auto tab = ztermy::workbench::makeSinglePaneTerminalWorkspace(
+                "saved-tab", "saved-pane", {.id = "local-intent", .profileId = "commandPrompt", .title = "CMD"});
+            tab.windowId = "saved-window";
+            tab.manualTitle = "Pinned tab";
+            workspace.terminalWorkspaces.push_back(tab);
+            workspace.activeTerminalWorkspaceId = tab.id;
+            workspace.terminalWindows.push_back({.id = tab.windowId, .selectedWorkspaceId = tab.id, .maximized = true});
+            QVERIFY(ztermy::workbench::WorkspaceStateStore(directory.filePath(QStringLiteral("workspace_state.json")))
+                        .save(workspace));
+            const auto session = std::make_shared<FakeLocalSessionState>();
+            ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                             directory.filePath(QStringLiteral("known_hosts.json")), settingsPath,
+                                             [session] {
+                                                 return std::make_unique<FakeLocalTerminalSession>(session);
+                                             });
+            QCOMPARE(controller.windowInteractionSettings().value(QStringLiteral("restoreDetachedWindows")).toBool(),
+                     detached);
+            QCOMPARE(session->starts, 0);
+            if (preserve)
+            {
+                QCOMPARE(controller.terminalTabs().size(), 1);
+                const auto restored = controller.terminalWorkspace(QStringLiteral("saved-tab"));
+                QCOMPARE(restored.value(QStringLiteral("windowId")).toString(),
+                         detached ? QStringLiteral("saved-window") : QStringLiteral("main"));
+                QCOMPARE(restored.value(QStringLiteral("title")).toString(), QStringLiteral("Pinned tab"));
+                QCOMPARE(restored.value(QStringLiteral("activePaneId")).toString(), QStringLiteral("saved-pane"));
+            }
+            else
+                QVERIFY(controller.terminalTabs().isEmpty());
+            QVERIFY(controller.saveWindowInteractionSettings({{QStringLiteral("restoreDetachedWindows"), !detached}}));
+            QCOMPARE(ztermy::config::ApplicationSettingsStore(settingsPath).load()->restoreDetachedWindows, !detached);
+            QCOMPARE(session->starts, 0);
+        }
+}
+
+void AppControllerTests::coalescesWindowPlacementUntilLayoutSave()
+{
+    QTemporaryDir directory;
+    const auto path = directory.filePath(QStringLiteral("workspace_state.json"));
+    const auto session = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")), [session] {
+                                         return std::make_unique<FakeLocalTerminalSession>(session);
+                                     });
+    const auto tab = controller.startLocalTerminal();
+    QVERIFY(!tab.isEmpty());
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const auto initial = file.readAll();
+    file.close();
+    QVariantMap state{{QStringLiteral("id"), QStringLiteral("main")},
+                      {QStringLiteral("selectedWorkspaceId"), tab},
+                      {QStringLiteral("x"), -1600},
+                      {QStringLiteral("y"), 80},
+                      {QStringLiteral("width"), 900},
+                      {QStringLiteral("height"), 600},
+                      {QStringLiteral("maximized"), false}};
+    for (int step = 0; step < 100; ++step)
+    {
+        state[QStringLiteral("x")] = -1600 + step;
+        QVERIFY(controller.rememberTerminalWindow(state));
+    }
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), initial);
+    file.close();
+    const auto last = controller.terminalWindowState(QStringLiteral("main"));
+    QCOMPARE(last.value(QStringLiteral("x")).toInt(), -1501);
+    auto invalid = state;
+    invalid[QStringLiteral("id")] = QStringLiteral("missing-window");
+    QVERIFY(!controller.rememberTerminalWindow(invalid));
+    invalid = state;
+    invalid[QStringLiteral("width")] = 0;
+    QVERIFY(!controller.rememberTerminalWindow(invalid));
+    QCOMPARE(controller.terminalWindowState(QStringLiteral("main")), last);
+    connect(&controller, &ztermy::AppController::terminalWindowStateRequested, &controller, [&] {
+        state[QStringLiteral("maximized")] = true;
+        QVERIFY(controller.rememberTerminalWindow(state));
+    });
+    controller.shutdown();
+    const auto saved = ztermy::workbench::WorkspaceStateStore(path).load();
+    QVERIFY(saved);
+    QCOMPARE(saved->terminalWindows.size(), std::size_t{1});
+    QCOMPARE(saved->terminalWindows.front().x, -1501);
+    QVERIFY(saved->terminalWindows.front().maximized);
+    QCOMPARE(session->starts, 1);
+}
+
 void AppControllerTests::managesMultipleLocalTerminalTabs()
 {
     QTemporaryDir directory;
@@ -3251,6 +3353,15 @@ void AppControllerTests::groupsAndTransfersDetachedTabsWithoutRestartingSessions
     QVERIFY(!controller.insertTerminalWorkspace(a, 0, QStringLiteral("missing-window")));
     QVERIFY(!controller.insertTerminalWorkspace(a, -1, window));
     QCOMPARE(controller.terminalTabs(), beforeInvalid);
+
+    // Tearing one tab out of a detached group creates a new window, not a no-op.
+    QVERIFY(controller.detachTerminalWorkspace(a));
+    const auto tornOwner = controller.terminalWorkspace(a).value(QStringLiteral("windowId")).toString();
+    QVERIFY(tornOwner != window && tornOwner != QStringLiteral("main"));
+    QCOMPARE(controller.terminalWorkspace(b).value(QStringLiteral("windowId")).toString(), window);
+    QVERIFY(controller.detachTerminalWorkspace(a));
+    QCOMPARE(controller.terminalWorkspace(a).value(QStringLiteral("windowId")).toString(), tornOwner);
+    QVERIFY(controller.insertTerminalWorkspace(a, 1, window));
 
     // Merge into the chosen leaf of a detached multi-pane tab, not its active-window substitute.
     QVERIFY(controller.mergeTerminalWorkspace(a, paneB, QStringLiteral("horizontal"), false));

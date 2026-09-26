@@ -2,6 +2,7 @@
 
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTemporaryDir>
@@ -24,6 +25,8 @@ private slots:
     void migratesVersionSixWithoutRestoreGuardState();
     void migratesVersionSevenToWindowOwnership();
     void migratesVersionEightWithoutLosingManualNames();
+    void migratesVersionNineWithoutWindowPlacement();
+    void rejectsInvalidWindowPlacementWithoutOverwriting();
     void togglesAndBoundsSftpBookmarks();
     void rejectsMalformedDuplicateAndInvalidState();
     void rejectsMalformedTerminalWorkspaceTopology();
@@ -84,6 +87,15 @@ void WorkspaceStateStoreTests::savesAndLoadsVersionedNonSecretState()
                                                  ztermy::workbench::TerminalSplitOrientation::Vertical, 0.5, true));
     expected.terminalWorkspaces.push_back(std::move(workspace));
     expected.activeTerminalWorkspaceId = "workspace-a";
+    expected.terminalWindows = {{.id = "main", .selectedWorkspaceId = "closed-tab", .x = -1800, .y = -80},
+                                {.id = "detached-window",
+                                 .selectedWorkspaceId = "workspace-a",
+                                 .screenName = "screen-2",
+                                 .x = 400,
+                                 .y = 100,
+                                 .width = 1100,
+                                 .height = 720,
+                                 .maximized = true}};
     expected.quarantinedRestoreIntentIds = {"intent-b"};
     expected.restoreAttemptIntentId = "intent-a";
 
@@ -95,7 +107,7 @@ void WorkspaceStateStoreTests::savesAndLoadsVersionedNonSecretState()
     QFile file(path);
     QVERIFY(file.open(QIODevice::ReadOnly));
     const QByteArray payload = file.readAll();
-    QCOMPARE(QJsonDocument::fromJson(payload).object().value(QStringLiteral("schemaVersion")).toInt(), 9);
+    QCOMPARE(QJsonDocument::fromJson(payload).object().value(QStringLiteral("schemaVersion")).toInt(), 10);
     QVERIFY(payload.contains("terminalWorkspaces"));
     QVERIFY(payload.contains("activeTerminalWorkspaceId"));
     QVERIFY(!payload.contains("password"));
@@ -143,7 +155,7 @@ void WorkspaceStateStoreTests::migratesVersionSevenToWindowOwnership()
     QVERIFY(store.save(*loaded));
     QCOMPARE(*store.load(), *loaded);
     QVERIFY(file.open(QIODevice::ReadOnly));
-    QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value(QStringLiteral("schemaVersion")).toInt(), 9);
+    QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value(QStringLiteral("schemaVersion")).toInt(), 10);
 }
 
 void WorkspaceStateStoreTests::migratesVersionEightWithoutLosingManualNames()
@@ -176,7 +188,88 @@ void WorkspaceStateStoreTests::migratesVersionEightWithoutLosingManualNames()
     QVERIFY(store.save(*loaded));
     QCOMPARE(store.load(), loaded);
     QVERIFY(file.open(QIODevice::ReadOnly));
-    QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value(QStringLiteral("schemaVersion")).toInt(), 9);
+    QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value(QStringLiteral("schemaVersion")).toInt(), 10);
+}
+
+void WorkspaceStateStoreTests::migratesVersionNineWithoutWindowPlacement()
+{
+    QTemporaryDir directory;
+    const QString path = directory.filePath(QStringLiteral("workspace.json"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    const QByteArray fixture = R"({"schemaVersion":9,"profiles":[],"collapsedHostSections":["recent"],
+"activeTerminalWorkspaceId":"tab","quarantinedRestoreIntentIds":["intent"],"restoreAttemptIntentId":"",
+"terminalWorkspaces":[{"id":"tab","title":"Temporary title","manualTitle":"Pinned tab","rootNodeId":"pane","activePaneId":"pane",
+"windowId":"detached","returnWorkspaceId":"origin",
+"nodes":[{"id":"pane","kind":"leaf","restoreIntentId":"intent","firstChildId":"","secondChildId":"","orientation":"horizontal","ratio":0.5}],
+"restoreIntents":[{"id":"intent","kind":"local","profileId":"nushell","title":"Nushell","manualTitle":"Pinned pane"}]}]})";
+    QCOMPARE(file.write(fixture), fixture.size());
+    file.close();
+    const ztermy::workbench::WorkspaceStateStore store(path);
+    const auto loaded = store.load();
+    QVERIFY(loaded);
+    QVERIFY(loaded->terminalWindows.empty());
+    QCOMPARE(loaded->collapsedHostSections, std::vector<std::string>{"recent"});
+    QCOMPARE(loaded->quarantinedRestoreIntentIds, std::vector<std::string>{"intent"});
+    const auto &tab = loaded->terminalWorkspaces.front();
+    QCOMPARE(tab.manualTitle, std::string("Pinned tab"));
+    QCOMPARE(tab.windowId, std::string("detached"));
+    QCOMPARE(tab.returnWorkspaceId, std::string("origin"));
+    QCOMPARE(tab.restoreIntents.front().profileId, std::string("nushell"));
+    QCOMPARE(tab.restoreIntents.front().manualTitle, std::string("Pinned pane"));
+    QVERIFY(store.save(*loaded));
+    QCOMPARE(store.load(), loaded);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const auto root = QJsonDocument::fromJson(file.readAll()).object();
+    QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 10);
+    QVERIFY(root.value(QStringLiteral("terminalWindows")).isArray());
+}
+
+void WorkspaceStateStoreTests::rejectsInvalidWindowPlacementWithoutOverwriting()
+{
+    QTemporaryDir directory;
+    const QString path = directory.filePath(QStringLiteral("workspace.json"));
+    const ztermy::workbench::WorkspaceStateStore store(path);
+    ztermy::workbench::WorkspaceState state;
+    state.terminalWindows = {{.id = "main", .x = -1920, .y = -200, .width = 960, .height = 600}};
+    QVERIFY(store.save(state));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const auto original = file.readAll();
+    file.close();
+    auto invalid = state;
+    invalid.terminalWindows.front().width = 0;
+    QVERIFY(!store.save(invalid));
+    invalid = state;
+    invalid.terminalWindows.push_back(invalid.terminalWindows.front());
+    QVERIFY(!store.save(invalid));
+    invalid = state;
+    invalid.terminalWindows.front().x = 1000001;
+    QVERIFY(!store.save(invalid));
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), original);
+    file.close();
+
+    const auto root = QJsonDocument::fromJson(original).object();
+    for (const QJsonValue badWidth : {QJsonValue(0), QJsonValue(960.5), QJsonValue("960"), QJsonValue(1e20)})
+    {
+        auto badRoot = root;
+        auto windows = root.value(QStringLiteral("terminalWindows")).toArray();
+        auto window = windows.first().toObject();
+        window.insert(QStringLiteral("width"), badWidth);
+        windows.replace(0, window);
+        badRoot.insert(QStringLiteral("terminalWindows"), windows);
+        // A separate file has no valid backup that could conceal a parse failure.
+        const QString brokenPath = directory.filePath(QStringLiteral("broken.json"));
+        QFile broken(brokenPath);
+        QVERIFY(broken.open(QIODevice::WriteOnly));
+        const auto payload = QJsonDocument(badRoot).toJson();
+        QCOMPARE(broken.write(payload), payload.size());
+        broken.close();
+        const auto result = ztermy::workbench::WorkspaceStateStore(brokenPath).load();
+        QVERIFY(!result);
+        QCOMPARE(result.error(), ztermy::workbench::WorkspaceStateStoreError::InvalidDocument);
+    }
 }
 
 void WorkspaceStateStoreTests::migratesVersionFiveWithoutTerminalWorkspaces()

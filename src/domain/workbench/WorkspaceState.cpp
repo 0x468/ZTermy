@@ -129,6 +129,7 @@ bool validWorkspaceState(const WorkspaceState &state) noexcept
 {
     if (state.collapsedHostSections.size() > maximumCollapsedHostSections
         || state.terminalWorkspaces.size() > maximumTerminalWorkspaces
+        || state.terminalWindows.size() > maximumTerminalWorkspaces + 1
         || state.quarantinedRestoreIntentIds.size() > maximumRestorableTerminalSessions
         || !std::ranges::all_of(state.profiles, validProfileWorkspaceState)
         || !std::ranges::all_of(state.terminalWorkspaces, validTerminalWorkspaceLayout))
@@ -140,6 +141,17 @@ bool validWorkspaceState(const WorkspaceState &state) noexcept
         }))
     {
         return false;
+    }
+    for (auto window = state.terminalWindows.begin(); window != state.terminalWindows.end(); ++window)
+    {
+        // Selection is advisory: a closed/moved Tab must not invalidate the saved layout.
+        if (!validBoundedText(window->id, 128, false) || !validBoundedText(window->selectedWorkspaceId, 128, true)
+            || !validBoundedText(window->screenName, 512, true) || window->x < -1000000 || window->x > 1000000
+            || window->y < -1000000 || window->y > 1000000 || window->width < 1 || window->width > 32768
+            || window->height < 1 || window->height > 32768
+            || std::ranges::find(std::next(window), state.terminalWindows.end(), window->id, &TerminalWindowState::id)
+                   != state.terminalWindows.end())
+            return false;
     }
     std::size_t restoreIntentCount = 0;
     for (auto workspace = state.terminalWorkspaces.begin(); workspace != state.terminalWorkspaces.end(); ++workspace)

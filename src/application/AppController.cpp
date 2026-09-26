@@ -2749,6 +2749,7 @@ void AppController::shutdown() noexcept
     {
         return;
     }
+    emit terminalWindowStateRequested();
     m_shutdownStarted = true;
     try
     {
@@ -3912,6 +3913,7 @@ QVariantMap AppController::windowInteractionSettings() const
 {
     const auto &settings = m_settings.windowInteraction;
     return {{QStringLiteral("allowTerminalTitleChanges"), m_settings.allowTerminalTitleChanges},
+            {QStringLiteral("restoreDetachedWindows"), m_settings.restoreDetachedWindows},
             {QStringLiteral("singleInstance"), settings.singleInstance},
             {QStringLiteral("navigationWidth"), settings.navigationWidth},
             {QStringLiteral("navigationExpandedWidth"), settings.navigationExpandedWidth},
@@ -3937,6 +3939,7 @@ bool AppController::saveWindowInteractionSettings(const QVariantMap &changes)
         .tabCloseButton = values.value(QStringLiteral("tabCloseButton")).toString(),
     };
     updated.allowTerminalTitleChanges = values.value(QStringLiteral("allowTerminalTitleChanges")).toBool();
+    updated.restoreDetachedWindows = values.value(QStringLiteral("restoreDetachedWindows")).toBool();
     return persistApplicationSettings(updated);
 }
 
@@ -16972,9 +16975,21 @@ void AppController::loadWorkspaceState()
         m_workspaceState.activeTerminalWorkspaceId.clear();
         m_workspaceState.restoreAttemptIntentId.clear();
         m_workspaceState.quarantinedRestoreIntentIds.clear();
+        m_workspaceState.terminalWindows.clear();
         if (!m_workspaceStateStore.save(m_workspaceState))
             qCWarning(appControllerLog) << "Unable to discard the previous terminal session layout";
         return;
+    }
+    if (!m_settings.restoreDetachedWindows)
+    {
+        for (auto &layout : m_workspaceState.terminalWorkspaces)
+        {
+            layout.windowId = "main";
+            layout.returnWorkspaceId.clear();
+        }
+        std::erase_if(m_workspaceState.terminalWindows, [](const auto &window) {
+            return window.id != "main";
+        });
     }
     if (!m_workspaceState.restoreAttemptIntentId.empty())
     {

@@ -9,6 +9,7 @@
 #include <QSaveFile>
 
 #include <algorithm>
+#include <limits>
 #include <optional>
 #include <utility>
 
@@ -17,7 +18,7 @@ namespace ztermy::workbench
 namespace
 {
 
-constexpr int currentSchemaVersion = 9;
+constexpr int currentSchemaVersion = 10;
 
 QString text(const std::string &value)
 {
@@ -92,6 +93,46 @@ QJsonObject serializeTerminalWorkspace(const TerminalWorkspaceLayout &layout)
         {QStringLiteral("windowId"), text(layout.windowId)},
         {QStringLiteral("returnWorkspaceId"), text(layout.returnWorkspaceId)},
     };
+}
+
+QJsonObject serializeTerminalWindow(const TerminalWindowState &window)
+{
+    return {{QStringLiteral("id"), text(window.id)},
+            {QStringLiteral("selectedWorkspaceId"), text(window.selectedWorkspaceId)},
+            {QStringLiteral("screenName"), text(window.screenName)},
+            {QStringLiteral("x"), window.x},
+            {QStringLiteral("y"), window.y},
+            {QStringLiteral("width"), window.width},
+            {QStringLiteral("height"), window.height},
+            {QStringLiteral("maximized"), window.maximized}};
+}
+
+std::optional<TerminalWindowState> parseTerminalWindow(const QJsonValue &value)
+{
+    if (!value.isObject())
+        return std::nullopt;
+    const auto object = value.toObject();
+    for (const auto &key : {QStringLiteral("id"), QStringLiteral("selectedWorkspaceId"), QStringLiteral("screenName")})
+        if (!object.value(key).isString())
+            return std::nullopt;
+    for (const auto &key :
+         {QStringLiteral("x"), QStringLiteral("y"), QStringLiteral("width"), QStringLiteral("height")})
+    {
+        const auto number = object.value(key);
+        if (!number.isDouble() || number.toDouble() != number.toInt(std::numeric_limits<int>::min()))
+            return std::nullopt;
+    }
+    if (!object.value(QStringLiteral("maximized")).isBool())
+        return std::nullopt;
+    return TerminalWindowState{.id = bytes(object.value(QStringLiteral("id")).toString()),
+                               .selectedWorkspaceId =
+                                   bytes(object.value(QStringLiteral("selectedWorkspaceId")).toString()),
+                               .screenName = bytes(object.value(QStringLiteral("screenName")).toString()),
+                               .x = object.value(QStringLiteral("x")).toInt(),
+                               .y = object.value(QStringLiteral("y")).toInt(),
+                               .width = object.value(QStringLiteral("width")).toInt(),
+                               .height = object.value(QStringLiteral("height")).toInt(),
+                               .maximized = object.value(QStringLiteral("maximized")).toBool()};
 }
 
 std::optional<TerminalRestoreKind> parseRestoreKind(const QJsonValue &value)
@@ -438,6 +479,19 @@ std::expected<WorkspaceState, WorkspaceStateStoreError> parseWorkspacePayload(co
         }
         state.restoreAttemptIntentId = bytes(attemptValue.toString());
     }
+    if (schemaVersion >= 10)
+    {
+        const auto windows = root.value(QStringLiteral("terminalWindows"));
+        if (!windows.isArray() || windows.toArray().size() > static_cast<qsizetype>(maximumTerminalWorkspaces + 1))
+            return std::unexpected(WorkspaceStateStoreError::InvalidDocument);
+        for (const auto &value : windows.toArray())
+        {
+            auto window = parseTerminalWindow(value);
+            if (!window)
+                return std::unexpected(WorkspaceStateStoreError::InvalidDocument);
+            state.terminalWindows.push_back(std::move(*window));
+        }
+    }
     return validWorkspaceState(state) ? std::expected<WorkspaceState, WorkspaceStateStoreError>{std::move(state)}
                                       : std::unexpected(WorkspaceStateStoreError::InvalidDocument);
 }
@@ -552,6 +606,9 @@ std::expected<void, WorkspaceStateStoreError> WorkspaceStateStore::save(const Wo
     {
         terminalWorkspaces.push_back(serializeTerminalWorkspace(workspace));
     }
+    QJsonArray terminalWindows;
+    for (const auto &window : state.terminalWindows)
+        terminalWindows.push_back(serializeTerminalWindow(window));
     QJsonArray quarantinedRestoreIntentIds;
     for (const std::string &intentId : state.quarantinedRestoreIntentIds)
         quarantinedRestoreIntentIds.push_back(text(intentId));
@@ -560,6 +617,7 @@ std::expected<void, WorkspaceStateStoreError> WorkspaceStateStore::save(const Wo
                                   {QStringLiteral("profiles"), profiles},
                                   {QStringLiteral("collapsedHostSections"), collapsedSections},
                                   {QStringLiteral("terminalWorkspaces"), terminalWorkspaces},
+                                  {QStringLiteral("terminalWindows"), terminalWindows},
                                   {QStringLiteral("activeTerminalWorkspaceId"), text(state.activeTerminalWorkspaceId)},
                                   {QStringLiteral("quarantinedRestoreIntentIds"), quarantinedRestoreIntentIds},
                                   {QStringLiteral("restoreAttemptIntentId"), text(state.restoreAttemptIntentId)}})
