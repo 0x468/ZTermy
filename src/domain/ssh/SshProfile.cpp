@@ -191,6 +191,9 @@ std::uint32_t reconnectBackoffMilliseconds(const SshSessionOptions &options, con
 
 bool validSshProfile(const SshProfile &profile) noexcept
 {
+    const bool knownIcon = profile.iconName == "terminal" || profile.iconName == "hosts"
+                           || profile.iconName == "network" || profile.iconName == "folder"
+                           || profile.iconName == "security" || profile.iconName == "commands";
     if (!nonEmptyWithin(profile.id, maximumIdLength) || !nonEmptyWithin(profile.name, maximumNameLength)
         || profile.group.size() > maximumGroupLength || !nonEmptyWithin(profile.host, maximumHostLength)
         || !nonEmptyWithin(profile.username, maximumUsernameLength) || profile.port == 0
@@ -200,7 +203,7 @@ bool validSshProfile(const SshProfile &profile) noexcept
         || !std::ranges::all_of(profile.keywordHighlightRules, validKeywordHighlightRule)
         || (profile.lastConnectedUtcMs.has_value() && *profile.lastConnectedUtcMs < 0)
         || !validSshSessionOptions(profile.sessionOptions) || !validSshProxyOptions(profile.proxy)
-        || profile.jumpProfileIds.size() > maximumSshJumpHostCount)
+        || profile.jumpProfileIds.size() > maximumSshJumpHostCount || !knownIcon)
     {
         return false;
     }

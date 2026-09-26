@@ -7,7 +7,8 @@
 
 namespace ztermy::ui
 {
-inline bool nativeTabDrag(QQuickWindow &source, const QPoint &start, const QPoint &end, const bool cancel = false)
+inline bool nativeTabDrag(QQuickWindow &source, const QPoint &start, const QPoint &end, const bool cancel = false,
+                          QObject *dropObserver = nullptr)
 {
     using namespace std::chrono_literals;
     const auto previous = QCursor::pos();
@@ -15,20 +16,37 @@ inline bool nativeTabDrag(QQuickWindow &source, const QPoint &start, const QPoin
     QCursor::setPos(start);
     processWindowEventsFor(150ms);
     const auto handle = reinterpret_cast<HWND>(source.winId()); // NOLINT(performance-no-int-to-ptr)
-    POINT pointer{};
-    if (GetForegroundWindow() != handle || !GetCursorPos(&pointer)
-        || GetAncestor(WindowFromPoint(pointer), GA_ROOT) != handle)
-    {
-        QCursor::setPos(previous);
-        qWarning() << "Native tab drag unavailable: source is not the foreground pointer target";
-        return false;
-    }
     const auto mouse = [](const DWORD flags) {
         INPUT input{};
         input.type = INPUT_MOUSE;
         input.mi.dwFlags = flags;
         return SendInput(1, &input, sizeof(input)) == 1;
     };
+    POINT pointer{};
+    bool pointerAvailable = GetCursorPos(&pointer) != FALSE;
+    bool foreground = GetForegroundWindow() == handle;
+    bool pointerTarget = pointerAvailable && GetAncestor(WindowFromPoint(pointer), GA_ROOT) == handle;
+    if (!foreground && pointerTarget)
+    {
+        // Windows can deny programmatic activation of a background test. Only
+        // click when the native hit is this owned window, then recheck both
+        // prerequisites before sending a drag or keyboard cancellation.
+        const bool pressed = mouse(MOUSEEVENTF_LEFTDOWN);
+        const bool released = mouse(MOUSEEVENTF_LEFTUP);
+        processWindowEventsFor(150ms);
+        pointerAvailable = GetCursorPos(&pointer) != FALSE;
+        pointerTarget = pointerAvailable && GetAncestor(WindowFromPoint(pointer), GA_ROOT) == handle;
+        foreground = pressed && released && GetForegroundWindow() == handle;
+    }
+    if (!foreground || !pointerTarget)
+    {
+        QCursor::setPos(previous);
+        qWarning() << "Native tab drag unavailable: source is not the foreground pointer target"
+                   << "foreground=" << foreground << "pointerAvailable=" << pointerAvailable
+                   << "pointerTarget=" << pointerTarget << "requestedLogical=" << start
+                   << "actualNative=" << QPoint(pointer.x, pointer.y) << "sourceGeometry=" << source.geometry();
+        return false;
+    }
     const bool pressed = mouse(MOUSEEVENTF_LEFTDOWN);
     processWindowEventsFor(50ms);
     for (int step = 1; step <= 20; ++step)
@@ -47,6 +65,8 @@ inline bool nativeTabDrag(QQuickWindow &source, const QPoint &start, const QPoin
         canceled = (SendInput(1, &key, sizeof(key)) == 1) && canceled;
         processWindowEventsFor(100ms);
     }
+    if (dropObserver)
+        qInfo() << "Native drag before release target:" << dropObserver->property("dropTarget").toMap();
     const bool released = mouse(MOUSEEVENTF_LEFTUP);
     QCursor::setPos(previous);
     processWindowEventsFor(400ms);
@@ -130,6 +150,76 @@ inline bool verifyDetachedDropOcclusion(NativeWindow &mainWindow, QQuickWindow &
     return exactPane && obscured && ignoresMovingSource && visibleAgain;
 }
 
+inline bool verifyNativeExactPaneDrop(NativeWindow &mainWindow, AppController &controller, QQuickWindow &source,
+                                      const QString &mainId)
+{
+    using namespace std::chrono_literals;
+    const auto mainGeometry = mainWindow.geometry();
+    const auto sourceGeometry = source.geometry();
+    const auto owner = source.property("ownerWindowId").toString();
+    if (!controller.activateTerminalTab(mainId))
+        return false;
+    const auto targetPane = controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString();
+    if (!controller.splitActiveTerminal(QStringLiteral("horizontal"), true))
+        return false;
+    const auto otherPane = controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString();
+    const auto movingId = controller.startLocalTerminalWithShell(QStringLiteral("commandPrompt"));
+    const auto movingPane = controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString();
+    if (movingId.isEmpty() || !controller.insertTerminalWorkspace(movingId, 0, owner))
+        return false;
+    mainWindow.rootObject()->setProperty("requestedMainWorkspaceId", mainId);
+    mainWindow.rootObject()->setProperty("currentPage", QStringLiteral("terminal"));
+    QMetaObject::invokeMethod(mainWindow.rootObject(), "refreshMainWorkspace");
+    const auto area = source.screen()->availableGeometry();
+    mainWindow.setGeometry({area.x() + 10, area.y() + 50, 500, 500});
+    source.setGeometry({area.x() + 530, area.y() + 50, 480, 500});
+    windowing::present(mainWindow);
+    processWindowEventsFor(400ms);
+    auto *tab = detachedVisualQuickItem(source.contentItem(), QStringLiteral("workspaceTitle-") + movingId);
+    auto *view = detachedVisualQuickItem(mainWindow.contentItem(), QStringLiteral("terminalViewport-") + targetPane);
+    auto *coordinator = mainWindow.rootObject()->findChild<QObject *>(QStringLiteral("terminalWindowCoordinator"));
+    if (view && coordinator)
+    {
+        const auto point = view->mapToGlobal({view->width() * 0.1, view->height() * 0.5});
+        QMetaObject::invokeMethod(coordinator, "updateDropTarget", Q_ARG(QVariant, QVariant::fromValue(point)));
+        qInfo() << "Exact pane preflight target:" << coordinator->property("dropTarget").toMap() << "point=" << point
+                << "viewport=" << view->size();
+        coordinator->setProperty("dropTarget", QVariantMap{});
+    }
+    const bool dragged =
+        tab && view
+        && nativeTabDrag(source, tab->mapToGlobal({60, 16}).toPoint(),
+                         view->mapToGlobal({view->width() * 0.1, view->height() * 0.5}).toPoint(), false, coordinator);
+    processWindowEventsFor(400ms);
+    const auto workspace = controller.terminalWorkspace(mainId);
+    const auto root = workspace.value(QStringLiteral("root")).toMap();
+    const auto first = root.value(QStringLiteral("first")).toMap();
+    const bool exact =
+        dragged && controller.terminalWorkspace(movingId).isEmpty()
+        && workspace.value(QStringLiteral("paneCount")).toInt() == 3
+        && first.value(QStringLiteral("first")).toMap().value(QStringLiteral("id")).toString() == movingPane
+        && first.value(QStringLiteral("second")).toMap().value(QStringLiteral("id")).toString() == targetPane
+        && root.value(QStringLiteral("second")).toMap().value(QStringLiteral("id")).toString() == otherPane;
+    qInfo() << "Exact pane drop details: dragged, source removed, pane count, expected target/moved/sibling:" << dragged
+            << controller.terminalWorkspace(movingId).isEmpty() << workspace.value(QStringLiteral("paneCount"))
+            << targetPane << movingPane << otherPane;
+    qInfo() << "Exact pane drop actual first/first-first/first-second/second:" << first.value(QStringLiteral("id"))
+            << first.value(QStringLiteral("first")).toMap().value(QStringLiteral("id"))
+            << first.value(QStringLiteral("second")).toMap().value(QStringLiteral("id"))
+            << root.value(QStringLiteral("second")).toMap().value(QStringLiteral("id"));
+    if (!controller.terminalWorkspace(movingId).isEmpty())
+        controller.closeTerminalTab(movingId);
+    else if (controller.activateTerminalPane(movingPane))
+        controller.closeActiveTerminalPane();
+    if (controller.activateTerminalPane(otherPane))
+        controller.closeActiveTerminalPane();
+    mainWindow.setGeometry(mainGeometry);
+    source.setGeometry(sourceGeometry);
+    processWindowEventsFor(400ms);
+    qInfo() << "Native cross-window drop targets non-active pane, keeps sibling and pane identity:" << exact;
+    return exact;
+}
+
 inline bool verifyDetachedTabGrouping(NativeWindow &window, AppController &controller, const QString &outputDirectory)
 {
     using namespace std::chrono_literals;
@@ -185,6 +275,8 @@ inline bool verifyDetachedTabGrouping(NativeWindow &window, AppController &contr
     if (!dragged)
         return false;
     if (!verifyDetachedCrossWindowTabs(controller, *detached, b, main))
+        return false;
+    if (!verifyNativeExactPaneDrop(window, controller, *detached, main))
         return false;
     tab = detachedVisualQuickItem(detached->contentItem(), QStringLiteral("workspaceTitle-") + a);
     if (!tab || !QMetaObject::invokeMethod(tab, "renameRequested"))

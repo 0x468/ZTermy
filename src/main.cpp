@@ -136,6 +136,8 @@ using ztermy::ui::visualQuickItem;
 
 [[nodiscard]] bool runWindowRuntimeSmoke(ztermy::NativeWindow &window)
 {
+    if (QCoreApplication::arguments().contains(QStringLiteral("--saved-window-startup")))
+        return ztermy::ui::verifySavedWindowStartup(window);
     return ztermy::ui::verifyWindowStateRoundTrip(window);
 }
 

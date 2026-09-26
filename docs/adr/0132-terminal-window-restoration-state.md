@@ -54,6 +54,18 @@ persist the latest placement. Restoration seeds normal geometry while hidden,
 clamps to the selected available screen and never restores minimization.
 Focused controller checks verify that 100 placement updates leave the store
 unchanged until shutdown and that the final snapshot is persisted. Offscreen
-window tests cover bounds and hidden/maximized transitions. Real restart,
-mixed-screen and interactive drag acceptance remain pending; these unit checks
-are not evidence that native restoration is fully accepted.
+window tests cover bounds and hidden/maximized transitions.
+
+`scripts/verify_window_restore.ps1` additionally seeds isolated three-Tab/two-window
+state and launches the actual application twice, reusing the first shutdown's
+saved document for the second launch. Both runs check main-window logical bounds
+and selection, detached native maximization and selection, preserved normal bounds
+and topology, and no remaining child processes. This passed with the software
+backend at normal and forced 125% scale. The in-process smoke uses the existing
+application shutdown path; closing a single window is deliberately not used as
+an equivalent to exiting the whole application. The `-RemovedScreen` variant uses
+a nonexistent monitor name and (-90000, -90000) saved origins. At normal and 125%
+scale, real windows restored inside the current work area; unmaximizing the
+detached window preserved its 800x520 normal size. This covers startup after a
+screen is absent, not live display unplugging or physical mixed-DPI movement.
+Those scenarios and interactive drag acceptance remain pending.

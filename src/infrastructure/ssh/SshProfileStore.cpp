@@ -25,7 +25,8 @@ constexpr qint64 proxySchemaVersion = 5;
 constexpr qint64 jumpHostSchemaVersion = 6;
 constexpr qint64 stageTimeoutSchemaVersion = 7;
 constexpr qint64 identitySchemaVersion = 8;
-constexpr qint64 currentSchemaVersion = identitySchemaVersion;
+constexpr qint64 iconSchemaVersion = 9;
+constexpr qint64 currentSchemaVersion = iconSchemaVersion;
 constexpr qsizetype maximumEnvironmentVariableCount = 32;
 
 [[nodiscard]] std::optional<ztermy::ssh::SshStartupCommandMode> parseStartupCommandMode(const QString &value)
@@ -362,6 +363,7 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
     const QJsonValue sessionOptionsValue = object.value(QStringLiteral("sessionOptions"));
     const QJsonValue proxyValue = object.value(QStringLiteral("proxy"));
     const QJsonValue jumpProfileIdsValue = object.value(QStringLiteral("jumpProfileIds"));
+    const QJsonValue iconValue = object.value(QStringLiteral("iconName"));
     if (!idValue.isString() || !nameValue.isString() || (!groupValue.isUndefined() && !groupValue.isString())
         || !hostValue.isString() || !portValue.isDouble() || !usernameValue.isString()
         || (version >= identitySchemaVersion && !identityReferenceValue.isUndefined()
@@ -375,7 +377,8 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
         || (version >= keywordSchemaVersion && !keywordRulesValue.isUndefined() && !keywordRulesValue.isArray())
         || (version >= sessionOptionsSchemaVersion && !sessionOptionsValue.isObject())
         || (version >= proxySchemaVersion && !proxyValue.isObject())
-        || (version >= jumpHostSchemaVersion && !jumpProfileIdsValue.isArray()))
+        || (version >= jumpHostSchemaVersion && !jumpProfileIdsValue.isArray())
+        || (version >= iconSchemaVersion && !iconValue.isString()))
     {
         return std::nullopt;
     }
@@ -477,6 +480,7 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
         .sessionOptions = std::move(*sessionOptions),
         .proxy = std::move(*proxy),
         .jumpProfileIds = std::move(jumpProfileIds),
+        .iconName = version >= iconSchemaVersion ? iconValue.toString().toStdString() : "terminal",
     };
     return ztermy::ssh::validSshProfile(profile) ? std::optional{std::move(profile)} : std::nullopt;
 }
@@ -486,6 +490,7 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
     QJsonObject object{
         {QStringLiteral("id"), QString::fromStdString(profile.id)},
         {QStringLiteral("name"), QString::fromStdString(profile.name)},
+        {QStringLiteral("iconName"), QString::fromStdString(profile.iconName)},
         {QStringLiteral("group"), QString::fromStdString(profile.group)},
         {QStringLiteral("host"), QString::fromStdString(profile.host)},
         {QStringLiteral("port"), profile.port},
@@ -575,7 +580,7 @@ parseProfilesPayload(const QByteArrayView payload)
             && versionValue.toInteger() != sessionOptionsSchemaVersion && versionValue.toInteger() != proxySchemaVersion
             && versionValue.toInteger() != jumpHostSchemaVersion
             && versionValue.toInteger() != stageTimeoutSchemaVersion
-            && versionValue.toInteger() != currentSchemaVersion))
+            && versionValue.toInteger() != identitySchemaVersion && versionValue.toInteger() != currentSchemaVersion))
     {
         return std::unexpected(versionValue.isDouble() ? ztermy::ssh::SshProfileStoreError::UnsupportedVersion
                                                        : ztermy::ssh::SshProfileStoreError::InvalidFormat);

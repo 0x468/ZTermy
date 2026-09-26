@@ -237,6 +237,7 @@ class AppControllerTests final : public QObject
     Q_OBJECT
 
 private slots:
+    void publishesProgressAndDeduplicatesTerminalNotifications_data();
     void publishesProgressAndDeduplicatesTerminalNotifications();
     void keepsManualTitlesSeparateFromProgramTitles();
     void instanceOwnershipIsScopedToDataDirectory();
@@ -2783,8 +2784,16 @@ void AppControllerTests::createsKeywordHighlightFromSshSelection()
     QVERIFY(reloadedProfiles->front().keywordHighlightEnabled);
 }
 
+void AppControllerTests::publishesProgressAndDeduplicatesTerminalNotifications_data()
+{
+    QTest::addColumn<bool>("detached");
+    QTest::newRow("main") << false;
+    QTest::newRow("detached") << true;
+}
+
 void AppControllerTests::publishesProgressAndDeduplicatesTerminalNotifications()
 {
+    QFETCH(bool, detached);
     QTemporaryDir directory;
     FakeLocalTerminalSession *backend = nullptr;
     ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
@@ -2794,7 +2803,23 @@ void AppControllerTests::publishesProgressAndDeduplicatesTerminalNotifications()
                                          backend = session.get();
                                          return session;
                                      });
-    QVERIFY(!controller.startLocalTerminal().isEmpty());
+    const auto workspaceId = controller.startLocalTerminal();
+    QVERIFY(!workspaceId.isEmpty());
+    if (detached)
+        QVERIFY(controller.detachTerminalWorkspace(workspaceId));
+    const auto owner = controller.terminalWorkspace(workspaceId).value(QStringLiteral("windowId")).toString();
+    QVERIFY(!owner.isEmpty());
+    QCOMPARE(owner == QStringLiteral("main"), !detached);
+    if (detached)
+    {
+        auto *sourceBackend = backend;
+        const auto otherWorkspace = controller.startLocalTerminal();
+        QVERIFY(!otherWorkspace.isEmpty());
+        QVERIFY(controller.activateTerminalTab(otherWorkspace));
+        QCOMPARE(controller.terminalWorkspace(otherWorkspace).value(QStringLiteral("windowId")).toString(),
+                 QStringLiteral("main"));
+        backend = sourceBackend;
+    }
     QSignalSpy notifications(&controller, &ztermy::AppController::terminalNotificationRequested);
     auto snapshot = std::make_shared<ztermy::terminal::TerminalSnapshot>();
     snapshot->progress = {.state = ztermy::terminal::TerminalProgressState::active, .percentage = 42};
@@ -2805,6 +2830,7 @@ void AppControllerTests::publishesProgressAndDeduplicatesTerminalNotifications()
     snapshot->notification = notification;
     emit backend->snapshotReady(snapshot);
     QCOMPARE(notifications.count(), 1);
+    QCOMPARE(notifications.first().first().toMap().value(QStringLiteral("windowId")).toString(), owner);
     QCOMPARE(notifications.first().first().toMap().value(QStringLiteral("message")).toString(),
              QStringLiteral("Build: Finished"));
     QCOMPARE(controller.terminalTabs().first().toMap().value(QStringLiteral("progressPercentage")).toInt(), 42);
@@ -3483,6 +3509,7 @@ void AppControllerTests::restoresSavedSshWorkspaceWithoutConnecting()
         .username = "operator",
         .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
         .privateKeyPath = "unused-test-key",
+        .iconName = "security",
     }};
     QVERIFY(ztermy::ssh::SshProfileStore(profilesPath).save(profiles));
 
@@ -3510,6 +3537,7 @@ void AppControllerTests::restoresSavedSshWorkspaceWithoutConnecting()
     QCOMPARE(controller.activeTerminalWorkspace().value(QStringLiteral("paneCount")).toInt(), 1);
     QVariantMap tab = controller.terminalTabs().constFirst().toMap();
     QCOMPARE(tab.value(QStringLiteral("kind")).toString(), QStringLiteral("ssh"));
+    QCOMPARE(tab.value(QStringLiteral("iconName")).toString(), QStringLiteral("security"));
     QVERIFY(!tab.value(QStringLiteral("running")).toBool());
     QVERIFY(!tab.value(QStringLiteral("connecting")).toBool());
     QVERIFY(!tab.value(QStringLiteral("reconnecting")).toBool());
@@ -3519,7 +3547,31 @@ void AppControllerTests::restoresSavedSshWorkspaceWithoutConnecting()
 
     const QString originalIdentity = tab.value(QStringLiteral("identity")).toString();
     QCOMPARE(originalIdentity, QStringLiteral("operator@192.0.2.44:22"));
+    QVERIFY(controller.saveHostProfile(QStringLiteral("saved-ssh"), QStringLiteral("Saved SSH"),
+                                       QStringLiteral("192.0.2.44"), 22, QStringLiteral("operator"),
+                                       QStringLiteral("private-key"), QStringLiteral("unused-test-key"), false, {}));
+    QCOMPARE(controller.terminalTabs().first().toMap().value(QStringLiteral("iconName")).toString(),
+             QStringLiteral("security"));
+    QVERIFY(controller.detachTerminalWorkspace(QStringLiteral("ssh-workspace")));
+    const auto detachedOwner =
+        controller.terminalWorkspace(QStringLiteral("ssh-workspace")).value(QStringLiteral("windowId")).toString();
+    const auto saveIcon = [&](const QString &icon) {
+        return controller.saveHostProfileWithCredential(
+            QStringLiteral("saved-ssh"), QStringLiteral("Saved SSH"), QStringLiteral("192.0.2.44"), 22,
+            QStringLiteral("operator"), QStringLiteral("private-key"), QStringLiteral("unused-test-key"), false, {}, {},
+            false, {}, {}, {}, false, {{QStringLiteral("iconName"), icon}});
+    };
+    QSignalSpy iconChanged(&controller, &ztermy::AppController::terminalTabsChanged);
+    QVERIFY(saveIcon(QStringLiteral("network")));
+    QVERIFY(iconChanged.count() > 0);
+    QCOMPARE(controller.terminalTabs().first().toMap().value(QStringLiteral("iconName")).toString(),
+             QStringLiteral("network"));
+    QVERIFY(!saveIcon(QStringLiteral("../invalid")));
+    QCOMPARE(controller.terminalTabs().first().toMap().value(QStringLiteral("iconName")).toString(),
+             QStringLiteral("network"));
+    QVERIFY(controller.activateTerminalTab(QStringLiteral("ssh-workspace")));
     QVERIFY(controller.splitActiveTerminal(QStringLiteral("horizontal"), true));
+    QCOMPARE(controller.activeTerminalWorkspace().value(QStringLiteral("windowId")).toString(), detachedOwner);
     const QVariantMap splitRoot = controller.activeTerminalWorkspace().value(QStringLiteral("root")).toMap();
     for (const auto *side : {"first", "second"})
     {

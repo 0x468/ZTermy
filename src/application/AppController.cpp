@@ -1824,6 +1824,7 @@ storedJumpHostRequests(const ztermy::ssh::SshProfile &profile, const std::vector
     QVariantMap result{
         {QStringLiteral("id"), utf8QString(profile.id)},
         {QStringLiteral("name"), utf8QString(profile.name)},
+        {QStringLiteral("iconName"), utf8QString(profile.iconName)},
         {QStringLiteral("group"), utf8QString(profile.group)},
         {QStringLiteral("host"), utf8QString(profile.host)},
         {QStringLiteral("port"), profile.port},
@@ -3023,11 +3024,14 @@ bool AppController::canReopenClosedTerminalTab() const noexcept
 
 QVariantMap AppController::terminalTabValue(const TerminalTab &tab, const QString &publicId) const
 {
+    const auto profile = std::ranges::find(m_profiles, utf8String(tab.sourceProfileId), &ssh::SshProfile::id);
     const workbench::ScriptExecutionSnapshot execution = tab.scriptExecution.snapshot();
     const ssh::SshConnectionPhase connectionPhase = tab.sshPhase;
     return {
         {QStringLiteral("id"), publicId},
         {QStringLiteral("sessionId"), tab.id},
+        {QStringLiteral("iconName"),
+         profile == m_profiles.end() ? QStringLiteral("terminal") : utf8QString(profile->iconName)},
         {QStringLiteral("paneId"), tab.paneId},
         {QStringLiteral("title"), tab.displayTitle(m_settings.allowTerminalTitleChanges)},
         {QStringLiteral("progressState"),
@@ -5303,7 +5307,6 @@ bool AppController::splitActiveTerminal(const QString &orientation, const bool d
     TerminalTab *source = activeTab();
     workbench::TerminalWorkspaceLayout *workspace = findTerminalWorkspace(m_activeTabId);
     if (source == nullptr || workspace == nullptr || m_tabs.size() >= maximumTerminalTabs
-        || workspace->windowId != "main"
         || workspace->restoreIntents.size() >= workbench::maximumTerminalPanesPerWorkspace)
     {
         return false;
@@ -8712,6 +8715,10 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
         .sessionOptions = std::move(resolvedSessionOptions),
         .proxy = std::move(resolvedProxy),
         .jumpProfileIds = std::move(*resolvedJumpProfileIds),
+        .iconName = routeOptions.contains(QStringLiteral("iconName"))
+                        ? utf8String(routeOptions.value(QStringLiteral("iconName")).toString())
+                    : storedProfile == m_profiles.end() ? "terminal"
+                                                        : storedProfile->iconName,
     };
     if (!ssh::validSshProfile(profile))
     {
@@ -8829,6 +8836,7 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
     m_profiles = std::move(updated);
     setCredentialOperationError({});
     emit hostProfilesChanged();
+    emit terminalTabsChanged();
     return true;
 }
 

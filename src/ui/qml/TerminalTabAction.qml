@@ -41,7 +41,7 @@ TitleTab {
     signal dragFinished(real sceneX, real sceneY)
 
     iconSize: 14
-    iconColor: iconName === "terminal" && (running || connecting) ? Theme.accent : selected ? Theme.text : Theme.textMuted
+    iconColor: running || connecting ? Theme.accent : selected ? Theme.text : Theme.textMuted
     trailingInset: closeButtonShown ? 28 : 0
     accessibleName: qsTr("Activate %1").arg(title)
     doubleClickEnabled: doubleClickAction !== "none"

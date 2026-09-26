@@ -1016,9 +1016,43 @@ WindowControl. Placement updates coalesce in controller memory; ordinary layout
 saves and the final shutdown snapshot persist them. Focused tests verify 100
 updates without intermediate store writes, the final shutdown snapshot, screen
 bounds and hidden/maximized transitions. Dynamic Release, QML formatting/lint
-and targeted controller static analysis pass. Native restart and mixed-screen
-acceptance remain unfinished; no UI restore completion is claimed from these
-persistence and offscreen checks.
+and targeted controller static analysis pass. Native restart evidence is recorded
+below; mixed-screen acceptance remains unfinished. Persistence and offscreen
+checks alone do not prove UI restoration.
+
+The actual application now passes two-process startup/shutdown/restart checks
+at normal and forced 125% scale with the software backend. The isolated fixture
+contains one main Tab and two detached Tabs, with the second detached Tab selected
+and its window maximized. Native maximization, main logical geometry, both window
+selections, saved normal bounds and all three Tabs survived both launches; no
+Shell was reopened and no direct child remained. Run
+`scripts/verify_window_restore.ps1` to reproduce. Evidence directories:
+`build/msvc-dynamic-release/test-data/window-restore-646eac1cabc54f7590d1d418e74d8ebf`
+and `build/msvc-dynamic-release/test-data/window-restore-9ada511644f74551a54f6e917d79eac6`.
+The smoke exits through the existing controller shutdown path, not by closing a
+window group. Earlier external-message shutdown attempts failed and were cleaned
+up; they are not acceptance evidence. Mixed-monitor, removed-screen and native
+pointer-drag scenarios remain pending. Targeted main translation-unit clang-tidy
+also passed.
+
+The `-RemovedScreen` variant now covers startup with a nonexistent screen name
+and both saved origins at (-90000, -90000). At normal and forced 125% scale,
+windows returned inside the current work area; the detached window unmaximized
+to 800x520 and maximized again before shutdown. This is startup recovery from
+absent-screen metadata, not evidence of physical hot-unplug or mixed-DPI drag.
+
+Terminal notifications now carry the originating workspace's window ID and use
+the shared toast only in that window. The controller test explicitly activates
+a different main-window Tab before delivering detached-session output; routing,
+progress and deduplication pass (four QtTest cases including setup/cleanup).
+Real QML checks deliver to each window separately and verify exclusive popup
+visibility without changing the focused window. Both startup passes succeed
+and leave no children. Evidence, normal and 125% respectively:
+`build/msvc-dynamic-release/test-data/window-restore-573d5a2209f641f0ad92d6a67a99fa04`
+and `build/msvc-dynamic-release/test-data/window-restore-507fb199cef8433b93616355c5843b0d`.
+Dynamic Release, QML formatting/lint, translations and targeted C++ static
+analysis passed. Detached Tab progress already uses the same status component;
+broader end-to-end protocol and visual acceptance is not implied by routing tests.
 
 The detached restore switch is now implemented (application settings schema 40,
 schema-39 fixture). On startup, master-off discards saved sessions; detached-off
@@ -1058,17 +1092,55 @@ not a passing drag check; the earlier unguarded attempt also failed. Evidence:
 and translation checks passed for this iteration. Do not bypass the foreground
 guard or weaken native acceptance to make the smoke green.
 
+Profile-owned Tab icons are now implemented (ADR 0133, SSH profile schema 9).
+The name field's icon button offers six existing interface icons; old schema-8
+profiles default to the terminal icon. The fixed migration fixture includes
+identity/credential references, a jump route and non-default timeout settings;
+after migration, the entire old JSON remains identical apart from the version
+and new icon fields. All 18 store cases passed. Controller checks cover retaining
+icons during ordinary Profile edits, live detached-Tab updates, invalid values,
+and restoration. The same check exposed an obsolete main-window-only split guard;
+it is removed, with detached workspace ownership asserted after splitting.
+
+Real QML startup checks now seed SSH Profile references and verify that both main
+and detached Tab delegates receive the configured icon. The six-item icon menu
+opens, changes the selected field value and resets to the terminal icon for a new
+Profile. Evidence:
+`build/msvc-dynamic-release/test-data/window-restore-3afcafbcea8042ecacb4ef6bbc7b53f0`.
+Both processes exited successfully with no direct children. The first picker
+probe looked for dynamic menu entries through QObject ancestry and failed; using
+the Menu item interface corrected that probe, not product selection behavior.
+Dynamic Release, QML formatting/lint, translations (2,404 entries), profile/domain
+static analysis and code-health gates pass. This verifies real component wiring,
+not an exhaustive physical mouse/keyboard or pixel-level appearance review.
+
+Native drag follow-up: when Windows denied programmatic activation, the smoke
+now clicks only after confirming the pointer hits its own window, then rechecks
+foreground ownership before dragging. Reordering, Escape cancellation and the
+two-detached-window round trip passed in
+`build/msvc-dynamic-release/test-data/native-drag-activation-bc31a407d982471998f5a9106e2f3d4d`
+(exit 0, no direct children). This supersedes the activation prerequisite above.
+
+The added non-active-Pane drop regression is still **failing**. In the latest
+`native-pane-target-*` evidence, preflight resolves the correct main-window leaf,
+but the coordinator target is empty before mouse release; the source remains
+in its original window and the main layout remains two panes. The failing check
+is retained, not waived. An experimental pointer grab-permission change did not
+help and was reverted. This checkpoint is not a release-ready drag acceptance;
+diagnosing event delivery/target loss is the next goal task.
+
 The existing active goal remains authoritative; this checkpoint does not mark
 the broader terminal/window work complete.
 
 1. Finish detached Tab drag and exact-pane transfers using real mouse gestures;
    audit selection after close, pane zoom and window-local actions. Check native
    Snap UI and mixed-monitor DPI without relying only on synthetic signals.
-2. Persist each window's selected Tab, normal geometry and maximized state, with
-   an independent detached-window restore switch under session-layout restore.
-   Migrate schemas forward, clamp windows to available screens, and retain the
-   existing local reopen/remote reconnect policies.
-3. Add Profile-specific Tab icons and finish detached progress/notification UX.
+2. Complete physical mixed-display/hot-unplug acceptance. Per-window selection,
+   geometry/maximization persistence, startup absent-screen recovery and restore
+   switches are implemented with focused controller/store and native evidence.
+3. Finish physical-input and visual acceptance of Profile-specific icons and
+   detached progress/notifications; implementation and real-QML routing checks
+   are in place.
 4. Complete Kitty/Sixel interoperability and unsupported-operation policy,
    resource/animation limits and focused performance evidence. Existing bounded
    image support is not a claim of full Kitty protocol conformance.

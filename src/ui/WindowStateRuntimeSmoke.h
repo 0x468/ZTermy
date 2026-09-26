@@ -7,7 +7,9 @@
 #include <QDebug>
 #include <QElapsedTimer>
 #include <QEventLoop>
+#include <QGuiApplication>
 #include <QQuickItem>
+#include <QScreen>
 #include <QTimer>
 #include <QWindow>
 
@@ -57,6 +59,125 @@ template <typename Predicate>
         processWindowEventsFor(std::chrono::milliseconds{25});
     }
     return predicate();
+}
+
+[[nodiscard]] inline bool verifyWindowNotificationRouting(NativeWindow &main, QWindow &detached)
+{
+    using namespace std::chrono_literals;
+    auto *mainToast = main.rootObject()->findChild<QObject *>(QStringLiteral("terminalNotificationToast"),
+                                                              Qt::FindDirectChildrenOnly);
+    auto *detachedToast = detached.findChild<QObject *>(QStringLiteral("terminalNotificationToast"));
+    auto *controller = main.rootObject()->property("controller").value<QObject *>();
+    if (!mainToast || !detachedToast || !controller)
+        return false;
+    auto *focused = QGuiApplication::focusWindow();
+    bool passed = true;
+    for (const bool toDetached : {true, false})
+    {
+        const QVariantMap notification{
+            {QStringLiteral("windowId"), toDetached ? QStringLiteral("restore-window") : QStringLiteral("main")},
+            {QStringLiteral("title"), QStringLiteral("Routing check")},
+            {QStringLiteral("message"), QStringLiteral("Plain terminal notification")}};
+        const bool delivered =
+            QMetaObject::invokeMethod(controller, "terminalNotificationRequested", Q_ARG(QVariantMap, notification));
+        processWindowEventsFor(300ms);
+        passed = passed && delivered && mainToast->property("visible").toBool() == !toDetached
+                 && detachedToast->property("visible").toBool() == toDetached
+                 && QGuiApplication::focusWindow() == focused;
+        QMetaObject::invokeMethod(mainToast, "close");
+        QMetaObject::invokeMethod(detachedToast, "close");
+        processWindowEventsFor(300ms);
+    }
+    qInfo() << "Window-local notifications without focus change:" << passed;
+    return passed;
+}
+
+[[nodiscard]] inline bool verifyHostProfileIconPicker(NativeWindow &window)
+{
+    using namespace std::chrono_literals;
+    auto *pane = window.rootObject()->findChild<QObject *>(QStringLiteral("hostConnectionPane"));
+    auto *field = window.rootObject()->findChild<QObject *>(QStringLiteral("hostName"));
+    auto *button = window.rootObject()->findChild<QObject *>(QStringLiteral("hostProfileIconButton"));
+    auto *menu = window.rootObject()->findChild<QObject *>(QStringLiteral("hostProfileIconMenu"));
+    if (!pane || !field || !button || !menu || !QMetaObject::invokeMethod(pane, "beginNewProfile"))
+        return false;
+    processWindowEventsFor(300ms);
+    if (!QMetaObject::invokeMethod(button, "clicked"))
+        return false;
+    processWindowEventsFor(300ms);
+    QQuickItem *choice = nullptr;
+    QMetaObject::invokeMethod(menu, "itemAt", Q_RETURN_ARG(QQuickItem *, choice), Q_ARG(int, 4));
+    const bool visible = menu->property("visible").toBool() && menu->property("count").toInt() == 6;
+    const bool selected = choice && QMetaObject::invokeMethod(choice, "triggered")
+                          && field->property("profileIcon").toString() == QStringLiteral("security");
+    QMetaObject::invokeMethod(menu, "close");
+    const bool reset = QMetaObject::invokeMethod(pane, "clearEditor")
+                       && field->property("profileIcon").toString() == QStringLiteral("terminal");
+    qInfo() << "Profile icon menu: six choices visible, selection, new-profile reset:" << visible << selected << reset;
+    return visible && selected && reset;
+}
+
+[[nodiscard]] inline QQuickItem *findWindowSmokeItem(QQuickItem *root, const QString &name)
+{
+    if (!root || root->objectName() == name)
+        return root;
+    for (auto *child : root->childItems())
+        if (auto *found = findWindowSmokeItem(child, name))
+            return found;
+    return nullptr;
+}
+
+// Paired with scripts/verify_window_restore.ps1: unlike the transition smoke,
+// this observes startup state without first resetting it using showNormal().
+[[nodiscard]] inline bool verifySavedWindowStartup(NativeWindow &window)
+{
+    using namespace std::chrono_literals;
+    windowing::reveal(window);
+    processWindowEventsFor(600ms);
+    QWindow *detached = nullptr;
+    for (auto *candidate : QGuiApplication::allWindows())
+        if (candidate->property("ownerWindowId").toString() == QStringLiteral("restore-window"))
+            detached = candidate;
+    const auto mainHandle = reinterpret_cast<HWND>(window.winId()); // NOLINT(performance-no-int-to-ptr)
+    const bool removedScreen = QCoreApplication::arguments().contains(QStringLiteral("--removed-screen-startup"));
+    const bool mainBounds = removedScreen ? window.screen()->availableGeometry().contains(window.geometry())
+                                                && window.size() == QSize(840, 540)
+                                          : window.geometry() == QRect(50, 60, 840, 540);
+    const bool mainRestored =
+        mainBounds && !IsZoomed(mainHandle)
+        && window.rootObject()->property("mainWorkspaceId").toString() == QStringLiteral("main-check");
+    bool detachedRestored = false;
+    if (detached)
+    {
+        const auto handle = reinterpret_cast<HWND>(detached->winId()); // NOLINT(performance-no-int-to-ptr)
+        detachedRestored = detached->isVisible() && IsZoomed(handle)
+                           && detached->property("workspaceId").toString() == QStringLiteral("detached-selected");
+        if (detachedRestored)
+        {
+            windowing::toggleMaximize(*detached);
+            processWindowEventsFor(300ms);
+            const bool normalBounds = detached->size() == QSize(800, 520)
+                                      && detached->screen()->availableGeometry().contains(detached->geometry());
+            qInfo() << "Detached restored normal bounds:" << detached->geometry() << normalBounds;
+            detachedRestored = normalBounds && !IsZoomed(handle);
+            windowing::toggleMaximize(*detached);
+            processWindowEventsFor(300ms);
+            detachedRestored = detachedRestored && IsZoomed(handle);
+        }
+    }
+    qInfo() << "Window restore startup: main bounds/selection, detached native maximum/selection:" << mainRestored
+            << detachedRestored;
+    auto *detachedQuick = qobject_cast<QQuickWindow *>(detached);
+    auto *mainTab = findWindowSmokeItem(window.contentItem(), QStringLiteral("workspaceTitle-main-check"));
+    auto *detachedTab = detachedQuick ? findWindowSmokeItem(detachedQuick->contentItem(),
+                                                            QStringLiteral("workspaceTitle-detached-selected"))
+                                      : nullptr;
+    const bool profileIcons = mainTab && detachedTab
+                              && mainTab->property("iconName").toString() == QStringLiteral("security")
+                              && detachedTab->property("iconName").toString() == QStringLiteral("security");
+    qInfo() << "Profile icon reaches main and detached Tab delegates:" << profileIcons;
+    return mainRestored && detachedRestored && profileIcons && verifyWindowNotificationRouting(window, *detached)
+           && verifyHostProfileIconPicker(window);
 }
 
 // Drives the real window through maximize -> minimize -> present -> restore.

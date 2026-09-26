@@ -108,7 +108,7 @@ Window {
                         selected: detachedTerminalWindow.workspaceId === modelData.id
                         width: 160
                         height: 32
-                        iconName: "terminal"
+                        iconName: modelData.iconName || "terminal"
                         running: modelData.running
                         connecting: modelData.connecting === true
                         progressState: modelData.progressState || 0
@@ -258,6 +258,14 @@ Window {
     TerminalRenameDialog {
         id: renameDialog
         controller: detachedTerminalWindow.controller
+    }
+
+    TerminalNotificationToast {
+        controller: detachedTerminalWindow.controller
+        ownerWindowId: detachedTerminalWindow.ownerWindowId
+        x: detachedTerminalWindow.width - width - 16
+        y: 46
+        z: 100
     }
 
     ConfirmationDialog {

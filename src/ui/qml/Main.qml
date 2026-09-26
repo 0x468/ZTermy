@@ -1129,7 +1129,7 @@ Rectangle {
                     canCloseToRight: modelData.canCloseToRight
                     canMoveLeft: modelData.canMoveLeft
                     canMoveRight: modelData.canMoveRight
-                    iconName: "terminal"
+                    iconName: modelData.iconName || "terminal"
                     compact: !selected
                     width: selected ? root.terminalTabPreferredWidth(modelData.title) : 38
                     height: titleTerminalTabs.height

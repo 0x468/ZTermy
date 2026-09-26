@@ -12546,4 +12546,14 @@ Output:
         <translation>无法读取本地目录。</translation>
     </message>
 </context>
+<context>
+    <name>HostProfileNameField</name>
+    <message><source>Profile icon</source><translation>主机图标</translation></message>
+    <message><source>Terminal</source><translation>终端</translation></message>
+    <message><source>Host</source><translation>主机</translation></message>
+    <message><source>Network</source><translation>网络</translation></message>
+    <message><source>Folder</source><translation>文件夹</translation></message>
+    <message><source>Security</source><translation>安全</translation></message>
+    <message><source>Commands</source><translation>命令</translation></message>
+</context>
 </TS>

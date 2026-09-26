@@ -108,6 +108,7 @@ struct SshProfile
     SshSessionOptions sessionOptions;
     SshProxyOptions proxy;
     std::vector<std::string> jumpProfileIds;
+    std::string iconName = "terminal";
 
     friend bool operator==(const SshProfile &, const SshProfile &) = default;
 };

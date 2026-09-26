@@ -196,7 +196,8 @@ Rectangle {
     function routeOptionsMap() {
         return {
             jumpProfileIds: jumpProfileIds.slice(0),
-            identityReference: selectedIdentityId
+            identityReference: selectedIdentityId,
+            iconName: nameField.profileIcon
         };
     }
 
@@ -445,6 +446,7 @@ Rectangle {
     function clearEditor() {
         editingProfileId = "";
         nameField.text = "";
+        nameField.profileIcon = "terminal";
         groupField.text = "";
         hostField.text = "";
         portField.text = "22";
@@ -570,6 +572,7 @@ Rectangle {
         editorExpanded = true;
         editingProfileId = profile.id;
         nameField.text = profile.name;
+        nameField.profileIcon = profile.iconName || "terminal";
         groupField.text = profile.group;
         hostField.text = profile.host;
         portField.text = String(profile.port);
@@ -1397,31 +1400,15 @@ Rectangle {
                                     text: qsTr("Profile name")
                                     color: pane.textColor
                                 }
-                                AppTextField {
+                                HostProfileNameField {
                                     id: nameField
                                     objectName: "hostName"
                                     Layout.fillWidth: true
                                     placeholderText: hostField.text.trim().length > 0 ? hostField.text.trim() : qsTr("Defaults to the host name")
                                     accessibleName: qsTr("Profile name")
                                     selectByMouse: true
-                                    onActiveFocusChanged: {
-                                        if (activeFocus && pane.nameWasAutoFilled) {
-                                            selectAll();
-                                        }
-                                    }
+                                    autoFilled: pane.nameWasAutoFilled
                                     onTextEdited: pane.nameWasAutoFilled = false
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        enabled: pane.nameWasAutoFilled
-                                        acceptedButtons: Qt.LeftButton
-                                        cursorShape: Qt.IBeamCursor
-                                        preventStealing: true
-                                        onPressed: nameField.forceActiveFocus(Qt.MouseFocusReason)
-                                        onReleased: {
-                                            nameField.selectAll();
-                                        }
-                                    }
                                 }
 
                                 Label {

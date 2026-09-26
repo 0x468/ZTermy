@@ -27,7 +27,9 @@ void AppController::updateTerminalStatus(TerminalTab &tab, const terminal::Termi
     };
     const QString body = label(notification.title) + (notification.title.empty() ? QString{} : QStringLiteral(": "))
                          + label(notification.body);
+    const auto *workspace = findTerminalWorkspace(tab.workspaceId);
     emit terminalNotificationRequested({
+        {QStringLiteral("windowId"), workspace ? QString::fromStdString(workspace->windowId) : QStringLiteral("main")},
         {QStringLiteral("title"), tr("Terminal notification — %1").arg(tab.displayTitle(false))},
         {QStringLiteral("message"), body.left(1024)},
     });
