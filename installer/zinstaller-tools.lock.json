@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "sdk_version": "0.1.0",
+  "target": "x86_64-pc-windows-msvc",
+  "sdk_sha256": "788de3f3437bd96610ded1b91eaed15e6ee009a3f7c8c894eafab34e39ff1449",
+  "files": {
+    "LICENSE": "30f8d950c0f67a1aa2d4a622c2237843eb5429f8476c7a770a389e7e84345e9c",
+    "bin/zinstaller-build.exe": "812ebfeac7e37570ffb99d7005f2f5052196e70fccb13a8f140152cf28d09cdb",
+    "bin/zinstaller-builder.exe": "d0bb70b24d52205cf188b662b482edb53ca4d5481475e99a402d6bbb7aa25414",
+    "runtime/zinstaller-light-bootstrapper.exe": "f5f33903998fa7ac3adc7ede5024463224f7ae3746641ca5fd0de68f0bdfa73e",
+    "runtime/zinstaller-maintenance.exe": "a119a33deccf82ba7bb59e943a5c96b273e812372a136e06faab2b6871d051ce",
+    "runtime/zinstaller.exe": "3d0515be67895de333150b2f5e2cb56d0418d537f5f56df7e38154e20ca603cb",
+    "schemas/README.md": "9161c88642f985fe488b0e8781a34e559f073062663dd4d0030c935e57c1e538",
+    "schemas/builder-product-v2.example.toml": "2992ffcd3b770279ab66eea854085da353d7667cb612ca168726e75b40d76ef0",
+    "schemas/product-descriptor-v1.example.toml": "f1f1b02096d25f8b82bc041b41eca32fd7a616de82cc79757f3cae0ddf225f0d",
+    "schemas/runtime-manifest-v1.example.toml": "04bb7db5b15500d84afe8be63db902c4c3ecfba26f6135a6ba0d5a73c953646d",
+    "schemas/zinstaller-tools-lock-v1.schema.json": "4a281268a2d2aae5d3a580f1e28e5134d5888c715d7c0c686d061ee6b2a23bc3"
+  },
+  "compression_level": 19,
+  "long_distance_matching": false
+}

@@ -1,0 +1,99 @@
+schema_version = 2
+
+[product]
+id = "z-series.ztermy"
+display_name = "Ztermy"
+version = "0.5.2"
+architecture = "x86-64"
+version_source = "payload:ztermy.exe"
+
+[application]
+main_executable = "ztermy.exe"
+running_processes = ["ztermy.exe"]
+close_strategy = "window-close"
+
+[install]
+default_scope = "per-user"
+directory_name = "Ztermy"
+
+[payload]
+required = [
+  "ztermy.exe",
+  "Qt6Core.dll",
+  "Qt6Gui.dll",
+  "Qt6Network.dll",
+  "Qt6Qml.dll",
+  "Qt6Quick.dll",
+  "msvcp140.dll",
+  "vcruntime140.dll",
+  "vcruntime140_1.dll",
+  "plugins/platforms/qwindows.dll",
+  ".zinstaller/maintenance.exe",
+]
+forbidden = [
+  "portable.flag",
+  "**/*.pdb",
+  "**/*.wixpdb",
+  "Qt6Cored.dll",
+  "Qt6Guid.dll",
+  "Qt6Networkd.dll",
+  "Qt6OpenGLd.dll",
+  "Qt6Qmld.dll",
+  "Qt6Quickd.dll",
+  "Qt6QuickControls2d.dll",
+  "Qt6QuickTemplates2d.dll",
+  "Qt6Svgd.dll",
+  "Qt6VirtualKeyboardd.dll",
+  "plugins/platforms/qwindowsd.dll",
+  "smoke-data/**",
+]
+baseline_bytes = 100000000
+warn_above_bytes = 110000000
+hard_limit_bytes = 150000000
+report_largest_files = 30
+
+[maintenance]
+executable = ".zinstaller/maintenance.exe"
+publisher = "Z Series"
+
+[[dependencies]]
+id = "windows"
+kind = "system"
+requirement = ">=10.0.22000"
+
+[[dependencies]]
+id = "qt-runtime"
+kind = "bundled"
+requirement = "6.8.x"
+
+[[dependencies]]
+id = "openssl-runtime"
+kind = "bundled"
+requirement = "3.x"
+
+[[shortcuts]]
+id = "start-menu"
+name = "Ztermy"
+location = "start-menu"
+selection = "required"
+
+[[shortcuts]]
+id = "desktop"
+name = "Ztermy"
+location = "desktop"
+selection = "default-off"
+
+[[completion_actions]]
+id = "launch-app"
+label = "启动 Ztermy"
+kind = "launch-executable"
+target = "ztermy.exe"
+selection = "default-on"
+
+[legacy.windows_msi]
+upgrade_code = "5E502533-5081-4401-9549-C5403DFD123A"
+transition = "confirm-uninstall"
+
+[brand]
+icon = "assets/product-icon.svg"
+accent_color = "#7C3AED"
