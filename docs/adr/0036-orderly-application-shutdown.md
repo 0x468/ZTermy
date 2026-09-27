@@ -25,6 +25,29 @@ late transfer callback mutate recovery state during teardown.
 - Release transfer and SFTP ownership while `AppController` is still alive;
   member destruction is only a fallback, not the primary shutdown mechanism.
 
+## Detached-window exit boundary (2026-09-27)
+
+Explicit tray exit is application-wide, not a sequence of ordinary Tab closes.
+Before the main window closes, the window coordinator captures placement and
+enters a final exiting state. It stops placement timers and ignores queued window
+synchronization so hidden windows cannot be re-created during shutdown.
+Detached windows accept application-exit close events without removing their
+Tabs; ordinary user closes still remove only that window's Tabs asynchronously.
+Already queued ordinary-close callbacks also respect the final exiting state.
+
+This distinction is required because Qt 6.8.3 cancels its Quit event if any
+top-level window rejects close. Previously the detached window always rejected
+close before asynchronously deleting its Tabs, leaving the event loop running
+after all visible windows disappeared. Cleanup after `application.exec()` was
+therefore never reached.
+
+`scripts/verify_window_restore.ps1 -TrayExit` exercises the actual tray-exit
+handler and application event loop with live local sessions and a detached
+window, from both a visible main window and a main window hidden to the tray.
+The external runner checks process termination, no remaining direct child
+processes, and preservation of Tab ownership, selection and window placement
+across the second startup. Its failure deadline is not a production exit path.
+
 ## Consequences
 
 - Independent worker cancellations overlap instead of beginning serially as

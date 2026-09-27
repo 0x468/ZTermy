@@ -16,28 +16,99 @@ Window {
     readonly property var visibleLayoutRoot: zoomedPaneId.length > 0 ? hostRoot.findTerminalPane(workspace.root, zoomedPaneId) || workspace.root : workspace.root
     property var pendingPasteViewport: null
     property int pendingPasteLineCount: 0
-    property bool paneHeadersVisible: false
-    property bool paneDockMoveActive: false
+    property bool tabBarVisible: false
+    property bool tabBarPreview: false
     property bool nativeMaximizeButtonHovered: false
     property bool nativeMaximizeButtonPressed: false
+    property string hostMainSelection: ""
+    property string hostConnectionError: ""
     readonly property var controller: hostRoot.controller
     readonly property string currentPage: "terminal"
     readonly property bool maximized: visibility === Window.Maximized
-    readonly property var findAction: controller.actions.find(action => action.id === "terminal.find") || ({})
+    readonly property var localActionIds: ["terminal.newLocal", "tabs.duplicate", "terminal.find", "tabs.next", "tabs.previous", "tabs.close", "terminal.splitHorizontal", "terminal.splitVertical", "terminal.duplicatePane", "terminal.focusNextPane", "terminal.focusPreviousPane", "terminal.growPane", "terminal.shrinkPane", "terminal.swapNextPane", "terminal.swapPreviousPane"]
 
-    Shortcut {
-        sequence: detachedTerminalWindow.findAction.shortcut || ""
-        enabled: detachedTerminalWindow.active && detachedTerminalWindow.findAction.enabled === true && (detachedTerminalWindow.findAction.shortcut || "").length > 0
-        autoRepeat: false
-        context: Qt.WindowShortcut
-        onActivated: {
-            if (searchPanel.visible)
-                searchPanel.closeSearch();
-            else
-                detachedTerminalWindow.openTerminalSearch();
+    Repeater {
+        model: detachedTerminalWindow.controller.actions.filter(action => detachedTerminalWindow.localActionIds.includes(action.id))
+        Item {
+            id: localShortcut
+            required property var modelData
+            width: 0
+            height: 0
+            Shortcut {
+                sequence: localShortcut.modelData.shortcut
+                enabled: detachedTerminalWindow.active && localShortcut.modelData.enabled && sequence.length > 0 && !renameDialog.visible
+                autoRepeat: localShortcut.modelData.autoRepeat
+                context: Qt.WindowShortcut
+                onActivated: detachedTerminalWindow.executeLocalAction(localShortcut.modelData.id)
+            }
         }
     }
 
+    function executeLocalAction(id) {
+        if (!active || !controller.activateTerminalTab(workspaceId))
+            return;
+        switch (id) {
+        case "terminal.newLocal":
+            openLocalTab();
+            break;
+        case "tabs.duplicate":
+            openLocalTab(workspaceId);
+            break;
+        case "terminal.find":
+            if (searchPanel.visible)
+                searchPanel.closeSearch();
+            else
+                openTerminalSearch();
+            break;
+        case "tabs.next":
+        case "tabs.previous":
+            const index = tabs.findIndex(tab => tab.id === workspaceId);
+            if (index >= 0 && tabs.length > 0)
+                selectWorkspace(tabs[(index + (id === "tabs.next" ? 1 : -1) + tabs.length) % tabs.length].id);
+            break;
+        case "tabs.close":
+            if ((workspace.paneCount || 1) > 1)
+                controller.closeActiveTerminalPane();
+            else
+                closeTab(workspaceId);
+            break;
+        case "terminal.splitHorizontal":
+        case "terminal.splitVertical":
+        case "terminal.duplicatePane":
+            controller.splitActiveTerminal(id === "terminal.duplicatePane" ? "auto" : id === "terminal.splitVertical" ? "vertical" : "horizontal", id === "terminal.duplicatePane");
+            break;
+        case "terminal.focusNextPane":
+        case "terminal.focusPreviousPane":
+            controller.focusRelativeTerminalPane(id === "terminal.focusNextPane" ? 1 : -1);
+            Qt.callLater(() => {
+                if (detachedTerminalWindow.active)
+                    detachedViewport.forceActiveFocus();
+            });
+            break;
+        case "terminal.growPane":
+        case "terminal.shrinkPane":
+            controller.resizeActiveTerminalPane(id === "terminal.growPane" ? 0.05 : -0.05);
+            break;
+        case "terminal.swapNextPane":
+        case "terminal.swapPreviousPane":
+            controller.swapActiveTerminalPane(id === "terminal.swapNextPane" ? 1 : -1);
+            break;
+        }
+    }
+
+    function openLocalTab(sourceId = "", shellId = "") {
+        const mainSelection = hostRoot.requestedMainWorkspaceId;
+        const insertionIndex = tabs.findIndex(tab => tab.id === (sourceId || workspaceId)) + 1;
+        const created = sourceId.length > 0 ? controller.duplicateTerminalTab(sourceId) : controller.startLocalTerminalWithShell(shellId).length > 0;
+        if (!created)
+            return false;
+        const placed = controller.insertTerminalWorkspace(controller.activeTerminalTabId, insertionIndex, ownerWindowId);
+        if (placed) {
+            hostRoot.requestedMainWorkspaceId = mainSelection;
+            Qt.callLater(hostRoot.refreshMainWorkspace);
+        }
+        return placed;
+    }
     function selectWorkspace(id) {
         if (!tabs.some(tab => tab.id === id))
             return;
@@ -48,19 +119,60 @@ Window {
     function openTerminalSearch() {
         searchPanel.openSearch();
     }
-    function toggleTerminalPaneHeaders() {
-        paneHeadersVisible = !paneHeadersVisible;
+    function toggleTabBar() {
+        tabBarVisible = !tabBarVisible;
     }
     function focusTerminalAfterLayout() {
         controller.activateTerminalTab(workspaceId);
     }
     function closeTab(id) {
-        const other = tabs.find(tab => tab.id !== id);
+        const index = tabs.findIndex(tab => tab.id === id);
+        if (index < 0)
+            return;
+        const other = tabs[index + 1] || tabs[index - 1];
         controller.closeTerminalTab(id, other ? other.id : hostRoot.requestedMainWorkspaceId);
     }
     function tabInsertionIndex(globalPosition) {
         const p = tabRow.mapFromGlobal(globalPosition.x, globalPosition.y);
         return Math.max(0, Math.min(tabs.length, Math.floor((p.x + 80) / 160)));
+    }
+
+    function tabDropTarget(globalPosition) {
+        const p = tabScroll.mapFromGlobal(globalPosition.x, globalPosition.y);
+        if (p.x < 0 || p.x > tabScroll.width + 32)
+            return ({});
+        const rowPoint = tabRow.mapFromGlobal(globalPosition.x, globalPosition.y);
+        const index = Math.floor(rowPoint.x / 160);
+        const offset = rowPoint.x - index * 160;
+        const insertion = p.x >= tabScroll.width || index >= tabs.length || offset < 8 || offset > 152;
+        if (insertion)
+            return {
+                mode: "insert",
+                windowId: ownerWindowId,
+                index: Math.min(tabs.length, index + (offset > 152 ? 1 : 0)),
+                x: p.x,
+                y: 4,
+                width: 3,
+                height: 24
+            };
+        const tab = tabs[index];
+        if (!tab)
+            return ({});
+        // Preview a tab without activating this native window or taking the
+        // source drag's pointer capture.
+        if (workspaceId !== tab.id)
+            selectWorkspace(tab.id);
+        return {
+            mode: "merge",
+            windowId: ownerWindowId,
+            paneId: workspace.activePaneId,
+            orientation: "horizontal",
+            after: true,
+            x: index * 160 - tabScroll.contentX,
+            y: 2,
+            width: 160,
+            height: 28
+        };
     }
 
     transientParent: null
@@ -86,9 +198,15 @@ Window {
     title: qsTr("%1 — Detached pane").arg(workspace.title || qsTr("Terminal"))
     color: Theme.workspaceBackground
     onClosing: close => {
+        if (coordinator.applicationExiting) {
+            close.accepted = true;
+            return;
+        }
         close.accepted = false;
         const ids = tabs.map(tab => tab.id);
         Qt.callLater(() => {
+            if (coordinator.applicationExiting)
+                return;
             for (const id of ids)
                 controller.closeTerminalTab(id, hostRoot.requestedMainWorkspaceId);
         });
@@ -96,21 +214,28 @@ Window {
 
     Item {
         id: tabBar
+        objectName: "detachedTabBar"
         width: parent.width
-        height: 32
+        visible: detachedTerminalWindow.tabBarVisible || detachedTerminalWindow.tabBarPreview
+        enabled: visible
+        onVisibleChanged: {
+            if (!visible) {
+                detachedTerminalWindow.nativeMaximizeButtonHovered = false;
+                detachedTerminalWindow.nativeMaximizeButtonPressed = false;
+            }
+        }
+        height: visible ? 32 : 0
         MouseArea {
             anchors.fill: parent
             onPressed: {
-                detachedTerminalWindow.paneDockMoveActive = true;
-                if (!detachedTerminalWindow.startSystemMove())
-                    detachedTerminalWindow.paneDockMoveActive = false;
+                detachedTerminalWindow.startSystemMove();
             }
             onDoubleClicked: WindowControl.toggleMaximize(detachedTerminalWindow)
         }
         Flickable {
             id: tabScroll
             objectName: "detachedTabScroll"
-            width: Math.max(0, parent.width - 160)
+            width: Math.min(tabRow.width, Math.max(0, parent.width - 160))
             height: parent.height
             contentWidth: tabRow.width
             interactive: false
@@ -157,13 +282,13 @@ Window {
                             detachedTerminalWindow.selectWorkspace(modelData.id);
                             detachedTerminalWindow.controller.reconnectTerminalTab(modelData.sessionId);
                         }
-                        onDuplicateRequested: {
-                            if (detachedTerminalWindow.controller.duplicateTerminalTab(modelData.id))
-                                detachedTerminalWindow.controller.insertTerminalWorkspace(detachedTerminalWindow.controller.activeTerminalTabId, modelData.tabIndex + 1, detachedTerminalWindow.ownerWindowId);
-                        }
+                        onDuplicateRequested: detachedTerminalWindow.openLocalTab(modelData.id)
                         onMoveLeftRequested: detachedTerminalWindow.controller.moveTerminalTab(modelData.id, modelData.tabIndex - 1)
                         onDragPositionChanged: globalPosition => detachedTerminalWindow.coordinator.updateDropTarget(globalPosition)
-                        onDragCanceled: detachedTerminalWindow.coordinator.dropTarget = ({})
+                        onDragCanceled: {
+                            detachedTerminalWindow.coordinator.dropTarget = ({});
+                            detachedTerminalWindow.coordinator.clearTabPreviews();
+                        }
                         onDragFinished: (sceneX, sceneY) => {
                             if (!dropCompleted) {
                                 const outside = sceneX < 0 || sceneY < 0 || sceneX >= detachedTerminalWindow.width || sceneY >= detachedTerminalWindow.height;
@@ -178,17 +303,37 @@ Window {
             }
         }
         TitleChromeAction {
+            id: newTerminalButton
+            objectName: "detachedNewTerminalButton"
             x: tabScroll.width
             width: 32
             height: 32
             iconName: "plus"
             accessibleName: qsTranslate("Main", "New terminal")
             toolTip: accessibleName
-            onActivated: {
-                const id = detachedTerminalWindow.controller.startLocalTerminal();
-                if (id)
-                    detachedTerminalWindow.controller.insertTerminalWorkspace(id, detachedTerminalWindow.tabs.length, detachedTerminalWindow.ownerWindowId);
+            menuOpen: newTerminalMenu.visible
+            onActivated: newTerminalMenu.open()
+            TerminalNewMenu {
+                id: newTerminalMenu
+                objectName: "detachedNewTerminalMenu"
+                y: parent.height
+                controller: detachedTerminalWindow.controller
+                onLocalRequested: shellId => detachedTerminalWindow.openLocalTab("", shellId)
+                onHostRequested: profile => {
+                    detachedTerminalWindow.hostConnectionError = "";
+                    savedHostConnection.connectSaved(profile, newTerminalButton);
+                }
             }
+        }
+        TitleChromeAction {
+            objectName: "detachedReattachAllButton"
+            x: newTerminalButton.x + newTerminalButton.width
+            width: 32
+            height: 32
+            iconName: "external-link"
+            accessibleName: qsTr("Reattach all tabs to main window")
+            toolTip: accessibleName
+            onActivated: detachedTerminalWindow.coordinator.reattachAll(detachedTerminalWindow)
         }
         Row {
             anchors.right: parent.right
@@ -226,8 +371,6 @@ Window {
         node: detachedTerminalWindow.visibleLayoutRoot || ({})
         zoomedPaneId: detachedTerminalWindow.zoomedPaneId
         paneCount: detachedTerminalWindow.workspace.paneCount || 1
-        headersVisible: detachedTerminalWindow.paneHeadersVisible
-        detachedPane: false
         defaultFontFamily: detachedTerminalWindow.hostRoot.controller.terminalFontFamily
         defaultFontSize: detachedTerminalWindow.hostRoot.controller.terminalFontSize
         defaultLigatures: detachedTerminalWindow.hostRoot.controller.terminalLigatures
@@ -243,14 +386,9 @@ Window {
         middleClickBehavior: detachedTerminalWindow.hostRoot.controller.terminalMiddleClickBehavior
         wordDelimiters: detachedTerminalWindow.hostRoot.controller.terminalWordDelimiters
         scrollRowsPerWheel: detachedTerminalWindow.hostRoot.controller.terminalScrollRows
-        onDetachPaneRequested: paneId => {
-            if (paneId.length > 0)
-                detachedTerminalWindow.hostRoot.detachTerminalPane(paneId);
-            else
-                detachedTerminalWindow.hostRoot.reattachWorkspace(detachedTerminalWindow.workspaceId);
-        }
+        onDetachPaneRequested: paneId => detachedTerminalWindow.hostRoot.detachTerminalPane(paneId)
         onZoomPaneRequested: paneId => detachedTerminalWindow.hostRoot.toggleTerminalPaneZoom(paneId, detachedTerminalWindow.workspaceId)
-        onToggleHeadersRequested: detachedTerminalWindow.paneHeadersVisible = !detachedTerminalWindow.paneHeadersVisible
+        onToggleTabBarRequested: detachedTerminalWindow.toggleTabBar()
         onMultilinePasteConfirmationRequested: (viewport, lineCount) => {
             detachedTerminalWindow.pendingPasteViewport = viewport;
             detachedTerminalWindow.pendingPasteLineCount = lineCount;
@@ -285,13 +423,6 @@ Window {
         enabled: paneDrag.dragging
         onActivated: paneDrag.cancelDrag()
     }
-    DragPreview {
-        z: 91
-        visible: paneDrag.dragging
-        x: paneDrag.pointerPoint.x + 16
-        y: paneDrag.pointerPoint.y + 18
-        title: paneDrag.paneTitle
-    }
     DropTargetIndicator {
         z: 90
         target: detachedTerminalWindow.coordinator.dropTarget.windowId === detachedTerminalWindow.ownerWindowId ? detachedTerminalWindow.coordinator.dropTarget : ({})
@@ -300,6 +431,30 @@ Window {
     TerminalRenameDialog {
         id: renameDialog
         controller: detachedTerminalWindow.controller
+    }
+
+    SavedHostConnection {
+        id: savedHostConnection
+        anchors.fill: parent
+        controller: detachedTerminalWindow.controller
+        onConnectionStarting: detachedTerminalWindow.hostMainSelection = detachedTerminalWindow.hostRoot.requestedMainWorkspaceId
+        onConnectionStarted: {
+            const index = detachedTerminalWindow.tabs.findIndex(tab => tab.id === detachedTerminalWindow.workspaceId) + 1;
+            if (controller.insertTerminalWorkspace(controller.activeTerminalTabId, index, detachedTerminalWindow.ownerWindowId)) {
+                detachedTerminalWindow.hostRoot.requestedMainWorkspaceId = detachedTerminalWindow.hostMainSelection;
+                Qt.callLater(detachedTerminalWindow.hostRoot.refreshMainWorkspace);
+            }
+        }
+        onConnectionError: message => detachedTerminalWindow.hostConnectionError = message
+    }
+    StatusMessage {
+        anchors.top: parent.top
+        anchors.topMargin: tabBar.height + 12
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: Math.min(440, parent.width - 32)
+        text: detachedTerminalWindow.hostConnectionError
+        kind: "error"
+        z: 90
     }
 
     TerminalNotificationToast {

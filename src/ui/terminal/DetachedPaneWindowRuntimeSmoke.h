@@ -1,6 +1,7 @@
 #pragma once
 
 #include "application/AppController.h"
+#include "platform/windows/DetachedWindowNativeFrame.h"
 #include "platform/windows/NativeWindow.h"
 #include "ui/WindowStateRuntimeSmoke.h"
 
@@ -31,6 +32,33 @@ inline bool verifyDetachedCaptionStateRoundTrip(QQuickWindow &detached, const QS
 {
     using namespace std::chrono_literals;
     const auto handle = reinterpret_cast<HWND>(detached.winId()); // NOLINT(performance-no-int-to-ptr)
+    POINT oldButton{.x = qRound((detached.width() - 48) * detached.devicePixelRatio()),
+                    .y = qRound(16 * detached.devicePixelRatio())};
+    if (!ClientToScreen(handle, &oldButton))
+        return false;
+    const LPARAM oldPosition = MAKELPARAM(oldButton.x, oldButton.y);
+    detached.setProperty("nativeMaximizeButtonHovered", true);
+    QMetaObject::invokeMethod(&detached, "toggleTabBar");
+    processWindowEventsFor(100ms);
+    const bool hiddenClient = SendMessageW(handle, WM_NCHITTEST, 0, oldPosition) == HTCLIENT;
+    const bool wasMaximized = IsZoomed(handle) != FALSE;
+    // Even stale native hover/click messages must not resurrect hidden chrome.
+    qintptr ignoredResult = 0;
+    for (const UINT kind : {WM_NCMOUSEMOVE, WM_NCLBUTTONDOWN, WM_NCLBUTTONUP})
+    {
+        const MSG stale{.hwnd = handle, .message = kind, .wParam = HTMAXBUTTON, .lParam = oldPosition};
+        if (!windowing::handleDetachedWindowFrameMessage(detached, stale, &ignoredResult) && kind != WM_NCMOUSEMOVE)
+            return false;
+    }
+    processWindowEventsFor(100ms);
+    const bool inert = !detached.property("nativeMaximizeButtonHovered").toBool()
+                       && !detached.property("nativeMaximizeButtonPressed").toBool()
+                       && (IsZoomed(handle) != FALSE) == wasMaximized;
+    QMetaObject::invokeMethod(&detached, "toggleTabBar");
+    processWindowEventsFor(100ms);
+    qInfo() << "Hidden caption: old button is client, stale hover/click is inert:" << hiddenClient << inert;
+    if (!hiddenClient || !inert)
+        return false;
     const auto clickCaption = [&detached, handle](const QString &kind) {
         const QString name = QStringLiteral("detachedWindowAction-") + kind;
         auto *button = detachedVisualQuickItem(detached.contentItem(), name);
@@ -98,37 +126,20 @@ inline bool verifyDetachedCaptionStateRoundTrip(QQuickWindow &detached, const QS
     return maximized && captured && minimizedKeepsMaximize && presentedMaximized && restored;
 }
 
-inline bool verifyDetachedWindowTabMerge(NativeWindow &window, AppController &controller, QQuickWindow &detached,
-                                         QQuickItem &targetTab, const QString &detachedWorkspaceId,
-                                         const QString &targetWorkspaceId)
+inline bool verifyDetachedWindowReattach(NativeWindow &window, AppController &controller, QQuickWindow &detached,
+                                         const QString &detachedWorkspaceId)
 {
-    QPointer<QQuickWindow> detachedGuard{&detached};
-    const QPointF targetScene = targetTab.mapToScene({targetTab.width() / 2, targetTab.height() / 2});
-    const QPoint targetGlobal = window.mapToGlobal(targetScene.toPoint());
-    const auto detachedHandle = reinterpret_cast<HWND>(detached.winId()); // NOLINT(performance-no-int-to-ptr)
-    detached.setProperty("paneDockMoveActive", true);
-    SetCursorPos(targetGlobal.x(), targetGlobal.y());
-    const bool cursorWarped = (QCursor::pos() - targetGlobal).manhattanLength() <= 2;
-    if (cursorWarped)
-        SendMessageW(detachedHandle, WM_MOVE, 0, 0);
-    else
-        emit window.detachedWindowMoving(&detached, targetGlobal);
-    processWindowEventsFor(std::chrono::milliseconds{250});
-    const auto *coordinator = window.rootObject()->findChild<QObject *>(QStringLiteral("terminalWindowCoordinator"));
-    const QString targetMode =
-        coordinator ? coordinator->property("dropTarget").toMap().value(QStringLiteral("mode")).toString() : QString{};
-    const bool moveForwarded = coordinator && coordinator->property("movingWindow").value<QObject *>() == &detached;
-    const bool dockPreviewVisible = qFuzzyCompare(detached.opacity(), 0.72);
-    qInfo() << "Native detached-window drag resolves tab target:" << targetMode << "moveForwarded=" << moveForwarded
-            << "cursorWarped=" << cursorWarped;
-    SendMessageW(detachedHandle, WM_EXITSIZEMOVE, 0, 0);
-    const bool moveFinished = !detached.property("paneDockMoveActive").toBool();
-    processWindowEventsFor(std::chrono::milliseconds{250});
-    const bool merged =
-        controller.terminalWorkspace(detachedWorkspaceId).isEmpty()
-        && controller.terminalWorkspace(targetWorkspaceId).value(QStringLiteral("paneCount")).toInt() == 2;
-    qInfo() << "Native detached-window drag merges into a tab:" << merged;
-    return targetMode == QStringLiteral("merge") && moveForwarded && dockPreviewVisible && merged && moveFinished
-           && detachedGuard.isNull();
+    QPointer<QQuickWindow> guard{&detached};
+    const auto layout = controller.terminalWorkspace(detachedWorkspaceId).value(QStringLiteral("root"));
+    auto *button = detachedVisualQuickItem(detached.contentItem(), QStringLiteral("detachedReattachAllButton"));
+    const bool triggered = button && QMetaObject::invokeMethod(button, "activated");
+    processWindowEventsFor(std::chrono::milliseconds{400});
+    const auto returned = controller.terminalWorkspace(detachedWorkspaceId);
+    const bool passed = triggered && guard.isNull()
+                        && returned.value(QStringLiteral("windowId")) == QStringLiteral("main")
+                        && returned.value(QStringLiteral("root")) == layout
+                        && window.rootObject()->property("mainWorkspaceId") == detachedWorkspaceId;
+    qInfo() << "Explicit reattach preserves layout, selects returned Tab and closes detached window:" << passed;
+    return passed;
 }
 } // namespace ztermy::ui

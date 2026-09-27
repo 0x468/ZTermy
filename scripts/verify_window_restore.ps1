@@ -1,9 +1,10 @@
-param([string]$BuildDirectory = 'build/msvc-dynamic-release', [switch]$RemovedScreen)
+param([string]$BuildDirectory = 'build/msvc-dynamic-release', [switch]$RemovedScreen, [switch]$VisualStatus, [switch]$SnapCapture,
+      [switch]$TrayExit, [string]$ExecutableName = 'ztermy.exe')
 
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 $build = (Resolve-Path (Join-Path $repo $BuildDirectory)).Path
-$exe = Join-Path $build 'ztermy.exe'
+$exe = Join-Path $build $ExecutableName
 $data = Join-Path $build ('test-data/window-restore-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $data | Out-Null
 
@@ -13,6 +14,7 @@ New-Item -ItemType Directory -Path $data | Out-Null
 
 $settings = Get-Content (Join-Path $repo 'tests/fixtures/settings/schema-39.json') -Raw | ConvertFrom-Json
 $settings.reopenLocalSessions = $false
+if ($TrayExit) { $settings.reopenLocalSessions = $true }
 $settings.reconnectRemoteSessions = $false
 $settings.closeToTray = $false
 $settings.language = 'en'
@@ -42,6 +44,7 @@ $workspace = @{
 }
 $statePath = Join-Path $data 'workspace_state.json'
 foreach ($tab in $workspace.terminalWorkspaces | Where-Object id -NE 'detached-first') {
+    if ($TrayExit) { continue }
     $tab.restoreIntents[0].kind = 'ssh-profile'
     $tab.restoreIntents[0].profileId = 'target'
 }
@@ -60,11 +63,24 @@ try {
     foreach ($pass in 1..2) {
         $arguments = @('--window-runtime-smoke', '--saved-window-startup', '--data-dir', ('"' + $data + '"'))
         if ($RemovedScreen) { $arguments += '--removed-screen-startup' }
+        if ($VisualStatus) { $arguments += '--status-visual-smoke' }
+        if ($SnapCapture) { $arguments += '--snap-layout-capture' }
+        if ($TrayExit) {
+            $arguments += '--tray-exit-smoke'
+            if ($pass -eq 2) { $arguments += '--tray-exit-hidden' }
+        }
         $owned = Start-Process -FilePath $exe -ArgumentList $arguments -WindowStyle Hidden -PassThru
         if (!$owned.WaitForExit(20000)) { throw 'Runtime check did not complete' }
         if ($owned.ExitCode -ne 0) { throw "Runtime check failed: $($owned.ExitCode); see isolated logs" }
         $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($owned.Id)")
-        if ($children.Count) { throw 'Unexpected child process: sessions should not auto-open' }
+        if ($children.Count) { throw 'Terminal child processes remain after application exit' }
+        if ($TrayExit) {
+            $log = Get-Content (Join-Path $data 'logs/ztermy.log') -Raw
+            if ($log -notmatch 'Tray exit: event loop stopped without timeout and full Tab topology preserved: true' -or
+                $log -notmatch 'Local terminal session started' -or $log -notmatch 'Local terminal session stopped') {
+                throw 'Tray exit did not exercise live local-session cleanup'
+            }
+        }
         $saved = Get-Content $statePath -Raw | ConvertFrom-Json
         $placement = @($saved.terminalWindows | Where-Object id -EQ 'restore-window')
         if ($saved.terminalWorkspaces.Count -ne 3 -or $placement.Count -ne 1 -or

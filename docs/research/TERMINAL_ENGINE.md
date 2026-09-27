@@ -1,7 +1,469 @@
 # Terminal engine candidate assessment
 
-Status: 2026-09-25 terminal polish and bounded protocol/performance audit validated;
-remaining product gaps are listed below, not advertised as implemented.
+Status: 2026-09-27. Core polish and multiple bounded terminal/window milestones
+have evidence below; the overall terminal/window goal remains in progress.
+
+## Current acceptance ledger
+
+This ledger supersedes earlier checkpoint wording. Historical measurements below
+remain evidence for their stated workloads, not claims of universal parity.
+
+| Goal area | Current state | Remaining boundary |
+|---|---|---|
+| Single-Tab multi-Pane close | Measured and optimized: 4/8 running local panes, synchronous stage timings and a post-call GUI heartbeat; two before/after runs | Idle-local evidence does not promise frame-perfect teardown for all output sizes or SSH |
+| OSC/manual title ownership | Implemented, persisted, controller-tested and exercised through local PowerShell/ConPTY | No separate live-server claim; do not reopen completed title work merely because other areas remain |
+| Progress, notifications and SGR blink | Implemented; window-scoped routing, light/dark main/detached status captures, focus preservation and blink pixel/layer checks recorded | Native system taskbar/toast is not implemented or claimed |
+| Kitty/Sixel | Bounded static rendering, rejection recovery, local/loopback-SSH slow-GUI coalescing, effects policy and Chafa 1.18.3 static PNG interoperability pass; host allocator removes measured growth through 12 D3D11 replacement rounds; 128-MiB shared stored-raster budget enabled | Not full Kitty conformance or a total-process memory cap; retain documented protocol/workload boundaries |
+| Independent windows and Profile icons | Multi-Tab ownership, persistence/switches, native exact-Pane drop, search isolation and zoom; local focus/resize/swap/new/close shortcuts and restored Profile icon captures pass; light/dark status presentation and native Snap hover flyout verified | Physical mixed-DPI/hot-unplug acceptance remains; Snap tile selection is not implied by hover capture |
+| Schemas and documentation | Application schema 40/workspace 10 migrations and translations have owning checks | Keep the current acceptance summary consistent with later evidence; no release/full-matrix claim |
+
+The owner approved cross-session image budgeting: reclaim older non-visible
+images first, protect visible content in every pane/window, and reject new
+admission when no safe victim exists. Native atomic admission accounting and
+non-blocking cross-engine reclamation and per-screen visibility protection are
+implemented. Focused local/loopback-SSH checks pass; eight-engine sampling informs
+the 128-MiB application startup limit. The post-enablement D3D11 image scenario
+passes; broader concurrent-window visual/platform acceptance remains. See ADR 0130;
+this is not a total-process memory limit.
+
+### Remaining physical-display acceptance
+
+The 2026-09-27 closing audit rechecked current application schema 40, workspace
+schema 10, the title-policy/restore fixtures and recorded single-workspace
+4/8-pane close measurements. Current localization validation passes 2,404 entries;
+all 94 QML files pass format checks and qmllint. These checks do not replace the
+two hardware-dependent cases below. Do not repeatedly rerun the single-display
+suite while waiting for suitable hardware.
+
+Use local disposable sessions; no production SSH connection is needed:
+
+1. **Mixed DPI:** use two physical displays with different Windows scale factors.
+   Create a main-window Tab with split panes and a separate multi-Tab window.
+   Move the separate window across displays in both directions; maximize,
+   restore, then drag a pane back onto a specific main-window pane. Pass if text,
+   cursor, selection and pointer hit targets align, the intended pane receives
+   the drop, and no session restarts or wrong-window action occurs. Restart with
+   both layout restore switches enabled and verify both windows' selected Tabs,
+   normal bounds and maximization. Record scale factors and result.
+2. **Display removal:** place the independent window on the secondary display,
+   then remove that display while the application is running. Pass if the
+   window remains reachable on the remaining display, its normal geometry can
+   be restored, and all Tabs/panes/sessions survive. Exit and restart with that
+   display still absent; verify visible placement and correct selection again.
+   Existing absent-screen metadata tests cover only this last startup portion,
+   not the live display-removal event.
+
+Source inspection finds explicit screen selection/clamping in startup
+`WindowControl::restorePlacement`; there is no application-owned
+`screenRemoved`/`WM_DISPLAYCHANGE` handler. Live relocation therefore also depends
+on Qt/Windows behavior and must not be claimed from startup tests. The current
+single-display machine cannot establish these physical outcomes. Owner feedback
+or a suitable display setup is needed to close this acceptance boundary.
+
+### Shared native image admission, 2026-09-27
+
+Inventory collection now scans image records, placements and Unicode
+placeholders once, using a bounded temporary ID-to-record index. It no longer
+repeats the placement/viewport scan for each image. In
+`image-inventory-scaling.txt`, 4096 virtual prototypes with only two displayed
+placeholders are classified correctly; ten collections total 925 microseconds
+on this machine's dynamic Release. This is a single workload measurement, not a
+whole-terminal speedup claim. The four relevant behavior cases pass (six QtTest
+passes including setup/cleanup), and the added C++ case passes clang-tidy.
+
+Inspection confirms local sessions have read/write workers serialized by
+`m_engineMutex`, while SSH uses a command-woken I/O loop. The queue-and-wait plan
+has been replaced by engine-level serialized access and try-lock-only foreign
+reclamation. See ADR 0130 for the updated lock/lifetime contract.
+
+`image-budget-reclamation.txt` passes all 73 owning-module checks after gating
+23 engine state entry points and teardown. A real three-engine admission case
+first rejects at capacity while every existing image is visible, then succeeds
+after one image scrolls into history: only that historical raster is reclaimed;
+other visible images, text and cursor state survive. A separate held-gate test
+proves a busy foreign engine is skipped without waiting and becomes eligible
+after release. The later `image-budget-screen-policy.txt` also passes all 73 checks
+after aligning per-screen admission: nine visible images fill 32 MiB, the next
+upload receives ENOMEM without losing any, and scrolling them into history allows
+admission by reclaiming only the oldest required raster. Equal-sized replacement
+and shrink accounting still pass. Reapplying the dependency patch preserves all
+six checked file hashes; C++/Zig format checks pass.
+
+`image-budget-local-gates.txt` exercises 120 real ConPTY input samples with queue
+P95 histogram bound 100 microseconds and maximum 124 microseconds. Its 80-image
+stalled-GUI case builds one pending snapshot and delivers two on recovery.
+`image-budget-ssh-gates.txt` repeats the 80 replacements over a real loopback SSH
+connection, delivers two recovery frames (169 ms burst/recovery interval), and
+passes the final synchronized frame on disconnect check. Each report has two
+behavior cases plus setup/cleanup, no skips. These are post-change functional and
+latency checks, not an A/B speedup claim or a remote-network benchmark. Test
+sessions and the loopback server exit through their cleanup paths.
+
+The additional `image-budget-local-short-soak.txt` samples 1,433 interactions over
+30 seconds. All six five-second windows retain a 100-microsecond queue P95
+histogram bound; the maximum individual sample is 1,541 microseconds. Snapshot
+construction averages 0.144 ms (maximum 0.926 ms); stop takes 26 ms and handle
+count falls from 201 to 188. This short non-image interaction workload checks for
+immediate serialization regressions, not long-duration or multi-session pressure.
+The three modified C++ implementation/test translation units pass clang-tidy with
+warnings treated as errors, and `git diff --check` passes.
+
+`shared-image-budget.txt` passes five focused behavior cases (seven QtTest passes
+with setup/cleanup). Two real engines compete from barrier-synchronized worker
+threads for four bytes: exactly one stores its raster, the other receives the
+identified Kitty ENOMEM reply. Same-sized replacement works at capacity, larger
+rejected replacement keeps the predecessor, and deletion/session destruction
+returns the charge even while immutable snapshots remain alive. A separate
+24-byte case proves Sixel and Kitty cannot bypass each other's stored-pixel
+charge and can recover admission after the other session releases it.
+
+The application now installs a 128-MiB shared stored-raster limit before session
+creation. Standalone engine consumers retain explicit startup configuration.
+Per-screen byte limits remain unchanged; visibility protection now
+also governs their eviction. Cross-engine maintenance is serialized through the
+victim's gate and skips busy engines rather than waiting for a foreign worker.
+
+### Eight-engine budget sizing, 2026-09-27
+
+The opt-in `ztermy_terminal_image_memory_probe multi <rounds> <MiB>` uses eight
+concurrent engine producers, four distinct 1024-by-1024 RGBA images per engine
+per round, and one retained UI-style snapshot per engine. Before the next round,
+48 newlines move all old placements out of the 24-row viewport. It records native
+stored bytes separately from private memory and heap allocations. Zero MiB means
+unlimited for this diagnostic process only. It is not a Qt Quick/GPU measurement.
+
+`image-multi-full-scroll-{0,64,128}.csv/.log` compare three rounds. Unlimited
+native storage rises to 256 MiB and sampled private memory reaches about 416 MiB;
+64 MiB rejects half the images even in the first all-visible batch. The 128-MiB
+run retains the 32-image working set with sampled private memory around 288 MiB.
+Deleting native images leaves retained snapshots alive as expected; releasing
+snapshots and destroying engines returns stored accounting to zero, with roughly
+13–14 MiB private memory remaining in this small diagnostic process.
+
+`image-multi-eight-{128,192}.csv/.log` extend to 256 uploads. At 128 MiB, six
+uploads are rejected; at 192 MiB, one is rejected. Both preserve visible images;
+the larger budget increases sampled private memory from roughly 280–288 MiB to
+348–352 MiB but cannot eliminate contention rejection. Candidate engines may be
+busy and other producers may consume freshly reclaimed space first. This is an
+intentional nonblocking boundary, not evidence that the budget is leak-free for
+every workload. Choose 128 MiB as a bounded default rather than raising the limit
+to hide contention; retained snapshots, decode scratch and GPU allocations remain
+outside that accounting. The first 24-newline exploratory run left some old
+placements visible and is not used as the fully-offscreen comparison above.
+
+After application enablement, isolated D3D11 run
+`image-pressure-d3d11-45ba391026044e94989deb22e9ce5e9b` exits 0. Kitty, Sixel and
+Unicode image pixel checks pass at full/reduced/off effects tiers, and maximum
+GUI heartbeat gap is 13 ms. Four post-delete private-memory samples are 291.39,
+298.19, 281.08 and 269.57 MiB; dedicated GPU memory is 42.35 MiB in each deletion
+phase. This confirms no monotonic growth in that replacement workload, not a
+whole-process 128-MiB ceiling. The scoped startup call and probe/budget code pass
+clang-tidy; test application and its tracked children exit without leftovers.
+
+### Image replacement capacity boundary, 2026-09-27
+
+The next budget prerequisite now has a worker-only native inventory and guarded
+eviction interface. Records distinguish primary/alternate screens, screen
+generation, image generation, stored bytes and visibility aggregated across all
+placements. Eviction rechecks those identities and current visibility, uses the
+engine's pin-aware deletion, and marks image storage dirty. It does not feed VT
+commands or switch the active screen to perform deletion.
+
+`image-eviction-visibility.txt` passes six related behavior cases (eight QtTest
+passes including setup/cleanup). The added case exercises a stale offscreen
+candidate after another visible placement is added, a replaced image generation,
+Unicode placeholders, and identical IDs in primary/alternate screens. The shared
+admission coordinator was not connected at this checkpoint; the later shared
+admission section above supersedes that integration status. This interface alone
+does not enable automatic cross-session eviction.
+
+An independent full-budget case exposed unnecessary eviction before introducing
+the shared budget: eight 4-MiB RGBA images filled the current screen limit;
+replacing the newest ID with an equal-sized raster left only six placements.
+The old storage admission counted the full replacement before subtracting its
+predecessor, and eviction continued when reclaimed bytes exactly met demand.
+The mechanical pinned-dependency patch now counts the replacement's net increase,
+excludes its predecessor from eviction candidates, and accepts exact reclamation.
+This does not yet provide process-wide budgeting or visible-image protection.
+
+`image-replacement-before.txt` records the expected failing 8-versus-6 assertion.
+`image-replacement-after.txt` passes seven relevant behavior cases (nine QtTest
+passes including setup/cleanup), including equal-sized replacement, shrinking
+and refilling the exact released capacity, immutable snapshots, metadata bounds,
+rejected upload recovery, mixed Sixel/Kitty output and screen/scroll changes.
+Both reports are under `build/msvc-dynamic-release`. The added C++ test passes
+clang-tidy; no full regression or new UI acceptance is claimed.
+
+### Physical display and launch evidence, 2026-09-27
+
+Read-only display inventory reports one active display, `DISPLAY1`, 2560-by-1440,
+96 effective DPI / 100% scale, with a 2560-by-1392 work area. Consequently this
+machine cannot currently prove physical mixed-DPI transfer or monitor hot-unplug
+behavior. Existing absent-screen startup fixtures are still useful, but are not
+substitutes for those physical checks.
+
+The attempted standalone visual/Snap inspection did not start successfully:
+the shell tool ended with code -1, and desktop inspection showed the security
+product blocking hidden PowerShell execution. No permission button or protection
+setting was changed, and no alternative launch mechanism was used to bypass it.
+The copied fixture directory is
+`build/msvc-dynamic-release/test-data/visual-window-check-20260927`; the attempted
+launch is not visual acceptance evidence. The owner subsequently authorized
+the test launch and temporary allowlisting. Run
+`native-drag-events-54ea5230c75a434d9dcf6d6427493af6` then started and terminated
+normally, so launch permission is no longer the blocker. Its app exit code was
+1: only the shrink-to-original-layout check reported false. That check compared
+the entire live node model, including session fields, rather than just layout.
+The check now compares recursive node identity, kind, orientation and ratios.
+Follow-up `native-drag-events-fce5b425767548c88d5666be21af065d` exits 0 and records
+restored geometry=true but complete live model equality=false, confirming the
+old assertion mixed unrelated live fields into layout acceptance. All scoped
+native pane actions and exact-Pane transfer checks pass; no production behavior
+was changed for this assertion repair. Neither run proves Snap flyout or physical
+mixed-DPI acceptance. Both test applications exited and their runner found no
+remaining direct child processes.
+
+### Detached new-Tab entry consistency, 2026-09-27
+
+The detached title-bar plus button still called start/insert directly, bypassing
+the shared `openLocalTab` logic used by keyboard and context-menu entry points.
+With a different first main-window Tab as a sentinel, runtime activation of the
+plus button changed the main-window selection even though the keyboard path
+passed. Before-fix run `native-drag-events-0e632d535baf4ff48a6acc558e5a8ece`
+failed only the added selection-isolation assertion. The button now uses the
+shared entry point, preserving main selection and consistent insertion order.
+
+After-fix run `native-drag-events-6621e9cbd5db40bfba8cea70c6ff8a32` exits 0:
+plus-button isolation, native next/previous/new/close/split shortcuts, scoped
+search/rebinding and exact-Pane cross-window drag pass. The plus-button check
+invokes the actual QML `activated` signal; it is not a separate mouse-hit-test
+claim. Native keyboard/drag checks still use guarded Windows input. Both runs
+use isolated data and terminate their own sessions. QML formatting/lint and
+`src/main.cpp` clang-tidy pass. Physical mixed-DPI/display-disconnect behavior
+remains separate acceptance work.
+
+### Detached pane action acceptance, 2026-09-27
+
+The expanded native check found two issues. Immediate focus transfer ran before
+the coordinator's deferred workspace synchronization and could reactivate the old
+pane. The detached action now queues its focus request after that synchronization
+and checks that the window remains active. Also, `moveTerminalPane` still rejected
+every target outside `main`, which prevented a detached window from swapping its
+own panes. It now accepts valid target layouts regardless of owning window and
+retains the existing transactional transfer validation.
+
+Run `native-drag-events-9832c2530c784caabf25c24970341d83` passes real Alt+Right /
+Alt+Left focus changes with a focused TerminalItem, Alt+Shift+Right / Left ratio
+change/restoration, and temporarily bound F9/F10 session exchange/restoration.
+It also retains the main-window isolation, plus-button, search, Tab and exact-Pane
+drag assertions. Session exchange is checked by session IDs, not layout node IDs:
+the feature exchanges the sessions carried by the existing nodes. Test keyboard
+injection explicitly marks Windows arrow keys as extended keys; earlier injection
+without that flag was invalid evidence for directional shortcuts.
+
+The intermediate run ending `46d91769726a424ebc415d08d38316c4` passes focus and
+resize after the focus correction but still fails exchange. The diagnostic run
+ending `986eab5eb54c4ad8998329480965edc6` confirms the exchange command arrives and
+is rejected by the controller. Temporary product logging was removed before the
+passing final run. `detached-pane-actions-tests.txt` records three relevant
+controller cases / five QtTest passes, including session-start/stop counters and
+transaction rollback behavior. QML quality checks and clang-tidy for the transfer
+controller and runtime entry point pass. No full regression or physical
+multi-display claim is made.
+
+### Independent image encoder acceptance, 2026-09-27
+
+Used the official portable [Chafa 1.18.3 Windows build](https://hpjansson.org/chafa/download/)
+only under ignored `build/tools`; it is not a product dependency or packaged asset.
+The downloaded ZIP SHA-256 was
+`3D7B43CAB1C9D9116024AB48664DB8910E3EABF0912720828D5E7AD1B80194FA`.
+The input is an original opaque 320-by-160 PNG with red/green/blue vertical
+bands of widths 107/106/107. Relevant options are `--format kitty` or
+`--format sixels`, `--probe off --animate off --threads 1 --exact-size on
+--size 40x10 --view-size 100x40 --dither none`.
+
+The explicit `--terminal-image-smoke --data-dir <isolated-directory>` test entry
+can run an `external-images.ps1` in that directory instead of its built-in VT
+fixture. The script clears the viewport and invokes Chafa from the local shell;
+normal application startup never checks or runs this file. Protocol output then
+travels through ConPTY, the session worker and the actual viewport. The screenshots
+were inspected, not only pixel-counted. All full/reduced/off effects checks passed:
+
+- `chafa-raster-sixel-578040cdde694bebaffc37f23520a5e3`: 320-by-160 output,
+  red/green/blue counts 17120/16960/17120.
+- `chafa-raster-kitty-ce0d8b2fd199488a813a31751269daf3`: Chafa requests 32 columns
+  by 8 rows; the 8-by-16 cell grid correctly displays 256-by-128 pixels,
+  red/green/blue counts 10880/10752/10880 (two interpolated color boundaries).
+
+Both directories are under `build/msvc-dynamic-release/test-data`; each contains
+its script, logs and three `terminal-images-<tier>.png` captures. Processes exited
+successfully and the runner found no remaining direct children. A dependency-free
+engine regression preserves the cell dimensions from Chafa's empty initial Kitty
+packet across payload-only continuation packets. Optionally setting
+`ZTERMY_TEST_KITTY_FIXTURE` to the saved `chafa-output.vt` exercises that independent
+encoder stream against the same 320-by-160 source / 256-by-128 placement oracle.
+
+The earlier SVG attempt failed the fixed color-area threshold. Decoding Chafa's
+actual Kitty payload explained why: its 320-by-160 raster contained only
+192-by-96 colored pixels plus 32768 near-transparent black pixels (alpha 1).
+Both direct engine decoding and application placement were correct; no product
+scaling change or lowered threshold was made to hide the mismatch. PNG removes
+this encoder-side SVG rasterization variable. This is static, explicit-format
+local-client evidence, not automatic capability probing, SSH, animation or native
+GPU memory-pressure acceptance.
+
+### SSH image burst and stalled GUI, 2026-09-27
+
+`coalescesImagesOverLoopbackSshWhileGuiIsStalled` uses the existing single-client
+Paramiko fixture on an ephemeral loopback port. It does not connect to a real
+host or expose a remote OS shell. After one seed image, the server sends 80
+128-by-128 RGB replacements of the same image/placement, a final text marker and
+CPR. The test blocks the GUI event loop while waiting only on the server's
+control pipe. The server reports completion only after receiving the CPR reply,
+proving the SSH worker consumed the entire burst rather than merely accepting
+bytes into a socket. Snapshot deliveries must remain unchanged during this wait.
+
+On resuming the event loop, the final shade (81) and final marker both arrive,
+the original image's weak reference expires, and no more than two snapshots are
+delivered. The measured run used two deliveries and 157 ms from burst start
+through recovery. This is not a throughput benchmark or a process/GPU memory cap.
+The test deliberately retains only the latest snapshot, unlike a signal spy that
+would itself retain every historical image.
+
+Evidence: `build/msvc-dynamic-release/ssh-image-stall-tests.txt`, three behavioral
+cases / five QtTest passes including setup and cleanup, no skips. Adjacent checks
+cover synchronized output over the same SSH fixture and the final frame before
+disconnect. Reproduction uses the previously documented Paramiko 5.0.0 directory
+and `ZTERMY_TEST_SSH_FIXTURE_PYTHON`; only these named tests need running. The
+server exits normally, and session shutdown joins the worker. No production
+queue change was necessary for this case.
+
+### Full-app image pressure: attribution and host-allocator correction, 2026-09-27
+
+The opt-in external smoke workload now supports `external-images.wait`: it waits
+up to 45 seconds for the isolated script's `external-images.done` while measuring
+an 8-ms GUI heartbeat. Without this handshake, the screenshot check could finish
+after the first image and prematurely terminate a longer workload. The scripts
+and sampler are retained under `build/image-pressure-tools`; runs have separate
+data directories, phase markers, logs, screenshots and `memory.csv`.
+
+Workload: four rounds of 40 alternating red/blue 512-by-512 RGB uploads replacing
+one Kitty image ID and placement ID, 60 ms between uploads, then deletion of all
+images and a three-second observation period. The final 240-by-96 three-band
+image validates continued rendering at full/reduced/off effects tiers. The
+sampler measures the ztermy PID only, not its PowerShell child, using process
+private bytes and Windows GPU process-memory counters. Missing GPU counters
+remain missing, not zero. GPU polling is slower than the 100-ms process samples;
+`gpuSample` marks fresh GPU observations.
+
+| Backend / last sample after deletion | Round 1 | Round 2 | Round 3 | Round 4 |
+|---|---:|---:|---:|---:|
+| D3D11 private MiB | 337.25 | 385.03 | 440.50 | 499.00 |
+| D3D11 dedicated GPU MiB | 43.00 | 43.00 | 43.00 | 43.00 |
+| Software private MiB | 223.55 | 281.83 | 340.38 | 400.51 |
+
+D3D11 was confirmed in Qt's runtime log using the RTX 4060 Ti, not inferred
+from the requested environment. Its maximum GUI heartbeat gap was 18 ms;
+software's was 17 ms. Both completed the final image checks and exited 0, with
+no remaining owned children. These functional passes do **not** pass the memory
+acceptance gate: CPU private memory continues growing across equivalent rounds
+on both backends. No heap-root or allocator attribution is proven yet.
+
+Evidence directories under `build/msvc-dynamic-release/test-data`:
+`image-pressure-d3d11-89e4b3e5529945a2ba948213f96246c5` and
+`image-pressure-software-b70a34038f794c5c996ccc817dd25429`.
+Earlier two-round D3D11 evidence is retained as well. Its first attempt failed
+the final pure-color pixel threshold because a three-pixel image was enlarged
+with smooth interpolation; the final fixture uses a one-to-one raster instead,
+without changing rendering or lowering thresholds.
+
+The isolated image-memory probe now has `rgb` and `streamed` modes. Both perform
+16 replacements per cycle; `streamed` also captures snapshots during incomplete
+multipart uploads. Across ten cycles, RGB private bytes settled at 13,746,176;
+streamed settled at 15,974,400 from cycle 3 onward. Heap busy bytes remained
+1,313,049 and 1,313,069 respectively. Evidence is in
+`build/msvc-dynamic-release/image-probe-rgb.csv` and `image-probe-streamed.csv`.
+Two additional modes serialize feeding with snapshot creation on a persistent
+worker (`cross-thread`) or alternate snapshot creation between that worker and
+the feeding thread (`alternating`). Across ten cycles, their private bytes settle
+at 27,807,744 and 16,138,240 respectively; live heap bytes settle at 1,354,051
+and 1,354,047. Reports are `image-probe-cross-thread.csv` and
+`image-probe-alternating.csv` in the same build directory. These are controlled
+allocation-thread tests, not the application's complete session scheduling.
+
+Full-app software runs with the viewport hidden still grow after deletion:
+219.66, 278.13, 339.13 and 396.02 MiB. Temporarily bypassing the output-observer
+fanout as well produces 221.95, 279.68, 338.22 and 398.12 MiB. Evidence directories
+end in `1ca46bd537de48459e877093a4b3a7f8` and
+`36d72c95293f4c0eb540d79dc0f2db8e`. Both restore the viewport for successful final
+captures. The observer bypass has been removed and the application rebuilt.
+Thus active painting and that output fanout are not required to reproduce the
+slope; this does not exclude snapshot/status consumers or allocator retention.
+
+Allocation-stack profiling with SDK UMDH 10.0.22621.755 failed to collect stacks
+despite verified `+ust` on a separately named diagnostic EXE. Microsoft documents
+this class of [Windows 11 SDK UMDH failure](https://learn.microsoft.com/en-us/troubleshoot/windows/win32/umdh-windows-11-sdk-not-work-fine).
+The instrumented run `image-pressure-software-08a85056c980429a8292612fd16d0ca3`
+is not allocation attribution or normal-latency evidence. The diagnostic flag
+was cleared and verified as zero; no tracing was enabled for `ztermy.exe`.
+The first CDB summary attempt also lacked ntdll symbols and is not valid heap
+evidence. After retrieving the matching Microsoft ntdll symbols into the ignored
+build cache, run `image-pressure-software-bc738279aa1144648a14dda0097d58d2`
+provides valid `summary-deleted-1.txt` / `summary-deleted-4.txt`. Process private
+memory rose from 223.30 to 400.14 MiB, while the NT heap's committed KiB changed
+only from 99596 to 100372. Read/write committed regions grew from 215.199 to
+391.812 MiB, mostly outside the debugger's recognized heap regions. Debugger
+attachment affects latency, so its heartbeat is not normal-runtime evidence.
+
+A temporary allocator A/B changed only the allocator passed to
+`ghostty_terminal_new`: an MSVC aligned-allocation/free vtable, declining optional
+in-place resize/remap. All other Ghostty handles retained their original
+allocators. Run `image-pressure-software-a5ee64ca4c7840f7861873f877f0bc3b` used
+the same hidden-viewport workload without debugger instrumentation. After-deletion
+private MiB were **177.11, 175.42, 176.34, 177.80**, instead of continued growth;
+maximum GUI heartbeat gap was 21 ms and all final image checks passed. This
+isolates the terminal-state allocator path as a practical mitigation point, not
+an exact allocation-site or universal no-leak proof. The temporary code was
+removed and the normal application rebuilt; this is not yet a shipped fix.
+
+The production adapter now uses process-lifetime `GhosttyHostAllocator` with
+paired C++ aligned nothrow new/delete, rejecting unrepresentable requests and
+declining optional resize/remap without changing the original bytes. It is passed
+only to `ghostty_terminal_new`; terminal destruction retrieves the same retained
+allocator in the pinned C bridge. The bridge passes log2 alignment, unlike the C
+header's byte-alignment prose. Tests therefore include alignments through 64 KiB,
+zero length, impossible requests, preservation after declined resizing, and the
+actual `ghostty_alloc`/`ghostty_free` bridge. An existing `Impl` constructor's
+incorrect `noexcept` was removed because its image-cache container can allocate.
+
+Relevant results: `host-allocator-engine-tests.txt` has 66 passes,
+`host-allocator-local-tests.txt` 4, and `host-allocator-ssh-tests.txt` 5, including
+setup/cleanup; no failures or skips. This is owning-module plus focused session
+verification, not full regression.
+
+With the production adapter and visible viewport, confirmed D3D11/RTX 4060 Ti run
+`image-pressure-d3d11-3c0dbff1da75430eaa87b1a6e0bc4de5` records after-deletion
+private MiB **275.64, 277.96, 278.52, 276.61**, compared with the earlier
+**337.25, 385.03, 440.50, 499.00**. Dedicated GPU memory returns to **43.25 MiB**
+each round. All final effect-tier image captures pass, with maximum GUI heartbeat
+gap 16 ms. This validates elimination of the measured slope for this workload,
+not a universal memory ceiling or a promise that all baseline memory is necessary.
+The matching visible software-backend run
+`image-pressure-software-a0a782879b724f8bbe16ad09d09eb638` records **176.60,
+175.30, 176.06, 176.03 MiB** after deletion (previously **223.55, 281.83,
+340.38, 400.51**), with a 14-ms maximum heartbeat gap and successful final
+captures at all three effects tiers. Both runs exited normally with no remaining
+owned direct children. No debugger or tracing configuration was enabled.
+An explicit `external-images.extended` marker raises only this smoke workload's
+deadline to 180 seconds. The runner's `-Extended` case uses twelve rounds / 480
+replacements, retaining the same per-frame size, cadence and deletion interval.
+Confirmed D3D11 run `image-pressure-d3d11-a5700cfff81647798e79e34fff21a60e`
+completed in approximately 100 seconds. After-deletion private memory settled
+from the initial 326.35 MiB to 281.18 MiB in round 12; rounds 10/11/12 were
+280.41/280.07/281.18 MiB. Dedicated GPU memory returned to 42.98–42.99 MiB each
+round, maximum GUI heartbeat gap was 17 ms, final captures passed, and the process
+exited normally. This longer run does not reproduce the original cumulative
+slope. The cross-session budget decision and other workloads remain separate.
 
 ## Outcome
 
@@ -345,7 +807,8 @@ run, not a full-suite regression. These checks were completed before commit.
 
 The protocol/interaction/performance audit is complete for the pinned adapter
 and measured scenarios, with explicit limitations rather than a claim of parity
-with every mainstream terminal. Suggested follow-up order:
+with every mainstream terminal. The following is the 2026-09-26 scope checkpoint;
+use the current acceptance ledger above and the subsequent evidence for status:
 
 1. Closed by owner confirmation on 2026-09-26: the reported no-ligature drift
    is fixed in current use. The earlier visual-only procedure remains historical
@@ -358,11 +821,11 @@ with every mainstream terminal. Suggested follow-up order:
    Display precedence, the setting and schema-9 manual-name persistence are now
    implemented in the worktree with focused controller and real local Shell
    verification (see below). Progress and in-app notifications are now connected;
-   system taskbar/toast presentation and detached-window routing are not yet
-   covered by the current main-window implementation.
+   detached-window routing was added later (see window-restoration evidence).
+   System taskbar/toast presentation remains outside the implemented in-app path.
 3. Approved on 2026-09-26: both Kitty and Sixel inline images, plus SGR text
-   blink, with memory/accessibility budgets. These are not yet shipped
-   capabilities; approval must not be mistaken for implementation evidence.
+   blink, with memory/accessibility budgets. These now have implementation and
+   focused evidence below; full protocol conformance and a new release are not claimed.
 
 No engine replacement or broad rendering rewrite is justified by the measured
 results. The actionable failures in this work were host integration and
@@ -513,8 +976,8 @@ Main-window notifications use the existing non-modal action toast, plain text,
 and an application-owned source heading. They do not request activation or
 keyboard focus. The displayed message is capped at 1024 UTF-16 units and is
 not persisted. This deliberately does not claim Windows system toast, taskbar
-progress or independent detached-window delivery support; those presentation
-paths still need integration/acceptance alongside the remaining window work.
+progress. This checkpoint predates detached routing; later window-scoped
+integration and acceptance below supersede that earlier limitation.
 The tab indicator respects effects reduction/disablement and does not animate
 when its window is hidden or minimized.
 
@@ -1054,6 +1517,48 @@ Dynamic Release, QML formatting/lint, translations and targeted C++ static
 analysis passed. Detached Tab progress already uses the same status component;
 broader end-to-end protocol and visual acceptance is not implied by routing tests.
 
+The opt-in `scripts/verify_window_restore.ps1 -VisualStatus` now supplements this
+with light/dark screenshots of main compact and detached expanded Tab progress
+(determinate/error/indeterminate/paused), plus UTF-8/plain-text notifications in
+both windows. It deliberately supplies presentation state without opening a
+remote session: prior VT-fed tests cover protocol delivery. Run
+`window-restore-ba822682609444ecb44de600ea0a4489` passes two native restarts, including
+unchanged selection/normal bounds/maximization/topology, no child processes and
+notification focus preservation. Original PNG pixel checks confirm both windows
+match: light progress/error/paused RGB 112,67,164 / 220,38,38 / 217,119,6; dark
+181,154,232 / 239,68,68 / 245,158,11. Chinese text and literal `<b>` text are visible
+in the captured notifications. A misleading visual reading of tiny previews
+initially suggested a one-frame delay; direct PNG inspection disproved it in all
+four runs. Experimental warm-up/whole-window capture workarounds were removed;
+no product-rendering defect is claimed. This is software-backend presentation
+evidence, not proof of physical Snap UI or mixed-display transitions.
+
+`scripts/verify_window_restore.ps1 -SnapCapture` adds a separate native hover
+check. It foregrounds only the isolated detached window, verifies foreground
+ownership, moves the real cursor over its maximize button, waits for the OS hover
+UI, captures the screen's top-right region and restores the cursor. A QML grab
+would miss this OS-owned overlay. Run `window-restore-907e8dbc649046f68edbce4bae4cf10f`
+passes both restarts, exits without children, and its `native-snap-hover.png` was
+visually inspected: Windows' layout chooser is present beneath the maximize
+button. This proves flyout appearance, not selecting every layout tile. Desktop
+captures may include content visible through a transparent window; these local
+ignored artifacts must not be automatically published. Static analysis passes.
+
+The current machine exposes only `DISPLAY1` at 2560x1440. Physical mixed-DPI
+cross-monitor dragging and hot-unplug remain explicitly unverified; neither
+`QT_SCALE_FACTOR` nor the absent-screen startup fixture substitutes for them.
+The owner has been asked whether these two manual checks can be performed on a
+dual-display setup. Keep this environment-dependent boundary separate from the
+completed single-display restore and Snap hover checks.
+
+The final code-health check caught size regressions in the engine and the growing
+window smoke header. Independent native error mapping now lives in
+`GhosttyError.h`, and status/Snap presentation checks in
+`WindowStatusRuntimeSmoke.{h,cpp}`. No size baseline was increased: the engine is
+2313 lines against its 2314-line ratchet, and the window-state header is again
+below its 400-line budget. The health gate passes. Dynamic Release builds and
+`terminal-helper-extraction.txt` passes all 73 owning-module checks after extraction.
+
 The detached restore switch is now implemented (application settings schema 40,
 schema-39 fixture). On startup, master-off discards saved sessions; detached-off
 keeps restored Tab/Pane topology in the main window; both on retain window IDs.
@@ -1207,18 +1712,154 @@ memory ceiling.
 The existing active goal remains authoritative; this checkpoint does not mark
 the broader terminal/window work complete.
 
-1. Finish detached Tab drag and exact-pane transfers using real mouse gestures;
-   audit selection after close, shortcut routing and remaining window-local actions. Check native
-   Snap UI and mixed-monitor DPI without relying only on synthetic signals.
-2. Complete physical mixed-display/hot-unplug acceptance. Per-window selection,
+Image renderer audit (2026-09-27): local and SSH presentation coalesce pending
+snapshots before queued GUI delivery. AppController uses ordinary connections
+to deliver the current snapshot to the viewport; TerminalItem replaces its
+snapshot rather than retaining a history. Image overlays are removed when empty.
+Qt 6.8.3 `QSGSimpleTextureNode::setTexture` deletes the previous texture when
+ownership is enabled, as it is here (verified against the
+[upstream 6.8.3 source](https://github.com/qt/qtdeclarative/blob/v6.8.3/src/quick/scenegraph/util/qsgsimpletexturenode.cpp)).
+These are ownership findings, not proof of a process-wide memory cap
+or a substitute for slow-GUI and multi-session stress measurements.
+
+The audit did identify repeated gray-alpha expansion for shared placements.
+An isolated painter probe uses one 1024x1024 gray-alpha raster and a 256x128
+output, five paints each with 1 and 32 placements. Before optimization it measured
+9.6648 / 307.477 ms; a per-paint single-entry pixel view measured
+9.8277 / 10.6304 ms under the same dynamic Release/software setup. The 32-placement
+case is about 29x faster in this conversion-heavy probe; this is not an overall
+terminal frame-rate claim. Evidence directories are
+`build/msvc-dynamic-release/test-data/image-cost-da90beae2d48418c83d96dc5a20a677c`
+and `build/msvc-dynamic-release/test-data/image-cost-b328c9843b724150b9241957936258e9`.
+Both full-app image checks exited 0, preserving 11,520 red Sixel pixels,
+1,024 blue Kitty pixels and 4,096 green placeholder pixels, with no direct
+children remaining. The cache lives only inside a paint call and retains at
+most one conversion; nonconsecutive differing images still incur conversion.
+No global cache or additional persistent pixel ownership was introduced.
+The final rerun also checks white/black/white sources of identical dimensions,
+preventing accidental reuse across different rasters. It passed with
+9.8652 / 10.6269 ms and the same protocol pixel counts in
+`build/msvc-dynamic-release/test-data/image-cost-37225a24073e4ce286451920fe25df2d`.
+Dynamic Release, focused clang-tidy, formatting and code-health checks passed.
+
+Slow-GUI image delivery now has a focused local-session regression. It feeds
+80 replacements of a 128x128 RGB Kitty raster through the production output
+consumer on a producer thread while deliberately not pumping GUI events. All
+5,327,717 input bytes finish processing; only one pending snapshot is built.
+After GUI processing resumes, two deliveries recover the last raster and final
+text, and a weak reference confirms release of the original snapshot pixels.
+The fixture retains only its latest snapshot, not a QSignalSpy history. It does
+not start a shell or exercise ConPTY, GPU upload or SSH transport, and does not
+measure a process memory ceiling. Evidence:
+`build/msvc-dynamic-release/image-stall-tests.txt` (three cases plus setup/cleanup,
+five passes, 1,778ms). The two adjacent cases check synchronized-output timeout
+recovery and selection interrupting synchronized output. The initial fixture
+lacked cell pixel dimensions and therefore had no visible image placements;
+adding realistic 8x16 cell geometry fixed the fixture, not production behavior.
+
+Image/effects policy acceptance (2026-09-27): the existing full-app image smoke
+now changes the persisted effects tier through the controller (full/reduced/off)
+and captures each result. Normal mode reports text-blink eligibility true/false/
+false; a separately booted performance-mode fixture reports false for all three
+saved tiers. All six captures preserve the same red/blue/green image pixel counts
+(11,520 / 1,024 / 4,096). Both runs exit 0 with no direct children remaining:
+`build/msvc-dynamic-release/test-data/image-cost-0e7ce631e581418797e2fb6fb53786ab`
+and `build/msvc-dynamic-release/test-data/image-policy-performance-1790474495942`.
+This verifies QML motion-policy binding and content preservation on the software
+backend, not SGR glyph phase/timer behavior or native GPU memory. Isolated test
+preferences are restored after a successful run; real user settings are untouched.
+
+Detached close-selection audit found a real controller bug: explicit successor
+IDs were honored only for main-window workspaces. Closing the last-position
+active Tab of a detached group could select a main session while the detached UI
+displayed its surviving Tab. `closingDetachedTabKeepsItsWindowSuccessor` fails
+before the fix and passes after honoring any existing explicit successor.
+The detached close action now chooses the next Tab, or the previous one at the
+right edge, rather than the first unrelated Tab in its group. Closing an inactive
+Tab still leaves active context untouched. Three focused controller cases pass
+(five including setup/cleanup, 392ms); no full regression was run.
+
+The real-QML multi-window check now asserts the active controller session and
+displayed detached successor immediately after close, before any manual
+selection can mask divergence. With A/copy/B it selects B and preserves the main
+selection. The first UI assertion incorrectly expected A after a preceding
+drag round trip; explicit ID diagnostics identified that fixture expectation,
+which was corrected to the actual right-hand neighbor, not relaxed to any Tab.
+Final evidence:
+`build/msvc-dynamic-release/test-data/native-drag-events-7252165f80a14aea8d8fcf644d0726aa`
+(exit 0, no direct children). Native exact-Pane drag, search keys, zoom, rename,
+duplication and caption-state round trip also pass in that run. Dynamic Release,
+94-file QML checks, focused clang-tidy, formatting and code-health checks pass.
+The close itself is invoked through the QML handler, not a physical close-button
+click; other shortcut/overflow and mixed-monitor checks remain open.
+
+Detached keyboard routing follow-up: the main action repeater uses window-local
+shortcut scope, so independent windows did not inherit its bindings. Detached
+windows now register their own configured sequences for search, next/previous
+Tab, close, split/duplicate Pane, Pane focus, resize and swap. Dispatch first
+activates that window's selected workspace; it does not call the main-window
+presentation switch. Close follows existing Pane semantics (close the active
+Pane, or use same-window Tab succession when only one remains). Rename dialogs
+disable these bindings. No new default sequences or translated labels were added.
+
+Native-key evidence verifies Ctrl+Tab / Ctrl+Shift+Tab stay inside the detached
+group, Alt+Shift+H adds a Pane there, and Ctrl+Shift+W removes it without changing
+the main layout or selection. Search default/rebound keys, exact-Pane drag and
+close succession still pass. Evidence:
+`build/msvc-dynamic-release/test-data/native-drag-events-e518e79669ef45e5bc1bff4739cc68c4`
+(exit 0, no direct children). Dynamic Release, 94-file QML, 2,404 translations,
+format and code-health checks pass. This is not yet a claim that every application
+action (workbench/composer/palette/new Tab) has detached-window presentation, nor
+that the newly registered focus/resize/swap keys have physical-input acceptance.
+
+New local Tab and duplicate actions now use the detached window's own insertion
+path (including its existing duplicate context-menu action). The temporary main
+ownership during session creation no longer replaces the remembered main-window
+selection. Native Ctrl+Shift+T creates/selects a Tab in the detached group, and
+Ctrl+Shift+W closes it there. The fixture deliberately leaves two main Tabs with
+the non-first one selected; that selection survives both actions. Evidence:
+`build/msvc-dynamic-release/test-data/native-drag-events-12a0307875ba4cf3aef650a2448e40e0`
+(exit 0, no direct children). Existing duplication, switching, split, search and
+drag checks pass in the same run. Dynamic Release/QML, translation, formatting
+and code-health checks pass; palette/workbench presentation remains separate.
+
+1. Exact-Pane native mouse transfer, search-key routing, local focus/resize/swap,
+   new/close actions and native Snap hover now pass. Do not infer every Snap tile
+   selection from the hover screenshot or all auxiliary-window actions from the
+   terminal-specific action checks.
+2. Physical mixed-display/hot-unplug acceptance awaits suitable hardware. Per-window selection,
    geometry/maximization persistence, startup absent-screen recovery and restore
    switches are implemented with focused controller/store and native evidence.
-3. Finish physical-input and visual acceptance of Profile-specific icons and
-   detached progress/notifications; implementation and real-QML routing checks
-   are in place.
-4. Complete Kitty/Sixel interoperability and unsupported-operation policy,
-   resource/animation limits and focused performance evidence. Existing bounded
-   image support is not a claim of full Kitty protocol conformance.
+3. Profile icon captures and light/dark main/detached progress/notification
+   presentation now pass; routing/focus checks are separate from protocol tests.
+4. Kitty/Sixel static interoperability, unsupported-animation rejection,
+   resource limits, shared storage budgeting and focused performance evidence
+   are recorded above. This is not full Kitty protocol conformance.
 5. Reconcile translations, ADRs and this status document; run only the affected
    module/integration and runtime checks. Report remaining manual acceptance
    explicitly instead of treating unit tests as native UI acceptance.
+
+### Window-interaction closeout (2026-09-27)
+
+This status supersedes historical follow-up notes above, without replacing their
+individual workload evidence. The owner confirmed real-pointer hover over an
+inactive detached Tab, switching its view and merging a dragged Pane into it.
+This acceptance is user-reported, not a newly completed automation run.
+
+The old Pane title component/resource, main per-workspace title-visibility map,
+recursive title layout branches, legacy detached-Pane toolbar mode and window-
+movement auto-docking signal chain are removed. Main Pane handles focus/drag;
+detached handles toggle the Tab bar, moving the window while that bar is hidden.
+Explicit reattach-all is the whole-window return action. Ordinary blank-caption
+window movement never implicitly transfers the selected Tab.
+
+PowerShell's post-startup executable-path title follows the existing terminal
+title policy (manual override, allowed terminal title, then Profile/default).
+No path-title normalization is planned in this closeout. Clearing a manual title
+restores automatic policy; disabling terminal title changes retains the default.
+
+Tray exit now captures placements before closing windows and bypasses ordinary
+detached-Tab deletion/veto. The two-startup live-session regression verifies exit
+from visible and tray-hidden main windows, preserved topology and no child
+processes; see ADR 0036. Physical mixed-DPI/hot-unplug acceptance remains pending.
+Installer/Sandbox release acceptance is tracked separately in ADR 0134.

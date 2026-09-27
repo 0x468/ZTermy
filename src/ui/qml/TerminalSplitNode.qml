@@ -25,11 +25,7 @@ Item {
     property real defaultBackgroundOpacity: 1.0
     property string defaultCursor: "terminal"
     property string zoomedPaneId: ""
-    property bool detachedPane: false
-    property bool nativeMaximizeButtonHovered: false
-    property bool nativeMaximizeButtonPressed: false
     property int paneCount: 1
-    property bool headersVisible: false
     // Bitmask of the edges this node shares with a sibling pane (1 left, 2 top,
     // 4 right, 8 bottom). The active leaf paints its accent on those edges only,
     // so the native window edge never carries a highlight.
@@ -44,7 +40,7 @@ Item {
     signal terminalSearchRequested
     signal zoomPaneRequested(string paneId)
     signal detachPaneRequested(string paneId)
-    signal toggleHeadersRequested
+    signal toggleTabBarRequested
 
     function forceActiveFocus() {
         // qmllint disable missing-property
@@ -130,7 +126,6 @@ Item {
             readonly property var activeViewport: node.active ? viewport : null
             readonly property bool aiConfigured: !!root.controller && root.controller.aiModel.trim().length > 0 && (root.controller.aiProviderPreference === "openai-chatgpt" ? root.controller.aiChatGptConfigured : root.controller.aiBaseUrl.trim().length > 0 && (root.controller.aiProviderPreference === "ollama" || root.controller.aiApiKeyConfigured))
             readonly property bool connectionProgressRequested: tab.kind === "ssh" && (!!tab.connecting || !!tab.reconnecting)
-            readonly property bool paneHeaderVisible: root.headersVisible
             property bool connectionProgressVisible: false
             property bool connectionProgressWasReconnect: false
             property int connectionProgressLastStep: 0
@@ -390,7 +385,6 @@ Item {
                 objectName: "terminalViewport-" + leaf.node.id
                 anchors.fill: parent
                 anchors.margins: 0
-                anchors.topMargin: leaf.paneHeaderVisible ? 32 : 0
                 focus: !!leaf.node.active || activeFocus
                 fontFamily: leaf.tab.sessionFontFamily && leaf.tab.sessionFontFamily.length > 0 ? leaf.tab.sessionFontFamily : root.defaultFontFamily
                 fontPixelSize: leaf.tab.sessionFontSize > 0 ? leaf.tab.sessionFontSize : root.defaultFontSize
@@ -452,7 +446,7 @@ Item {
             PaneFocusEdges {
                 objectName: "terminalPaneFocusEdges-" + leaf.node.id
                 edges: root.innerEdges
-                shown: !!leaf.node.active && !root.detachedPane && root.paneCount > 1
+                shown: !!leaf.node.active && root.paneCount > 1
                 z: 14
             }
 
@@ -463,7 +457,7 @@ Item {
                 anchors.top: viewport.top
                 anchors.right: viewport.right
                 anchors.bottom: viewport.bottom
-                anchors.topMargin: !leaf.paneHeaderVisible && paneActions.revealed ? paneActions.height + 12 : 6
+                anchors.topMargin: paneActions.revealed ? paneActions.height + 12 : 6
                 anchors.rightMargin: 6
                 anchors.bottomMargin: 6
                 width: 12
@@ -536,29 +530,6 @@ Item {
                         if (pressed)
                             applyPointer(mouse.y);
                     }
-                }
-            }
-
-            TerminalPaneHeader {
-                id: paneHeader
-
-                paneId: leaf.node.id || ""
-                paneTitle: leaf.tab.title || leaf.tab.identity || qsTr("Terminal pane")
-                active: !!leaf.node.active
-                detached: root.detachedPane
-                running: !!leaf.tab.running
-                connecting: !!leaf.tab.connecting || !!leaf.tab.reconnecting
-                actionsWidth: paneActions.visible ? paneActions.implicitWidth + 12 : 0
-                cornerRadius: 0
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-                height: leaf.paneHeaderVisible ? 32 : 0
-                visible: height > 0
-                z: 12
-                onActivated: {
-                    if (root.controller.activateTerminalPane(leaf.node.id))
-                        viewport.forceActiveFocus();
                 }
             }
 
@@ -877,7 +848,7 @@ Item {
                 anchors.top: parent.top
                 anchors.right: parent.right
                 width: Math.max(40, paneActions.implicitWidth + 16)
-                height: leaf.paneHeaderVisible ? 32 : 40
+                height: 40
                 z: 11
 
                 HoverHandler {
@@ -896,7 +867,7 @@ Item {
                 height: paneActions.height + 8
                 radius: Theme.radiusControl
                 color: Theme.floatingBackground
-                opacity: !leaf.paneHeaderVisible ? paneActions.opacity * 0.82 : 0
+                opacity: paneActions.opacity * 0.82
                 visible: opacity > 0
                 z: 12
             }
@@ -908,21 +879,17 @@ Item {
                 paneId: leaf.node.id
                 paneTitle: leaf.tab.title || leaf.tab.identity || qsTr("Terminal pane")
                 paneCount: root.paneCount
-                headersVisible: leaf.paneHeaderVisible
                 zoomed: root.zoomedPaneId === leaf.node.id
-                detached: root.detachedPane
-                nativeMaximizeButtonHovered: root.nativeMaximizeButtonHovered
-                nativeMaximizeButtonPressed: root.nativeMaximizeButtonPressed
-                revealed: root.nativeMaximizeButtonHovered || paneActionRevealHover.hovered || interactionActive
+                revealed: paneActionRevealHover.hovered || interactionActive
                 anchors.top: parent.top
                 anchors.right: parent.right
-                anchors.topMargin: root.detachedPane ? 0 : leaf.paneHeaderVisible ? 2 : 8
-                anchors.rightMargin: root.detachedPane ? 0 : leaf.paneHeaderVisible ? 4 : 8
+                anchors.topMargin: 8
+                anchors.rightMargin: 8
                 visible: !!root.controller
                 z: 13
                 onZoomRequested: root.zoomPaneRequested(leaf.node.id)
-                onDetachRequested: root.detachedPane ? root.detachPaneRequested("") : root.detachPaneRequested(leaf.node.id)
-                onToggleHeadersRequested: root.toggleHeadersRequested()
+                onDetachRequested: root.detachPaneRequested(leaf.node.id)
+                onToggleTabBarRequested: root.toggleTabBarRequested()
             }
 
             StatePanel {
@@ -1047,7 +1014,6 @@ Item {
                     source: Qt.resolvedUrl("TerminalSplitNode.qml")
                     onLoaded: {
                         item.paneCount = Qt.binding(() => root.paneCount);
-                        item.headersVisible = Qt.binding(() => root.headersVisible);
                         item.innerEdges = Qt.binding(() => root.innerEdges | (split.orientation === Qt.Horizontal ? 4 : 8));
                     }
                 }
@@ -1160,12 +1126,6 @@ Item {
                     value: root.zoomedPaneId
                     when: firstLoader.item !== null
                 }
-                Binding {
-                    target: firstLoader.item
-                    property: "detachedPane"
-                    value: root.detachedPane
-                    when: firstLoader.item !== null
-                }
 
                 Connections {
                     target: firstLoader.item
@@ -1181,8 +1141,8 @@ Item {
                     function onDetachPaneRequested(paneId) {
                         root.detachPaneRequested(paneId);
                     }
-                    function onToggleHeadersRequested() {
-                        root.toggleHeadersRequested();
+                    function onToggleTabBarRequested() {
+                        root.toggleTabBarRequested();
                     }
                 }
             }
@@ -1209,7 +1169,6 @@ Item {
                     source: Qt.resolvedUrl("TerminalSplitNode.qml")
                     onLoaded: {
                         item.paneCount = Qt.binding(() => root.paneCount);
-                        item.headersVisible = Qt.binding(() => root.headersVisible);
                         item.innerEdges = Qt.binding(() => root.innerEdges | (split.orientation === Qt.Horizontal ? 1 : 2));
                     }
                 }
@@ -1322,12 +1281,6 @@ Item {
                     value: root.zoomedPaneId
                     when: secondLoader.item !== null
                 }
-                Binding {
-                    target: secondLoader.item
-                    property: "detachedPane"
-                    value: root.detachedPane
-                    when: secondLoader.item !== null
-                }
 
                 Connections {
                     target: secondLoader.item
@@ -1343,8 +1296,8 @@ Item {
                     function onDetachPaneRequested(paneId) {
                         root.detachPaneRequested(paneId);
                     }
-                    function onToggleHeadersRequested() {
-                        root.toggleHeadersRequested();
+                    function onToggleTabBarRequested() {
+                        root.toggleTabBarRequested();
                     }
                 }
             }

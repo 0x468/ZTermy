@@ -2068,6 +2068,10 @@
 <context>
     <name>DetachedTerminalWindow</name>
     <message>
+        <source>Reattach all tabs to main window</source>
+        <translation>将全部标签页移回主窗口</translation>
+    </message>
+    <message>
         <location filename="../src/ui/qml/DetachedTerminalWindow.qml" line="72"/>
         <source>%1 — Detached pane</source>
         <translation>%1 — 已脱离窗格</translation>
@@ -8158,6 +8162,10 @@
 </context>
 <context>
     <name>TerminalPaneToolbar</name>
+    <message>
+        <source>Drag pane</source>
+        <translation>拖动窗格</translation>
+    </message>
     <message>
         <location filename="../src/ui/qml/TerminalPaneToolbar.qml" line="71"/>
         <source>Hide headers</source>

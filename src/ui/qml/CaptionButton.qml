@@ -15,8 +15,8 @@ Control {
     property bool externallyPressed: false
     property bool nativeMaximizeHandling: true
     property string accessibleName: ""
-    readonly property bool effectiveHovered: externallyHovered || control.hovered || mouseArea.containsMouse
-    readonly property bool effectivePressed: externallyPressed || mouseArea.pressed
+    readonly property bool effectiveHovered: visible && enabled && (externallyHovered || control.hovered || mouseArea.containsMouse)
+    readonly property bool effectivePressed: visible && enabled && (externallyPressed || mouseArea.pressed)
     readonly property bool closeHighlighted: kind === "close" && (effectiveHovered || visualFocus)
     readonly property color surfaceColor: {
         if (control.closeHighlighted) {

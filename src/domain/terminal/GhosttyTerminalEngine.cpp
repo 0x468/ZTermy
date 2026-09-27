@@ -1,4 +1,7 @@
 #include "domain/terminal/GhosttyTerminalEngine.h"
+#include "domain/terminal/GhosttyError.h"
+#include "domain/terminal/GhosttyHostAllocator.h"
+#include "domain/terminal/GhosttyImageBudget.h"
 #include "domain/terminal/GhosttyImagePolicy.h"
 #include "domain/terminal/GhosttyImageSnapshot.h"
 #include "domain/terminal/GhosttyInputMapping.h"
@@ -21,46 +24,8 @@
 namespace
 {
 
-class GhosttyErrorCategory final : public std::error_category
-{
-public:
-    [[nodiscard]] const char *name() const noexcept override { return "libghostty-vt"; }
-
-    [[nodiscard]] std::string message(const int condition) const override
-    {
-        switch (static_cast<GhosttyResult>(condition))
-        {
-            case GHOSTTY_SUCCESS:
-                return "success";
-            case GHOSTTY_OUT_OF_MEMORY:
-                return "out of memory";
-            case GHOSTTY_INVALID_VALUE:
-                return "invalid value";
-            case GHOSTTY_OUT_OF_SPACE:
-                return "output buffer is too small";
-            case GHOSTTY_NO_VALUE:
-                return "requested value is unavailable";
-            default:
-                return "unknown libghostty-vt error";
-        }
-    }
-};
-
-[[nodiscard]] const std::error_category &ghosttyErrorCategory() noexcept
-{
-    static GhosttyErrorCategory category;
-    return category;
-}
-
-[[nodiscard]] std::error_code ghosttyError(const GhosttyResult result) noexcept
-{
-    return {static_cast<int>(result), ghosttyErrorCategory()};
-}
-
-[[nodiscard]] std::error_code invalidArgument() noexcept
-{
-    return std::make_error_code(std::errc::invalid_argument);
-}
+using ztermy::terminal::detail::ghosttyError;
+using ztermy::terminal::detail::invalidArgument;
 
 [[nodiscard]] std::optional<std::string> normalizeSemanticPromptMarks(const std::span<const std::byte> bytes,
                                                                       std::string &pending)
@@ -329,8 +294,7 @@ struct GhosttyTerminalEngine::Impl
     static constexpr std::size_t maximumPtyWriteBytes = std::size_t{64} * 1024U;
 
     Impl(const GhosttyTerminal terminalHandle, const GhosttyRenderState renderStateHandle,
-         const GhosttyRenderStateRowIterator rowIteratorHandle,
-         const GhosttyRenderStateRowCells rowCellsHandle) noexcept
+         const GhosttyRenderStateRowIterator rowIteratorHandle, const GhosttyRenderStateRowCells rowCellsHandle)
         : terminal(terminalHandle),
           renderState(renderStateHandle),
           rowIterator(rowIteratorHandle),
@@ -341,6 +305,8 @@ struct GhosttyTerminalEngine::Impl
 
     ~Impl()
     {
+        const std::scoped_lock imageLock(imageAccess->mutex);
+        imageAccess->terminal = nullptr;
         ghostty_mouse_event_free(mouseEvent);
         ghostty_mouse_encoder_free(mouseEncoder);
         ghostty_key_event_free(keyEvent);
@@ -365,6 +331,20 @@ struct GhosttyTerminalEngine::Impl
         if (terminal != nullptr)
         {
             ghostty_terminal_free(terminal);
+        }
+    }
+
+    static bool reclaimImages(void *userdata, std::size_t bytes, std::uint32_t protectedId,
+                              bool currentScreenOnly) noexcept
+    {
+        auto *self = static_cast<Impl *>(userdata);
+        try
+        {
+            return reclaimImageStorage(self->imageAccess, bytes, protectedId, currentScreenOnly) >= bytes;
+        }
+        catch (...)
+        {
+            return false; // Never propagate allocation or mutex exceptions through the C ABI.
         }
     }
 
@@ -462,6 +442,7 @@ struct GhosttyTerminalEngine::Impl
     std::vector<std::byte> pendingPtyWrite;
     std::optional<std::string> pendingClipboardWrite;
     GhosttyStatusEvents statusEvents;
+    std::shared_ptr<GhosttyImageAccess> imageAccess = std::make_shared<GhosttyImageAccess>();
     GhosttyImageSnapshot imageSnapshot;
     GhosttySixelBridge sixelBridge;
     GhosttyColorScheme reportedScheme = GHOSTTY_COLOR_SCHEME_DARK;
@@ -482,7 +463,8 @@ GhosttyTerminalEngine::create(const TerminalGeometry geometry)
     }
 
     GhosttyTerminal terminal = nullptr;
-    const GhosttyResult result = ghostty_terminal_new(nullptr, &terminal, geometry.columns, geometry.rows);
+    const GhosttyResult result =
+        ghostty_terminal_new(ghosttyHostAllocator(), &terminal, geometry.columns, geometry.rows);
     if (result != GHOSTTY_SUCCESS)
     {
         return std::unexpected(ghosttyError(result));
@@ -627,6 +609,8 @@ GhosttyTerminalEngine::create(const TerminalGeometry geometry)
     {
         return std::unexpected(resizeError);
     }
+    engine->m_impl->imageAccess->terminal = engine->m_impl->terminal;
+    registerImageEngine(engine->m_impl->imageAccess);
     return engine;
 }
 
@@ -636,6 +620,12 @@ GhosttyTerminalEngine::~GhosttyTerminalEngine() = default;
 
 std::error_code GhosttyTerminalEngine::feed(const std::span<const std::byte> bytes)
 {
+    const std::scoped_lock imageLock(m_impl->imageAccess->mutex);
+    struct RestoreReclaimer final
+    {
+        ZtermyGhosttyImageReclaimer previous;
+        ~RestoreReclaimer() { ztermy_ghostty_exchange_image_reclaimer(previous); }
+    } restore{ztermy_ghostty_exchange_image_reclaimer({.callback = &Impl::reclaimImages, .userdata = m_impl.get()})};
     if (!bytes.empty())
     {
         const auto normalized = normalizeSemanticPromptMarks(bytes, m_impl->pendingSemanticPromptPrefix);
@@ -647,6 +637,7 @@ std::error_code GhosttyTerminalEngine::feed(const std::span<const std::byte> byt
 
 bool GhosttyTerminalEngine::synchronizedOutput() const noexcept
 {
+    const std::scoped_lock imageLock(m_impl->imageAccess->mutex);
     bool enabled = false;
     return ghostty_terminal_mode_get(m_impl->terminal, GHOSTTY_MODE_SYNC_OUTPUT, &enabled) == GHOSTTY_SUCCESS
            && enabled;
@@ -654,11 +645,13 @@ bool GhosttyTerminalEngine::synchronizedOutput() const noexcept
 
 void GhosttyTerminalEngine::cancelSynchronizedOutput() noexcept
 {
+    const std::scoped_lock imageLock(m_impl->imageAccess->mutex);
     (void)ghostty_terminal_mode_set(m_impl->terminal, GHOSTTY_MODE_SYNC_OUTPUT, false);
 }
 
 std::error_code GhosttyTerminalEngine::resize(const TerminalGeometry geometry)
 {
+    const std::scoped_lock imageLock(m_impl->imageAccess->mutex);
     if (!geometry.valid())
     {
         return invalidArgument();
@@ -675,6 +668,7 @@ std::error_code GhosttyTerminalEngine::resize(const TerminalGeometry geometry)
 
 std::error_code GhosttyTerminalEngine::setColorScheme(const TerminalColorScheme &scheme)
 {
+    const std::scoped_lock imageLock(m_impl->imageAccess->mutex);
     std::array<GhosttyColorRgb, 256> palette{};
     ghostty_color_palette_default(palette.data());
     for (std::size_t index = 0; index < scheme.ansi.size(); ++index)
@@ -731,6 +725,7 @@ std::error_code GhosttyTerminalEngine::setColorScheme(const TerminalColorScheme 
 
 std::error_code GhosttyTerminalEngine::setSelection(const std::optional<TerminalSelection> selection)
 {
+    const std::scoped_lock imageLock(m_impl->imageAccess->mutex);
     ghostty_selection_gesture_reset(m_impl->selectionGesture, m_impl->terminal);
     m_impl->lastSearchQuery.clear();
     if (!selection)
@@ -777,6 +772,7 @@ std::error_code GhosttyTerminalEngine::setSelection(const std::optional<Terminal
 std::expected<bool, std::error_code>
 GhosttyTerminalEngine::applySelectionGesture(const TerminalSelectionGesture &gesture)
 {
+    const std::scoped_lock imageLock(m_impl->imageAccess->mutex);
     m_impl->lastSearchQuery.clear();
     if (gesture.type == TerminalSelectionGestureType::cancel)
     {
@@ -993,6 +989,7 @@ GhosttyTerminalEngine::applySelectionGesture(const TerminalSelectionGesture &ges
 
 std::expected<bool, std::error_code> GhosttyTerminalEngine::applyCopyModeAction(const TerminalCopyModeAction &action)
 {
+    const std::scoped_lock imageLock(m_impl->imageAccess->mutex);
     const auto install = [this](const GhosttySelection *selection) -> std::expected<bool, std::error_code> {
         const GhosttyResult result = ghostty_terminal_set(m_impl->terminal, GHOSTTY_TERMINAL_OPT_SELECTION, selection);
         if (result != GHOSTTY_SUCCESS)
@@ -1273,6 +1270,7 @@ std::expected<bool, std::error_code> GhosttyTerminalEngine::applyCopyModeAction(
 
 std::error_code GhosttyTerminalEngine::selectAll()
 {
+    const std::scoped_lock imageLock(m_impl->imageAccess->mutex);
     ghostty_selection_gesture_reset(m_impl->selectionGesture, m_impl->terminal);
     m_impl->lastSearchQuery.clear();
     GhosttySelection selection{};
@@ -1293,6 +1291,7 @@ std::error_code GhosttyTerminalEngine::selectAll()
 
 std::expected<std::optional<std::string>, std::error_code> GhosttyTerminalEngine::selectedText() const
 {
+    const std::scoped_lock imageLock(m_impl->imageAccess->mutex);
     GhosttyTerminalSelectionFormatOptions options{};
     options.size = sizeof(options);
     options.emit = GHOSTTY_FORMATTER_FORMAT_PLAIN;
@@ -1329,6 +1328,7 @@ std::expected<std::optional<std::string>, std::error_code> GhosttyTerminalEngine
 
 void GhosttyTerminalEngine::scrollViewport(const int rows)
 {
+    const std::scoped_lock imageLock(m_impl->imageAccess->mutex);
     GhosttyTerminalScrollViewport behavior{};
     behavior.tag = GHOSTTY_SCROLL_VIEWPORT_DELTA;
     behavior.value.delta = rows;
@@ -1337,6 +1337,7 @@ void GhosttyTerminalEngine::scrollViewport(const int rows)
 
 void GhosttyTerminalEngine::scrollToBottom()
 {
+    const std::scoped_lock imageLock(m_impl->imageAccess->mutex);
     GhosttyTerminalScrollViewport behavior{};
     behavior.tag = GHOSTTY_SCROLL_VIEWPORT_BOTTOM;
     ghostty_terminal_scroll_viewport(m_impl->terminal, behavior);
@@ -1346,6 +1347,7 @@ std::expected<TerminalSearchResult, std::error_code>
 GhosttyTerminalEngine::search(const std::string_view query, const TerminalSearchDirection direction,
                               const bool caseSensitive)
 {
+    const std::scoped_lock imageLock(m_impl->imageAccess->mutex);
     ghostty_selection_gesture_reset(m_impl->selectionGesture, m_impl->terminal);
     if (query.empty())
     {
@@ -1589,6 +1591,7 @@ GhosttyTerminalEngine::search(const std::string_view query, const TerminalSearch
 
 std::error_code GhosttyTerminalEngine::clearSearch()
 {
+    const std::scoped_lock imageLock(m_impl->imageAccess->mutex);
     ghostty_selection_gesture_reset(m_impl->selectionGesture, m_impl->terminal);
     m_impl->lastSearchQuery.clear();
     const GhosttyResult result = ghostty_terminal_set(m_impl->terminal, GHOSTTY_TERMINAL_OPT_SELECTION, nullptr);
@@ -1598,6 +1601,7 @@ std::error_code GhosttyTerminalEngine::clearSearch()
 std::expected<std::vector<std::byte>, std::error_code>
 GhosttyTerminalEngine::encodePaste(const std::span<const std::byte> bytes) const
 {
+    const std::scoped_lock imageLock(m_impl->imageAccess->mutex);
     std::vector<char> input(bytes.size());
     if (!bytes.empty())
     {
@@ -1626,6 +1630,7 @@ GhosttyTerminalEngine::encodePaste(const std::span<const std::byte> bytes) const
 
 std::expected<std::vector<std::byte>, std::error_code> GhosttyTerminalEngine::encodeKey(const TerminalKeyEvent &event)
 {
+    const std::scoped_lock imageLock(m_impl->imageAccess->mutex);
     ghostty_key_encoder_setopt_from_terminal(m_impl->keyEncoder, m_impl->terminal);
     ghostty_key_event_set_action(m_impl->keyEvent, ghosttyKeyAction(event.action));
     ghostty_key_event_set_key(m_impl->keyEvent, ghosttyKey(event.key));
@@ -1642,6 +1647,7 @@ std::expected<std::vector<std::byte>, std::error_code> GhosttyTerminalEngine::en
 std::expected<std::vector<std::byte>, std::error_code>
 GhosttyTerminalEngine::encodeMouse(const TerminalMouseEvent &event)
 {
+    const std::scoped_lock imageLock(m_impl->imageAccess->mutex);
     if (event.screenWidthPixels == 0 || event.screenHeightPixels == 0 || event.cellWidthPixels == 0
         || event.cellHeightPixels == 0)
     {
@@ -1683,6 +1689,7 @@ GhosttyTerminalEngine::encodeMouse(const TerminalMouseEvent &event)
 
 std::expected<std::vector<std::byte>, std::error_code> GhosttyTerminalEngine::encodeFocus(const bool focused) const
 {
+    const std::scoped_lock imageLock(m_impl->imageAccess->mutex);
     bool enabled = false;
     if (const GhosttyResult modeResult =
             ghostty_terminal_mode_get(m_impl->terminal, GHOSTTY_MODE_FOCUS_EVENT, &enabled);
@@ -1701,16 +1708,19 @@ std::expected<std::vector<std::byte>, std::error_code> GhosttyTerminalEngine::en
 
 std::optional<std::string> GhosttyTerminalEngine::takeClipboardWrite()
 {
+    const std::scoped_lock imageLock(m_impl->imageAccess->mutex);
     return std::exchange(m_impl->pendingClipboardWrite, std::nullopt);
 }
 
 std::vector<std::byte> GhosttyTerminalEngine::takePtyWrite()
 {
+    const std::scoped_lock imageLock(m_impl->imageAccess->mutex);
     return std::exchange(m_impl->pendingPtyWrite, {});
 }
 
 std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot()
 {
+    const std::scoped_lock imageLock(m_impl->imageAccess->mutex);
     if (const GhosttyResult updateResult = ghostty_render_state_update(m_impl->renderState, m_impl->terminal);
         updateResult != GHOSTTY_SUCCESS)
     {
@@ -2166,6 +2176,7 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
 
 std::expected<std::string, std::error_code> GhosttyTerminalEngine::plainText() const
 {
+    const std::scoped_lock imageLock(m_impl->imageAccess->mutex);
     GhosttyFormatterTerminalOptions options{};
     options.size = sizeof(options);
     options.emit = GHOSTTY_FORMATTER_FORMAT_PLAIN;
@@ -2198,6 +2209,7 @@ std::expected<std::string, std::error_code> GhosttyTerminalEngine::plainText() c
 std::expected<TerminalScrollbackPage, std::error_code>
 GhosttyTerminalEngine::scrollbackPage(const TerminalScrollbackRequest request) const
 {
+    const std::scoped_lock imageLock(m_impl->imageAccess->mutex);
     if (request.lineCount == 0)
     {
         return std::unexpected(invalidArgument());

@@ -7,6 +7,7 @@
 #include "core/config/ApplicationPaths.h"
 #include "core/logging/Logging.h"
 #include "core/windowing/WindowPresenter.h"
+#include "domain/terminal/GhosttyTerminalEngine.h"
 #include "infrastructure/terminal/ConPtyRuntime.h"
 #include "infrastructure/terminal/TerminalPngDecoder.h"
 #include "platform/windows/CrashDiagnostics.h"
@@ -137,7 +138,9 @@ using ztermy::ui::visualQuickItem;
 [[nodiscard]] bool runWindowRuntimeSmoke(ztermy::NativeWindow &window)
 {
     if (QCoreApplication::arguments().contains(QStringLiteral("--saved-window-startup")))
-        return ztermy::ui::verifySavedWindowStartup(window);
+        return QCoreApplication::arguments().contains(QStringLiteral("--tray-exit-smoke"))
+                   ? ztermy::ui::verifyTrayExit(window)
+                   : ztermy::ui::verifySavedWindowStartup(window);
     return ztermy::ui::verifyWindowStateRoundTrip(window);
 }
 
@@ -4480,6 +4483,11 @@ int main(int argc, char *argv[])
         qWarning() << "ConPTY runtime initialization failed:" << conPtyError.message();
     if (!ztermy::terminal::installTerminalPngDecoder())
         return EXIT_FAILURE;
+    if (!ztermy::terminal::GhosttyTerminalEngine::initializeImageBudget())
+    {
+        qCritical() << "Could not initialize terminal image storage budget";
+        return EXIT_FAILURE;
+    }
     QGuiApplication::setApplicationDisplayName(QStringLiteral("ztermy"));
     QGuiApplication::setApplicationName(QStringLiteral("ztermy"));
     QGuiApplication::setApplicationVersion(QStringLiteral(ZTERMY_VERSION_STRING));

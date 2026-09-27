@@ -516,6 +516,10 @@ add_library(ztermy_terminal_engine STATIC
     src/domain/terminal/GhosttyImageSnapshot.cpp
     src/domain/terminal/GhosttyImageSnapshot.h
     src/domain/terminal/GhosttyImagePolicy.cpp
+    src/domain/terminal/GhosttyHostAllocator.cpp
+    src/domain/terminal/GhosttyHostAllocator.h
+    src/domain/terminal/GhosttyImageBudget.cpp
+    src/domain/terminal/GhosttyImageBudget.h
     src/domain/terminal/GhosttyImagePolicy.h
     src/domain/terminal/GhosttyImageExtension.h
     src/domain/terminal/GhosttySixelBridge.cpp
@@ -1012,6 +1016,7 @@ endif()
 
 qt_add_executable(ztermy WIN32
     src/main.cpp
+    src/ui/WindowStatusRuntimeSmoke.cpp
     src/ui/AiMemoryDiagnostics.h
     src/application/FontCatalog.cpp
     src/application/FontCatalog.h
@@ -1427,8 +1432,10 @@ set_source_files_properties(src/ui/qml/TitleTab.qml PROPERTIES QT_RESOURCE_ALIAS
 set_source_files_properties(src/ui/qml/TitleChromeAction.qml PROPERTIES QT_RESOURCE_ALIAS TitleChromeAction.qml)
 set_source_files_properties(src/ui/qml/SessionStatusDot.qml PROPERTIES QT_RESOURCE_ALIAS SessionStatusDot.qml)
 set_source_files_properties(src/ui/qml/DragPreview.qml PROPERTIES QT_RESOURCE_ALIAS DragPreview.qml)
+set_source_files_properties(src/ui/qml/NativeDragPreview.qml PROPERTIES QT_RESOURCE_ALIAS NativeDragPreview.qml)
+set_source_files_properties(src/ui/qml/TerminalNewMenu.qml PROPERTIES QT_RESOURCE_ALIAS TerminalNewMenu.qml)
+set_source_files_properties(src/ui/qml/SavedHostConnection.qml PROPERTIES QT_RESOURCE_ALIAS SavedHostConnection.qml)
 set_source_files_properties(src/ui/qml/DropTargetIndicator.qml PROPERTIES QT_RESOURCE_ALIAS DropTargetIndicator.qml)
-set_source_files_properties(src/ui/qml/TerminalPaneHeader.qml PROPERTIES QT_RESOURCE_ALIAS TerminalPaneHeader.qml)
 
 qt_add_qml_module(ztermy
     URI Ztermy
@@ -1516,8 +1523,10 @@ qt_add_qml_module(ztermy
         src/ui/qml/TitleChromeAction.qml
         src/ui/qml/SessionStatusDot.qml
         src/ui/qml/DragPreview.qml
+        src/ui/qml/NativeDragPreview.qml
+        src/ui/qml/TerminalNewMenu.qml
+        src/ui/qml/SavedHostConnection.qml
         src/ui/qml/DropTargetIndicator.qml
-        src/ui/qml/TerminalPaneHeader.qml
         src/ui/qml/TerminalRecordingPopover.qml
         src/ui/qml/TerminalWorkbench.qml
         src/ui/qml/TransferCenter.qml
@@ -3439,6 +3448,7 @@ if(BUILD_TESTING)
 
     target_compile_features(ztermy_terminal_engine_tests PRIVATE cxx_std_23)
     target_link_libraries(ztermy_terminal_engine_tests PRIVATE
+        ghostty-vt-static
         ztermy_terminal_engine
         ztermy_terminal_image_codec
         Qt6::Test

@@ -243,6 +243,7 @@ class SshTerminalSessionTests final : public QObject
 
 private slots:
     void synchronizesOutputOverLoopbackSsh();
+    void coalescesImagesOverLoopbackSshWhileGuiIsStalled();
     void deliversFinalSynchronizedFrameBeforeDisconnect();
     void rejectsInvalidStartupConfiguration();
     void presentsDistinctFailureStatuses();
@@ -335,6 +336,78 @@ void SshTerminalSessionTests::synchronizesOutputOverLoopbackSsh()
     session.stop();
     QVERIFY(server.waitForFinished(5000) || server.state() == QProcess::NotRunning);
     QCOMPARE(server.exitCode(), 0);
+}
+
+void SshTerminalSessionTests::coalescesImagesOverLoopbackSshWhileGuiIsStalled()
+{
+    const QString python = qEnvironmentVariable("ZTERMY_TEST_SSH_FIXTURE_PYTHON");
+    if (python.isEmpty())
+        QSKIP("Set ZTERMY_TEST_SSH_FIXTURE_PYTHON to a Python environment with Paramiko");
+    QProcess server;
+    server.start(python, {QFINDTESTDATA("fixtures/synchronized_ssh_server.py")});
+    QVERIFY(server.waitForStarted(5000));
+    QByteArray serverEvents;
+    connect(&server, &QProcess::readyReadStandardOutput, this, [&] {
+        serverEvents += server.readAllStandardOutput();
+    });
+    QTRY_VERIFY_WITH_TIMEOUT(serverEvents.contains('\n'), 10000);
+    bool portValid = false;
+    const auto port = serverEvents.split('\n').first().toUShort(&portValid);
+    QVERIFY(portValid && port != 0);
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ztermy::ssh::SshTerminalSession session;
+    connect(&session, &ztermy::ssh::SshTerminalSession::hostKeyConfirmationRequired, &session, [&] {
+        session.confirmHostKey(false);
+    });
+    ztermy::terminal::TerminalSnapshotPtr latest;
+    std::size_t deliveries = 0;
+    connect(&session, &ztermy::ssh::SshTerminalSession::snapshotReady, this,
+            [&](ztermy::terminal::TerminalSnapshotPtr snapshot) {
+                latest = std::move(snapshot);
+                ++deliveries;
+            });
+    ztermy::ssh::SshConnectionRequest request{
+        .host = QStringLiteral("127.0.0.1"),
+        .port = port,
+        .username = QStringLiteral("fixture"),
+        .authentication = ztermy::ssh::SshAuthenticationMethod::Password,
+        .secret = ztermy::security::SensitiveByteArray(QByteArrayLiteral("fixture-only")),
+        .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json")),
+    };
+    QVERIFY(
+        !session.start(std::move(request), {.columns = 80, .rows = 24, .cellWidthPixels = 8, .cellHeightPixels = 16}));
+    QTRY_VERIFY_WITH_TIMEOUT(latest, 10000);
+    server.write(QByteArrayLiteral("image-seed\n"));
+    QTRY_VERIFY_WITH_TIMEOUT(latest && !latest->images.empty(), 5000);
+    QCOMPARE(latest->images.front().image->pixels.front(), std::uint8_t{1});
+    std::weak_ptr<const ztermy::terminal::TerminalImage> original = latest->images.front().image;
+    const auto before = deliveries;
+    server.write(QByteArrayLiteral("image-burst\n"));
+    // QProcess's blocking wait services this pipe, not the GUI event loop.
+    // A CPR round-trip proves the SSH worker parsed the entire burst while
+    // snapshot delivery was stalled; merely writing server bytes cannot do so.
+    QElapsedTimer elapsed;
+    elapsed.start();
+    while (!serverEvents.contains("IMAGES_DONE") && elapsed.elapsed() < 10000)
+        server.waitForReadyRead(100);
+    QVERIFY2(serverEvents.contains("IMAGES_DONE"), server.readAllStandardError().constData());
+    QCOMPARE(deliveries, before);
+    QVERIFY(!original.expired());
+    QTRY_VERIFY_WITH_TIMEOUT(
+        latest && !latest->images.empty() && latest->images.front().image->pixels.front() == std::uint8_t{81}, 3000);
+    std::u32string text;
+    for (const auto &cell : latest->cells)
+        text.append(cell.grapheme);
+    QVERIFY(text.find(U"SSH_IMAGE_BURST_COMPLETE") != std::u32string::npos);
+    QTRY_VERIFY(original.expired());
+    QVERIFY2(deliveries - before <= 2, "GUI recovery replayed stale image frames instead of coalescing");
+    qInfo() << "SSH image GUI stall: replacements=80 recoveryDeliveries=" << deliveries - before
+            << "burstMilliseconds=" << elapsed.elapsed();
+    server.write(QByteArrayLiteral("exit\n"));
+    QVERIFY(server.waitForFinished(5000) || server.state() == QProcess::NotRunning);
+    QCOMPARE(server.exitCode(), 0);
+    session.stop();
 }
 
 void SshTerminalSessionTests::deliversFinalSynchronizedFrameBeforeDisconnect()

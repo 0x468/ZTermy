@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Window
 
 // Terminal (and Settings) tab on the title bar: a TitleTab with session
@@ -105,23 +104,11 @@ TitleTab {
         }
     }
 
-    Item {
-        id: workspaceDragProxy
-
-        parent: Overlay.overlay
-        readonly property point pointerPosition: control.mapToItem(parent, reorderDrag.centroid.position.x, reorderDrag.centroid.position.y)
-        x: pointerPosition.x
-        y: pointerPosition.y
-        width: 1
-        height: 1
-
-        DragPreview {
-            x: 16
-            y: 18
-            visible: reorderDrag.active && !control.dropCompleted
-            title: control.title
-            iconName: control.iconName
-        }
+    NativeDragPreview {
+        visible: reorderDrag.active && !control.dropCompleted
+        globalPosition: control.mapToGlobal(reorderDrag.centroid.position.x, reorderDrag.centroid.position.y)
+        title: control.title
+        iconName: control.iconName
     }
 
     DragHandler {

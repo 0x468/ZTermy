@@ -10,17 +10,16 @@ RowLayout {
     required property string paneId
     property string paneTitle: ""
     property int paneCount: 1
-    property bool headersVisible: false
+    readonly property var hostWindow: root.Window.window
+    readonly property bool detachedWindow: hostWindow && hostWindow.tabBarVisible !== undefined
+    readonly property bool tabBarVisible: detachedWindow && hostWindow.tabBarVisible
     property bool zoomed: false
-    property bool detached: false
-    property bool nativeMaximizeButtonHovered: false
-    property bool nativeMaximizeButtonPressed: false
-    property bool revealed: headersVisible || detached
+    property bool revealed: tabBarVisible
     readonly property bool interactionActive: hover.hovered || activeFocus || newPaneMenu.visible
     signal zoomRequested
     signal detachRequested
-    signal toggleHeadersRequested
-    spacing: detached ? 0 : 2
+    signal toggleTabBarRequested
+    spacing: 2
     opacity: revealed ? 1 : 0
     enabled: revealed
 
@@ -36,7 +35,7 @@ RowLayout {
 
     function createPane(profile, shell, copy) {
         if (controller.activateTerminalPane(paneId))
-            controller.splitActiveTerminal("horizontal", copy, profile, shell);
+            controller.splitActiveTerminal("auto", copy, profile, shell);
     }
 
     // The model only carries stable identity; labels and visibility are
@@ -49,30 +48,26 @@ RowLayout {
             required property string modelData
             property string dragPaneId: root.paneId
             property string dragPaneTitle: root.paneTitle
-            property bool suppressClick: false
             objectName: "terminalPaneAction-" + modelData + "-" + root.paneId
             visible: {
                 switch (modelData) {
                 case "zoom":
                 case "close":
-                    return root.paneCount > 1 && !root.detached;
-                case "copy":
-                case "new":
-                    return !root.detached;
+                    return root.paneCount > 1;
                 default:
                     return true;
                 }
             }
             Layout.preferredWidth: 28
-            Layout.preferredHeight: root.detached ? 32 : 28
+            Layout.preferredHeight: 28
             label: {
                 switch (modelData) {
                 case "headers":
-                    return root.headersVisible ? qsTr("Hide headers") : qsTr("Show headers");
+                    return root.detachedWindow ? (root.tabBarVisible ? qsTr("Hide headers") : qsTr("Show headers")) : qsTr("Drag pane");
                 case "zoom":
                     return root.zoomed ? qsTr("Restore pane layout") : qsTr("Zoom this pane within its tab");
                 case "detach":
-                    return root.detached ? qsTr("Reattach terminal pane") : qsTr("Detach terminal pane");
+                    return qsTr("Detach terminal pane");
                 case "copy":
                     return qsTr("Copy pane — new session, same profile or Shell");
                 case "new":
@@ -82,18 +77,15 @@ RowLayout {
                 }
             }
             iconName: modelData === "headers" ? "list" : modelData === "zoom" ? "locate" : modelData === "detach" ? "external-link" : modelData === "copy" ? "copy" : modelData === "new" ? "plus" : "close"
-            selected: (modelData === "headers" && root.headersVisible) || (modelData === "zoom" && root.zoomed)
+            selected: (modelData === "headers" && root.tabBarVisible) || (modelData === "zoom" && root.zoomed)
             onWorkspace: true
             iconColor: selected ? Theme.accent : Theme.workspaceText
             toolTipEnabled: !newPaneMenu.visible
             onClicked: {
-                if (suppressClick) {
-                    suppressClick = false;
-                    return;
-                }
                 switch (modelData) {
                 case "headers":
-                    root.toggleHeadersRequested();
+                    if (root.detachedWindow)
+                        root.toggleTabBarRequested();
                     break;
                 case "zoom":
                     root.zoomRequested();
@@ -112,54 +104,6 @@ RowLayout {
                         root.controller.closeActiveTerminalPane();
                     break;
                 }
-            }
-            DragHandler {
-                target: null
-                acceptedButtons: Qt.LeftButton
-                dragThreshold: 10
-                enabled: button.modelData === "headers" && root.detached
-                onActiveChanged: {
-                    if (active) {
-                        button.suppressClick = true;
-                        const window = button.Window.window;
-                        window.paneDockMoveActive = true;
-                        if (!window.startSystemMove())
-                            window.paneDockMoveActive = false;
-                    } else if (button.suppressClick) {
-                        Qt.callLater(() => {
-                            button.down = false;
-                            button.focus = false;
-                            button.suppressClick = false;
-                        });
-                    }
-                }
-            }
-        }
-    }
-    QtObject {
-        id: detachedChrome
-        readonly property bool maximized: root.Window.window && root.Window.window.visibility === Window.Maximized
-    }
-    Repeater {
-        model: root.detached ? ["minimize", "maximize", "close"] : []
-        delegate: CaptionButton {
-            required property string modelData
-            objectName: "detachedWindowAction-" + modelData + "-" + root.paneId
-            Layout.preferredWidth: 32
-            Layout.preferredHeight: 32
-            kind: modelData
-            chrome: detachedChrome
-            externallyHovered: modelData === "maximize" && root.nativeMaximizeButtonHovered
-            externallyPressed: modelData === "maximize" && root.nativeMaximizeButtonPressed
-            accessibleName: modelData === "minimize" ? qsTranslate("TitleWindowActions", "Minimize") : modelData === "close" ? qsTranslate("TitleWindowActions", "Close") : detachedChrome.maximized ? qsTranslate("TitleWindowActions", "Restore") : qsTranslate("TitleWindowActions", "Maximize")
-            onActivated: {
-                const window = root.Window.window;
-                if (modelData === "minimize")
-                    WindowControl.minimize(window);
-                else if (modelData === "maximize")
-                    WindowControl.toggleMaximize(window);
-                else
-                    window.close();
             }
         }
     }

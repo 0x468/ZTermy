@@ -6,6 +6,141 @@ const Result = @import("result.zig").Result;
 const Image = @import("../kitty/graphics_image.zig").Image;
 const Storage = @import("../kitty/graphics_storage.zig").ImageStorage;
 const unicode = @import("../kitty/graphics_unicode.zig");
+const graphics_c = @import("kitty_graphics.zig");
+const Screen = @import("../Screen.zig");
+const ScreenSet = @import("../ScreenSet.zig");
+const image_budget = @import("ztermy_image_budget.zig");
+
+pub fn configureImageBudget(bytes: usize) callconv(lib.calling_conv) Result {
+    return if (image_budget.configure(bytes)) .success else .invalid_value;
+}
+
+pub fn imageBudgetUsage() callconv(lib.calling_conv) usize {
+    return image_budget.current();
+}
+
+pub fn exchangeImageReclaimer(value: image_budget.Reclaimer) callconv(lib.calling_conv) image_budget.Reclaimer {
+    return image_budget.exchangeReclaimer(value);
+}
+
+pub const ImageRecord = extern struct {
+    image_id: u32,
+    visible: u32,
+    generation: u64,
+    bytes: u64,
+    screen_generation: u64,
+};
+
+// Worker-thread only. Visibility belongs to the image, across every placement.
+fn imageVisible(t: *terminal_c.ZigTerminal, screen: *Screen, image: *const Image) bool {
+    if (screen != t.screens.active) return false;
+    var placements = screen.kitty_images.placements.iterator();
+    var has_virtual = false;
+    while (placements.next()) |entry| {
+        if (entry.key_ptr.image_id != image.id) continue;
+        if (entry.value_ptr.location == .virtual) {
+            has_virtual = true;
+        } else if (graphics_c.computeViewportPos(entry.value_ptr, image, t).visible) {
+            return true;
+        }
+    }
+    if (!has_virtual) return false;
+    const bottom = screen.pages.getBottomRight(.viewport) orelse return true;
+    var placeholders = unicode.placementIterator(screen.pages.getTopLeft(.viewport), bottom);
+    while (placeholders.next()) |placement| {
+        if (placement.image_id == image.id) return true;
+    }
+    return false;
+}
+
+pub fn imageInventory(
+    handle: terminal_c.Terminal,
+    alternate: bool,
+    output: ?[*]ImageRecord,
+    capacity: usize,
+    count: ?*usize,
+) callconv(lib.calling_conv) Result {
+    const t = (handle orelse return .invalid_value).terminal;
+    const written = count orelse return .invalid_value;
+    written.* = 0;
+    const key: ScreenSet.Key = if (alternate) .alternate else .primary;
+    const screen = t.screens.get(key) orelse return .success;
+    const storage = &screen.kitty_images;
+    written.* = storage.images.count();
+    if (capacity < written.*) return .out_of_memory;
+    if (written.* == 0) return .success;
+    const destination = output orelse return .invalid_value;
+    var indices: std.AutoHashMapUnmanaged(u32, usize) = .empty;
+    defer indices.deinit(t.gpa());
+    indices.ensureTotalCapacity(t.gpa(), @intCast(written.*)) catch return .out_of_memory;
+    var images = storage.images.valueIterator();
+    var index: usize = 0;
+    while (images.next()) |image| : (index += 1) {
+        indices.putAssumeCapacity(image.id, index);
+        destination[index] = .{
+            .image_id = image.id,
+            .visible = 0,
+            .generation = image.generation,
+            .bytes = image.data.len,
+            .screen_generation = t.screens.generation(key),
+        };
+    }
+    if (screen != t.screens.active) return .success;
+    // One pass over placements and one over Unicode placeholders, rather than
+    // rescanning both once per image (up to 4096 times at the metadata limit).
+    var placements = storage.placements.iterator();
+    var has_virtual = false;
+    while (placements.next()) |entry| {
+        const slot = indices.get(entry.key_ptr.image_id) orelse continue;
+        const record = &destination[slot];
+        if (record.visible == 1) continue;
+        if (entry.value_ptr.location == .virtual) {
+            record.visible = 2; // temporary: has a virtual prototype
+            has_virtual = true;
+        } else {
+            const image = storage.images.getPtr(entry.key_ptr.image_id) orelse continue;
+            if (graphics_c.computeViewportPos(entry.value_ptr, image, t).visible)
+                record.visible = 1;
+        }
+    }
+    if (has_virtual) {
+        if (screen.pages.getBottomRight(.viewport)) |bottom| {
+            var placeholders = unicode.placementIterator(screen.pages.getTopLeft(.viewport), bottom);
+            while (placeholders.next()) |placement| {
+                const slot = indices.get(placement.image_id) orelse continue;
+                if (destination[slot].visible == 2) destination[slot].visible = 1;
+            }
+        } else {
+            // Missing viewport geometry cannot prove a prototype is invisible.
+            for (destination[0..written.*]) |*record| {
+                if (record.visible == 2) record.visible = 1;
+            }
+        }
+        for (destination[0..written.*]) |*record| record.visible &= 1;
+    }
+    return .success;
+}
+
+// A queued candidate is only a hint. Recheck identity and visibility on its
+// owning worker immediately before releasing pixels and screen-owned pins.
+pub fn evictImage(
+    handle: terminal_c.Terminal,
+    alternate: bool,
+    id: u32,
+    screen_generation: u64,
+    generation: u64,
+) callconv(lib.calling_conv) Result {
+    const t = (handle orelse return .invalid_value).terminal;
+    const key: ScreenSet.Key = if (alternate) .alternate else .primary;
+    if (t.screens.generation(key) != screen_generation) return .no_value;
+    const screen = t.screens.get(key) orelse return .no_value;
+    const storage = &screen.kitty_images;
+    const image = storage.images.getPtr(id) orelse return .no_value;
+    if (image.generation != generation or imageVisible(t, screen, image)) return .no_value;
+    storage.deleteById(t.gpa(), screen, id, 0, true);
+    storage.markMutated(t.io());
+    return .success;
+}
 
 pub const UnicodePlacement = extern struct {
     image_id: u32,

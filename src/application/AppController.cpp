@@ -5037,10 +5037,9 @@ bool AppController::closeTabsInternal(const QStringList &ids, const bool recordC
         else
         {
             const auto *preferred = findTerminalWorkspace(successorId);
-            const auto &next = preferred && preferred->windowId == "main"
-                                   ? *preferred
-                                   : m_workspaceState.terminalWorkspaces[std::min(
-                                         workspaceIndex, m_workspaceState.terminalWorkspaces.size() - 1U)];
+            const auto &next = preferred ? *preferred
+                                         : m_workspaceState.terminalWorkspaces[std::min(
+                                               workspaceIndex, m_workspaceState.terminalWorkspaces.size() - 1U)];
             m_activeTabId.clear();
             m_workspaceState.activeTerminalWorkspaceId = next.id;
             activateTerminalTab(utf8QString(next.id));
@@ -5315,19 +5314,17 @@ bool AppController::splitActiveTerminal(const QString &orientation, const bool d
     {
         return false;
     }
-    workbench::TerminalSplitOrientation splitOrientation;
-    if (orientation == QStringLiteral("horizontal"))
-    {
-        splitOrientation = workbench::TerminalSplitOrientation::Horizontal;
-    }
-    else if (orientation == QStringLiteral("vertical"))
-    {
-        splitOrientation = workbench::TerminalSplitOrientation::Vertical;
-    }
-    else
+    if (orientation != QStringLiteral("horizontal") && orientation != QStringLiteral("vertical")
+        && orientation != QStringLiteral("auto"))
     {
         return false;
     }
+    const ui::TerminalItem *viewport = m_terminalViewports.value(source->paneId);
+    const bool vertical =
+        orientation == QStringLiteral("vertical")
+        || (orientation == QStringLiteral("auto") && viewport && viewport->height() > viewport->width());
+    const auto splitOrientation =
+        vertical ? workbench::TerminalSplitOrientation::Vertical : workbench::TerminalSplitOrientation::Horizontal;
 
     auto tab = std::make_unique<TerminalTab>();
     tab->id = QUuid::createUuid().toString(QUuid::WithoutBraces);

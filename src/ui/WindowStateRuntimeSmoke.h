@@ -2,13 +2,18 @@
 
 #include "core/windowing/WindowPresenter.h"
 #include "platform/windows/NativeWindow.h"
+#include "ui/WindowStatusRuntimeSmoke.h"
 
 #include <QColor>
 #include <QDebug>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QGuiApplication>
+#include <QPointer>
 #include <QQuickItem>
+#include <QQuickItemGrabResult>
+#include <QScopeGuard>
 #include <QScreen>
 #include <QTimer>
 #include <QWindow>
@@ -92,6 +97,45 @@ template <typename Predicate>
     return passed;
 }
 
+[[nodiscard]] inline QQuickItem *findWindowSmokeItem(QQuickItem *root, const QString &name);
+
+[[nodiscard]] inline bool captureWindowSmokeItem(QQuickItem *item, const QString &name)
+{
+    const auto arguments = QCoreApplication::arguments();
+    const auto dataIndex = arguments.indexOf(QStringLiteral("--data-dir"));
+    if (!item || dataIndex < 0 || dataIndex + 1 >= arguments.size())
+        return false;
+    QPointer<QQuickItem> guardedItem(item);
+    const auto objectName = item->objectName();
+    if (auto *targetWindow = item->window())
+    {
+        windowing::present(*targetWindow);
+        processWindowEventsFor(std::chrono::milliseconds{250});
+        if (!targetWindow->isExposed())
+        {
+            // Start-Process -WindowStyle Hidden can consume the first native
+            // show request despite Qt already reporting the window as visible.
+            targetWindow->hide();
+            windowing::present(*targetWindow);
+            processWindowEventsFor(std::chrono::milliseconds{250});
+        }
+        qInfo() << "Profile capture window exposed:" << targetWindow->isExposed();
+        if (!objectName.isEmpty())
+            guardedItem = findWindowSmokeItem(targetWindow->contentItem(), objectName);
+    }
+    qInfo() << "Profile icon capture" << name << guardedItem.data() << (guardedItem ? guardedItem->size() : QSizeF{});
+    if (!guardedItem)
+        return false;
+    const auto capture = guardedItem->grabToImage();
+    return capture
+           && settleWindowUntil(
+               [&] {
+                   return !capture->image().isNull();
+               },
+               std::chrono::seconds{3})
+           && capture->image().save(QDir(arguments[dataIndex + 1]).filePath(name));
+}
+
 [[nodiscard]] inline bool verifyHostProfileIconPicker(NativeWindow &window)
 {
     using namespace std::chrono_literals;
@@ -108,13 +152,15 @@ template <typename Predicate>
     QQuickItem *choice = nullptr;
     QMetaObject::invokeMethod(menu, "itemAt", Q_RETURN_ARG(QQuickItem *, choice), Q_ARG(int, 4));
     const bool visible = menu->property("visible").toBool() && menu->property("count").toInt() == 6;
+    const bool captured = captureWindowSmokeItem(qvariant_cast<QQuickItem *>(menu->property("contentItem")),
+                                                 QStringLiteral("profile-icon-menu.png"));
     const bool selected = choice && QMetaObject::invokeMethod(choice, "triggered")
                           && field->property("profileIcon").toString() == QStringLiteral("security");
     QMetaObject::invokeMethod(menu, "close");
     const bool reset = QMetaObject::invokeMethod(pane, "clearEditor")
                        && field->property("profileIcon").toString() == QStringLiteral("terminal");
     qInfo() << "Profile icon menu: six choices visible, selection, new-profile reset:" << visible << selected << reset;
-    return visible && selected && reset;
+    return visible && captured && selected && reset;
 }
 
 [[nodiscard]] inline QQuickItem *findWindowSmokeItem(QQuickItem *root, const QString &name)
@@ -127,8 +173,6 @@ template <typename Predicate>
     return nullptr;
 }
 
-// Paired with scripts/verify_window_restore.ps1: unlike the transition smoke,
-// this observes startup state without first resetting it using showNormal().
 [[nodiscard]] inline bool verifySavedWindowStartup(NativeWindow &window)
 {
     using namespace std::chrono_literals;
@@ -168,6 +212,23 @@ template <typename Predicate>
     qInfo() << "Window restore startup: main bounds/selection, detached native maximum/selection:" << mainRestored
             << detachedRestored;
     auto *detachedQuick = qobject_cast<QQuickWindow *>(detached);
+    auto *tabBar =
+        detachedQuick ? findWindowSmokeItem(detachedQuick->contentItem(), QStringLiteral("detachedTabBar")) : nullptr;
+    const bool hiddenByDefault = tabBar && !tabBar->isVisible() && tabBar->height() == 0;
+    const auto selectionBeforeToggle = detached ? detached->property("workspaceId") : QVariant{};
+    const bool toggled = detached && QMetaObject::invokeMethod(detached, "toggleTabBar");
+    processWindowEventsFor(100ms);
+    const bool shown = toggled && tabBar && tabBar->isVisible() && tabBar->height() == 32;
+    if (detached)
+        QMetaObject::invokeMethod(detached, "toggleTabBar");
+    processWindowEventsFor(100ms);
+    const bool hiddenAgain = tabBar && !tabBar->isVisible() && tabBar->height() == 0
+                             && detached->property("workspaceId") == selectionBeforeToggle;
+    qInfo() << "Detached tab chrome: hidden initially, shown, hidden without changing selection:" << hiddenByDefault
+            << shown << hiddenAgain;
+    if (detached)
+        QMetaObject::invokeMethod(detached, "toggleTabBar");
+    processWindowEventsFor(100ms);
     auto *mainTab = findWindowSmokeItem(window.contentItem(), QStringLiteral("workspaceTitle-main-check"));
     auto *detachedTab = detachedQuick ? findWindowSmokeItem(detachedQuick->contentItem(),
                                                             QStringLiteral("workspaceTitle-detached-selected"))
@@ -176,7 +237,17 @@ template <typename Predicate>
                               && mainTab->property("iconName").toString() == QStringLiteral("security")
                               && detachedTab->property("iconName").toString() == QStringLiteral("security");
     qInfo() << "Profile icon reaches main and detached Tab delegates:" << profileIcons;
-    return mainRestored && detachedRestored && profileIcons && verifyWindowNotificationRouting(window, *detached)
+    const bool capturedIcons =
+        captureWindowSmokeItem(mainTab, QStringLiteral("profile-icon-main.png"))
+        && captureWindowSmokeItem(
+            findWindowSmokeItem(detachedQuick->contentItem(), QStringLiteral("workspaceTitle-detached-selected")),
+            QStringLiteral("profile-icon-detached.png"));
+    const bool statusPresentation = !QCoreApplication::arguments().contains(QStringLiteral("--status-visual-smoke"))
+                                    || (detachedQuick && verifyWindowStatusPresentation(window, *detachedQuick));
+    const bool snapCaptured = !QCoreApplication::arguments().contains(QStringLiteral("--snap-layout-capture"))
+                              || (detachedQuick && captureNativeSnapFlyout(*detachedQuick));
+    return hiddenByDefault && shown && hiddenAgain && mainRestored && detachedRestored && profileIcons && capturedIcons
+           && statusPresentation && snapCaptured && verifyWindowNotificationRouting(window, *detached)
            && verifyHostProfileIconPicker(window);
 }
 

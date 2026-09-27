@@ -115,11 +115,10 @@ inline bool verifyPaneScrollbarLayout(NativeWindow &window, AppController &contr
         return nullptr;
     };
     bool passed = true;
-    for (const auto *orientation : {"horizontal", "vertical", "detached"})
+    for (const auto *orientation : {"horizontal", "vertical", "single"})
     {
-        const bool detached = QLatin1StringView{orientation} == QLatin1StringView{"detached"};
-        surface->setProperty("detachedPane", detached);
-        const QVariantMap layout = detached
+        const bool single = QLatin1StringView{orientation} == QLatin1StringView{"single"};
+        const QVariantMap layout = single
                                        ? leaf(QStringLiteral("a"), true)
                                        : QVariantMap{{QStringLiteral("kind"), QStringLiteral("split")},
                                                      {QStringLiteral("orientation"), QString::fromLatin1(orientation)},
@@ -127,10 +126,13 @@ inline bool verifyPaneScrollbarLayout(NativeWindow &window, AppController &contr
                                                      {QStringLiteral("first"), leaf(QStringLiteral("a"), true)},
                                                      {QStringLiteral("second"), leaf(QStringLiteral("b"), false)}};
         surface->setProperty("node", layout);
-        for (const bool headers : {false, true})
+        for (const bool toolbarRevealed : {false, true})
         {
-            surface->setProperty("headersVisible", headers);
             processWindowEventsFor(std::chrono::milliseconds{400});
+            auto *actions = find(QStringLiteral("terminalPaneActions-a"));
+            if (!actions)
+                return false;
+            actions->setProperty("revealed", toolbarRevealed);
             auto *a = qobject_cast<TerminalItem *>(find(QStringLiteral("terminalViewport-a")));
             auto *b = qobject_cast<TerminalItem *>(find(QStringLiteral("terminalViewport-b")));
             auto snapshot = std::make_shared<terminal::TerminalSnapshot>();
@@ -138,7 +140,7 @@ inline bool verifyPaneScrollbarLayout(NativeWindow &window, AppController &contr
             snapshot->rows = 8;
             snapshot->cells.resize(96);
             snapshot->scrollbar = {.total = 100, .offset = 40, .visible = 20};
-            if (!a || (!detached && !b))
+            if (!a || (!single && !b))
                 return false;
             a->setSnapshot(snapshot);
             if (b)
@@ -156,10 +158,10 @@ inline bool verifyPaneScrollbarLayout(NativeWindow &window, AppController &contr
                                        : QMetaObject::Connection{};
             auto *bar = find(QStringLiteral("terminalPaneScrollbar-a"));
             auto *thumb = find(QStringLiteral("terminalPaneScrollbarThumb-a"));
-            auto *actions = find(QStringLiteral("terminalPaneActions-a"));
             bool valid =
-                bar && thumb && actions && bar->isVisible()
-                && bar->mapToScene(QPointF{0, 0}).y() >= actions->mapToScene(QPointF{0, actions->height()}).y();
+                bar && thumb && actions && bar->isVisible() && qAbs(a->y()) < 1
+                && (!toolbarRevealed
+                    || bar->mapToScene(QPointF{0, 0}).y() >= actions->mapToScene(QPointF{0, actions->height()}).y());
             if (valid)
             {
                 const qreal thumbHeight = thumb->height();
@@ -179,17 +181,8 @@ inline bool verifyPaneScrollbarLayout(NativeWindow &window, AppController &contr
             valid = valid && aScrolls >= 2 && bScrolls == 0;
             QObject::disconnect(aConnection);
             QObject::disconnect(bConnection);
-            if (!detached)
-            {
-                auto *button = find(QStringLiteral("terminalPaneAction-new-a"));
-                if (button)
-                    sendMouseClick(window, *button, {button->width() / 2, button->height() / 2});
-                auto *menu = surface->findChild<QObject *>(QStringLiteral("terminalNewPaneMenu-a"));
-                valid = valid && button && menu && menu->property("visible").toBool();
-                if (menu)
-                    QMetaObject::invokeMethod(menu, "close");
-            }
-            qInfo() << "Pane scrollbar layout/hit test" << orientation << "headers=" << headers << "passed=" << valid;
+            qInfo() << "Pane scrollbar layout/hit test" << orientation << "toolbar=" << toolbarRevealed
+                    << "passed=" << valid;
             passed = valid && passed;
         }
     }

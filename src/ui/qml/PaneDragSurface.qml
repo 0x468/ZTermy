@@ -10,7 +10,7 @@ MouseArea {
     HoverHandler {
         id: paneDragSourceHover
         // Observe the host without placing a permanently visible input layer
-        // above its controls. Only the actual header drag claims the pointer.
+        // above its controls. Only the actual handle drag claims the pointer.
         parent: control.parent
         blocking: false
         property bool overDragSource: false
@@ -36,7 +36,12 @@ MouseArea {
     property string paneId: ""
     property string paneTitle: ""
     property bool dragging: false
-    property bool toggleHeadersOnClick: false
+    property bool windowMove: false
+    NativeDragPreview {
+        visible: control.dragging
+        globalPosition: control.mapToGlobal(control.pointerPoint.x, control.pointerPoint.y)
+        title: control.paneTitle
+    }
 
     function dragSourceAt(global) {
         if (control.hostRoot.currentPage !== "terminal")
@@ -45,19 +50,9 @@ MouseArea {
         if (handle)
             return {
                 "paneId": handle.dragPaneId,
-                "paneTitle": handle.dragPaneTitle,
-                "toggleHeaders": true
+                "paneTitle": handle.dragPaneTitle
             };
-        if (!control.hostRoot.paneHeadersVisible)
-            return null;
-        const header = control.coordinator.viewportAt(control.terminalArea, global, "terminalPaneHeader-");
-        if (!header || header.mapFromGlobal(global.x, global.y).x >= header.dragAreaWidth)
-            return null;
-        return {
-            "paneId": header.paneId,
-            "paneTitle": header.paneTitle,
-            "toggleHeaders": false
-        };
+        return null;
     }
 
     onPressed: mouse => {
@@ -69,18 +64,25 @@ MouseArea {
         }
         paneId = source.paneId;
         paneTitle = source.paneTitle;
-        toggleHeadersOnClick = source.toggleHeaders;
         pressPoint = Qt.point(mouse.x, mouse.y);
         pointerPoint = pressPoint;
         dragging = false;
+        windowMove = false;
         control.coordinator.draggedPaneId = paneId;
     }
     onPositionChanged: mouse => {
-        if (!pressed || !paneId.length)
+        if (!pressed || !paneId.length || windowMove)
             return;
         pointerPoint = Qt.point(mouse.x, mouse.y);
-        if (!dragging && Math.hypot(mouse.x - pressPoint.x, mouse.y - pressPoint.y) >= 10)
+        if (!dragging && Math.hypot(mouse.x - pressPoint.x, mouse.y - pressPoint.y) >= 10) {
+            if (control.hostRoot.tabBarVisible !== undefined && !control.hostRoot.tabBarVisible) {
+                windowMove = true;
+                control.coordinator.draggedPaneId = "";
+                control.hostRoot.startSystemMove();
+                return;
+            }
             dragging = true;
+        }
         if (dragging)
             control.coordinator.updateDropTarget(mapToGlobal(mouse.x, mouse.y));
     }
@@ -89,23 +91,26 @@ MouseArea {
             return;
         const id = paneId;
         paneId = "";
-        if (dragging) {
+        if (windowMove) {
+            windowMove = false;
+        } else if (dragging) {
             control.coordinator.finishPaneDrop(id, mouse.x < 0 || mouse.y < 0 || mouse.x > width || mouse.y > height);
         } else {
             control.coordinator.draggedPaneId = "";
-            if (toggleHeadersOnClick) {
-                control.hostRoot.toggleTerminalPaneHeaders();
+            if (control.hostRoot.tabBarVisible !== undefined) {
+                control.hostRoot.toggleTabBar();
             } else if (control.hostRoot.controller.activateTerminalPane(id)) {
                 control.hostRoot.focusTerminalAfterLayout();
             }
         }
         dragging = false;
-        toggleHeadersOnClick = false;
+        windowMove = false;
     }
     function cancelDrag() {
+        windowMove = false;
+        control.coordinator.clearTabPreviews();
         paneId = "";
         dragging = false;
-        toggleHeadersOnClick = false;
         control.coordinator.draggedPaneId = "";
         control.coordinator.dropTarget = ({});
     }

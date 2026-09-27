@@ -268,7 +268,7 @@ bool AppController::moveTerminalPane(const QString &paneId, const QString &targe
             && orientation != QStringLiteral("vertical")))
         return false;
     const auto *targetLayout = findTerminalWorkspace(target->workspaceId);
-    if (!targetLayout || targetLayout->windowId != "main")
+    if (!targetLayout)
         return false;
     return applyTerminalTransfer(
         {.kind = orientation == QStringLiteral("swap") ? workbench::TerminalTransferKind::SwapPanes

@@ -1,3 +1,7 @@
+#include "domain/terminal/GhosttyHostAllocator.h"
+#include "domain/terminal/GhosttyImageBudget.h"
+#include "domain/terminal/GhosttyImageExtension.h"
+#include "domain/terminal/GhosttyImagePolicy.h"
 #include "domain/terminal/GhosttyTerminalEngine.h"
 #include "domain/terminal/ShellPathQuoter.h"
 #include "domain/terminal/SixelDecoder.h"
@@ -5,14 +9,26 @@
 #include "infrastructure/terminal/TerminalPngDecoder.h"
 
 #include <QBuffer>
+#include <QElapsedTimer>
+#include <QFile>
+#include <QScopeGuard>
 #include <QTest>
 #include <QtEndian>
+extern "C"
+{
+#include <ghostty/vt/allocator.h>
+}
 
 #include <algorithm>
+#include <array>
+#include <barrier>
 #include <cstddef>
+#include <future>
+#include <limits>
 #include <span>
 #include <string>
 #include <string_view>
+#include <thread>
 
 namespace
 {
@@ -59,6 +75,7 @@ class TerminalEngineTests final : public QObject
     Q_OBJECT
 
 private slots:
+    void preservesHostAllocationAlignmentAndFailedResizeContents();
     void separatesSixelWithoutChangingOtherVtOrUtf8();
     void recoversFromCancelledOrIncompleteGraphicsStrings();
     void observesGraphicsModesWithoutConsumingTerminalControls();
@@ -67,6 +84,7 @@ private slots:
     void rejectsInflationBeyondImageBudgetAndRecovers();
     void releasesRejectedMultipartImageBeforeNextTransmission();
     void keepsKittyUploadIndependentOfSixelOutput();
+    void retainsMultipartKittyPlacementDimensions();
     void rejectsKittyAnimationWithIdentityAndRecovers();
     void placesAbsoluteSixelWithoutChangingCursorOrWrap();
     void reportsSixelCapabilitiesWithoutChangingScreen();
@@ -76,6 +94,13 @@ private slots:
     void decodesPngThroughKittyWithoutPremultiplyingAlpha();
     void rejectsOversizedAndMalformedPngBeforeRasterDecode();
     void retainsKittyPixelsAcrossReplacementAndDeletion();
+    void replacesImageAtCapacityWithoutEvictingOtherImages();
+    void revalidatesImageEvictionAcrossPlacementsAndReplacement();
+    void sharesImageAdmissionAcrossConcurrentTerminals();
+    void sharesImageAdmissionAcrossKittyAndSixel();
+    void inventoriesManyVirtualImagesWithoutProtectingUnusedPrototypes();
+    void reclaimsOnlyIdleInvisibleImagesAcrossEngines();
+    void reclaimsHistoryBeforeRejectingNewTerminalImages();
     void tracksKittyPlacementAcrossScreenAndScrollChanges();
     void rendersUnicodeImageFragmentsWithInheritedCoordinates();
     void resolvesUnicodeImageIdentityAndReleasesSnapshotPixels();
@@ -122,6 +147,38 @@ private slots:
     void pagesThroughScrollback();
     void quotesDroppedPathsForShellDialects();
 };
+
+void TerminalEngineTests::preservesHostAllocationAlignmentAndFailedResizeContents()
+{
+    const auto *allocator = ztermy::terminal::ghosttyHostAllocator();
+    const auto &vtable = *allocator->vtable;
+    for (const std::uint8_t exponent : {0, 1, 3, 4, 6, 12, 16})
+    {
+        for (const std::size_t length : {0, 1, 17, 4097})
+        {
+            const auto cleanup = [=](unsigned char *memory) {
+                vtable.free(allocator->ctx, memory, length, exponent, 0);
+            };
+            std::unique_ptr<unsigned char, decltype(cleanup)> memory(
+                static_cast<unsigned char *>(vtable.alloc(allocator->ctx, length, exponent, 0)), cleanup);
+            QVERIFY(memory);
+            QCOMPARE(reinterpret_cast<std::uintptr_t>(memory.get()) % (std::size_t{1} << exponent), 0U);
+            std::fill_n(memory.get(), length, static_cast<unsigned char>(0xA5));
+            QVERIFY(!vtable.resize(allocator->ctx, memory.get(), length, exponent, length + 8192, 0));
+            QVERIFY(vtable.remap(allocator->ctx, memory.get(), length, exponent, length + 8192, 0) == nullptr);
+            QVERIFY(std::all_of(memory.get(), memory.get() + length, [](unsigned char value) {
+                return value == 0xA5;
+            }));
+        }
+    }
+    QVERIFY(vtable.alloc(allocator->ctx, std::numeric_limits<std::size_t>::max(), 4, 0) == nullptr);
+    QVERIFY(vtable.alloc(allocator->ctx, 32, std::numeric_limits<std::uint8_t>::max(), 0) == nullptr);
+    // Exercise the actual Zig allocator bridge as well as direct vtable calls.
+    auto *buffer = ghostty_alloc(allocator, 8193);
+    QVERIFY(buffer != nullptr);
+    std::fill_n(buffer, 8193, static_cast<std::uint8_t>(0x5A));
+    ghostty_free(allocator, buffer, 8193);
+}
 
 void TerminalEngineTests::separatesSixelWithoutChangingOtherVtOrUtf8()
 {
@@ -348,6 +405,51 @@ void TerminalEngineTests::releasesRejectedMultipartImageBeforeNextTransmission()
     QVERIFY(snapshot);
     QCOMPARE(snapshot->images.size(), std::size_t{1});
     QCOMPARE(snapshot->images[0].image->pixels, std::vector<std::uint8_t>({255, 0, 0, 255}));
+}
+
+void TerminalEngineTests::retainsMultipartKittyPlacementDimensions()
+{
+    auto created = ztermy::terminal::GhosttyTerminalEngine::create(
+        {.columns = 100, .rows = 40, .cellWidthPixels = 8, .cellHeightPixels = 16});
+    QVERIFY(created);
+    auto &engine = **created;
+    const auto feed = [&](const QByteArray &bytes) {
+        return !engine.feed(std::as_bytes(std::span(bytes.data(), static_cast<std::size_t>(bytes.size()))));
+    };
+    // Chafa starts its multipart transfer with an empty header packet. Cell
+    // dimensions belong to that packet, not to the final payload-only packet.
+    QVERIFY(feed("\x1b_Ga=T,f=32,s=320,v=160,c=32,r=8,m=1,q=2\x1b\\"));
+    const auto payload = QByteArray(qsizetype{320} * 160 * 4, '\xff').toBase64();
+    for (qsizetype offset = 0; offset < payload.size(); offset += 4096)
+    {
+        const auto chunk = payload.mid(offset, 4096);
+        QVERIFY(
+            feed(QByteArray(offset + chunk.size() < payload.size() ? "\x1b_Gm=1;" : "\x1b_Gm=0;") + chunk + "\x1b\\"));
+    }
+    const auto snapshot = engine.snapshot();
+    QVERIFY(snapshot);
+    QCOMPARE(snapshot->images.size(), std::size_t{1});
+    QCOMPARE(snapshot->images[0].image->width, std::uint32_t{320});
+    QCOMPARE(snapshot->images[0].image->height, std::uint32_t{160});
+    QCOMPARE(snapshot->images[0].width, std::uint32_t{256});
+    QCOMPARE(snapshot->images[0].height, std::uint32_t{128});
+
+    const auto fixture = qEnvironmentVariable("ZTERMY_TEST_KITTY_FIXTURE");
+    if (!fixture.isEmpty())
+    {
+        QFile file(fixture);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QVERIFY(file.size() <= qint64{2} * 1024 * 1024);
+        QVERIFY(feed("\x1b_Ga=d,d=A;\x1b\\\x1b[H"));
+        QVERIFY(feed(file.readAll()));
+        const auto captured = engine.snapshot();
+        QVERIFY(captured);
+        QCOMPARE(captured->images.size(), std::size_t{1});
+        QCOMPARE(captured->images[0].image->width, std::uint32_t{320});
+        QCOMPARE(captured->images[0].image->height, std::uint32_t{160});
+        QCOMPARE(captured->images[0].width, std::uint32_t{256});
+        QCOMPARE(captured->images[0].height, std::uint32_t{128});
+    }
 }
 
 void TerminalEngineTests::keepsKittyUploadIndependentOfSixelOutput()
@@ -701,6 +803,368 @@ void TerminalEngineTests::retainsKittyPixelsAcrossReplacementAndDeletion()
     QVERIFY(deleted->images.empty());
     QVERIFY(deleted->damage != ztermy::terminal::TerminalDamageKind::none);
     QCOMPARE(red->pixels, std::vector<std::uint8_t>({255, 0, 0, 255}));
+}
+
+void TerminalEngineTests::replacesImageAtCapacityWithoutEvictingOtherImages()
+{
+    auto created = ztermy::terminal::GhosttyTerminalEngine::create(
+        {.columns = 10, .rows = 4, .cellWidthPixels = 8, .cellHeightPixels = 16});
+    QVERIFY(created);
+    auto &engine = **created;
+    const auto transmit = [&](int id, char shade, int width = 1024, int height = 1024, bool accepted = true) {
+        // Eight independent 4-MiB RGBA images exactly fill the screen budget.
+        const QByteArray raster(qsizetype{width} * height * 4, shade);
+        const auto payload = qCompress(raster, 9).sliced(4).toBase64();
+        for (qsizetype offset = 0; offset < payload.size(); offset += 4096)
+        {
+            std::string command = offset == 0 ? "\x1b_Ga=T,f=32,o=z,C=1,c=1,r=1,p=1,s=" + std::to_string(width) + ",v="
+                                                    + std::to_string(height) + ",i=" + std::to_string(id) + ",m="
+                                              : "\x1b_Gm=";
+            command += offset + 4096 < payload.size() ? "1;" : "0;";
+            const auto chunk =
+                QByteArrayView(payload).sliced(offset, std::min(qsizetype{4096}, payload.size() - offset));
+            command.append(chunk.data(), static_cast<std::size_t>(chunk.size())).append("\x1b\\");
+            QVERIFY(!engine.feed(std::as_bytes(std::span(command))));
+        }
+        const auto response = engine.takePtyWrite();
+        const std::string reply(reinterpret_cast<const char *>(response.data()), response.size());
+        QVERIFY2(reply.find(accepted ? ";OK" : "ENOMEM") != std::string::npos, reply.c_str());
+    };
+    for (int id = 1; id <= 8; ++id)
+        transmit(id, static_cast<char>(id));
+    {
+        const auto full = engine.snapshot();
+        QVERIFY(full);
+        QCOMPARE(full->images.size(), std::size_t{8});
+    }
+    // Replace the newest ID, so needless eviction of an older image is observable.
+    transmit(8, 42);
+    const auto replaced = engine.snapshot();
+    QVERIFY(replaced);
+    QCOMPARE(replaced->images.size(), std::size_t{8});
+    for (std::uint32_t id = 1; id <= 8; ++id)
+    {
+        const auto found = std::ranges::find(replaced->images, id, &ztermy::terminal::TerminalImagePlacement::imageId);
+        QVERIFY(found != replaced->images.end());
+        QCOMPARE(found->image->pixels.front(), static_cast<std::uint8_t>(id == 8 ? 42 : id));
+    }
+    transmit(8, 43, 512, 512);  // Shrinking returns 3 MiB to the storage budget.
+    transmit(9, 44, 768, 1024); // Exactly consume those bytes without losing an old image.
+    const auto refilled = engine.snapshot();
+    QVERIFY(refilled);
+    QCOMPARE(refilled->images.size(), std::size_t{9});
+    // A per-screen limit must not bypass the shared visible-content policy.
+    transmit(10, 45, 1024, 1024, false);
+    QCOMPARE(engine.snapshot()->images.size(), std::size_t{9});
+    QCOMPARE(ztermy_ghostty_image_budget_usage(), std::size_t{32} * 1024 * 1024);
+    const std::string_view scroll = "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(scroll))));
+    transmit(10, 45);
+    engine.scrollViewport(-100);
+    const auto history = engine.snapshot();
+    QVERIFY(history);
+    QCOMPARE(history->images.size(), std::size_t{8});
+    QVERIFY(std::ranges::none_of(history->images, [](const auto &placement) {
+        return placement.imageId == 1;
+    }));
+    engine.scrollToBottom();
+    const auto current = engine.snapshot();
+    QVERIFY(current);
+    QCOMPARE(current->images.size(), std::size_t{1});
+    QCOMPARE(current->images.front().imageId, std::uint32_t{10});
+}
+
+void TerminalEngineTests::revalidatesImageEvictionAcrossPlacementsAndReplacement()
+{
+    GhosttyTerminal handle = nullptr;
+    QCOMPARE(ghostty_terminal_new(ztermy::terminal::ghosttyHostAllocator(), &handle, 10, 4), GHOSTTY_SUCCESS);
+    const std::unique_ptr<std::remove_pointer_t<GhosttyTerminal>, decltype(&ghostty_terminal_free)> terminal(
+        handle, &ghostty_terminal_free);
+    QCOMPARE(ztermy::terminal::installGhosttyImagePolicy(handle), GHOSTTY_SUCCESS);
+    QCOMPARE(ghostty_terminal_resize(handle, 10, 4, 8, 16), GHOSTTY_SUCCESS);
+    const auto feed = [&](std::string_view bytes) {
+        ghostty_terminal_vt_write(handle, reinterpret_cast<const std::uint8_t *>(bytes.data()), bytes.size());
+    };
+    ZtermyGhosttyImageRecord record{};
+    std::size_t count = 0;
+    const auto inventory = [&] {
+        return ztermy_ghostty_image_inventory(handle, false, &record, 1, &count);
+    };
+    const auto evict = [&](const ZtermyGhosttyImageRecord &candidate) {
+        return ztermy_ghostty_evict_image(handle, false, candidate.imageId, candidate.screenGeneration,
+                                          candidate.generation);
+    };
+    feed("\x1b_Ga=T,f=32,s=1,v=1,i=51,p=1,c=1,r=1,C=1;/wAA/w==\x1b\\");
+    QCOMPARE(ztermy_ghostty_image_inventory(handle, false, nullptr, 0, &count), GHOSTTY_OUT_OF_MEMORY);
+    QCOMPARE(count, std::size_t{1});
+    QCOMPARE(inventory(), GHOSTTY_SUCCESS);
+    QCOMPARE(record.visible, std::uint32_t{1});
+    QCOMPARE(record.bytes, std::uint64_t{4});
+    QCOMPARE(evict(record), GHOSTTY_NO_VALUE);
+    feed("\r\n\r\n\r\n\r\n\r\n\r\n");
+    QCOMPARE(inventory(), GHOSTTY_SUCCESS);
+    QCOMPARE(record.visible, std::uint32_t{0});
+    const auto offscreen = record;
+    // The same raster is now placed in history AND on the live viewport.
+    feed("\x1b_Ga=p,i=51,p=2,c=1,r=1,C=1;\x1b\\");
+    QCOMPARE(evict(offscreen), GHOSTTY_NO_VALUE);
+    QCOMPARE(inventory(), GHOSTTY_SUCCESS);
+    QCOMPARE(record.visible, std::uint32_t{1});
+    feed("\x1b_Ga=d,d=i,i=51,p=2;\x1b\\");
+    QCOMPARE(inventory(), GHOSTTY_SUCCESS);
+    QCOMPARE(record.visible, std::uint32_t{0});
+    // A queued old-generation request must not remove a replacement raster.
+    feed("\x1b_Ga=t,f=32,s=1,v=1,i=51;AAD//w==\x1b\\");
+    QCOMPARE(evict(offscreen), GHOSTTY_NO_VALUE);
+    QCOMPARE(inventory(), GHOSTTY_SUCCESS);
+    QVERIFY(record.generation != offscreen.generation);
+    QCOMPARE(evict(record), GHOSTTY_SUCCESS);
+    QCOMPARE(inventory(), GHOSTTY_SUCCESS);
+    QCOMPARE(count, std::size_t{0});
+
+    feed("\x1b_Ga=T,f=24,s=1,v=1,i=42,U=1,c=1,r=1,q=2;/wAA\x1b\\");
+    QCOMPARE(inventory(), GHOSTTY_SUCCESS);
+    QCOMPARE(record.visible, std::uint32_t{0});
+    const auto virtualCandidate = record;
+    feed("\x1b[38;5;42m");
+    feed(QString::fromUcs4(U"\U0010eeee\u0305\u0305").toStdString());
+    QCOMPARE(inventory(), GHOSTTY_SUCCESS);
+    QCOMPARE(record.visible, std::uint32_t{1});
+    QCOMPARE(evict(virtualCandidate), GHOSTTY_NO_VALUE);
+
+    // Primary/alternate screens may contain the same image ID independently.
+    feed("\x1b[?1049h\x1b_Ga=T,f=24,s=1,v=1,i=42,c=1,r=1,C=1;/wAA\x1b\\");
+    QCOMPARE(inventory(), GHOSTTY_SUCCESS);
+    QCOMPARE(record.visible, std::uint32_t{0});
+    QCOMPARE(evict(record), GHOSTTY_SUCCESS);
+    QCOMPARE(ztermy_ghostty_image_inventory(handle, true, &record, 1, &count), GHOSTTY_SUCCESS);
+    QCOMPARE(count, std::size_t{1});
+    QCOMPARE(record.visible, std::uint32_t{1});
+    QCOMPARE(ztermy_ghostty_evict_image(handle, true, record.imageId, record.screenGeneration, record.generation),
+             GHOSTTY_NO_VALUE);
+}
+
+void TerminalEngineTests::sharesImageAdmissionAcrossConcurrentTerminals()
+{
+    QCOMPARE(ztermy_ghostty_image_budget_usage(), std::size_t{0});
+    QCOMPARE(ztermy_ghostty_configure_image_budget(4), GHOSTTY_SUCCESS);
+    const auto restoreBudget = qScopeGuard([] {
+        static_cast<void>(ztermy_ghostty_configure_image_budget(std::numeric_limits<std::size_t>::max()));
+    });
+    std::array<std::unique_ptr<ztermy::terminal::GhosttyTerminalEngine>, 2> engines;
+    for (auto &engine : engines)
+    {
+        auto created = ztermy::terminal::GhosttyTerminalEngine::create(
+            {.columns = 10, .rows = 4, .cellWidthPixels = 8, .cellHeightPixels = 16});
+        QVERIFY(created);
+        engine = std::move(*created);
+    }
+    const std::string_view image = "\x1b_Ga=T,f=32,s=1,v=1,i=1,p=1,c=1,r=1,C=1;/wAA/w==\x1b\\";
+    std::barrier start(3);
+    std::array<std::error_code, 2> results;
+    std::array<std::jthread, 2> workers;
+    for (std::size_t index = 0; index < workers.size(); ++index)
+        workers[index] = std::jthread([&, index] {
+            start.arrive_and_wait();
+            results[index] = engines[index]->feed(std::as_bytes(std::span(image)));
+        });
+    start.arrive_and_wait();
+    for (auto &worker : workers)
+        worker.join();
+    QVERIFY(!results[0] && !results[1]); // VT parsing succeeds; admission replies separately.
+    const auto first = engines[0]->snapshot();
+    const auto second = engines[1]->snapshot();
+    QVERIFY(first && second);
+    QCOMPARE(first->images.size() + second->images.size(), std::size_t{1});
+    QCOMPARE(ztermy_ghostty_image_budget_usage(), std::size_t{4});
+    const auto winner = first->images.empty() ? 1U : 0U;
+    const auto loser = 1U - winner;
+    const auto rejected = engines[loser]->takePtyWrite();
+    const std::string reply(reinterpret_cast<const char *>(rejected.data()), rejected.size());
+    QVERIFY(reply.find("ENOMEM") != std::string::npos);
+    QVERIFY(reply.find("i=1") != std::string::npos);
+    // Equal-sized replacement must not need another four bytes of reservation.
+    QVERIFY(!engines[winner]->feed(std::as_bytes(std::span(image))));
+    QCOMPARE(engines[winner]->snapshot()->images.size(), std::size_t{1});
+    QCOMPARE(ztermy_ghostty_image_budget_usage(), std::size_t{4});
+    // Reject a larger replacement without releasing or corrupting its predecessor.
+    const std::string_view larger = "\x1b_Ga=t,f=32,s=2,v=1,i=1;/wAA//8AAP8=\x1b\\";
+    QVERIFY(!engines[winner]->feed(std::as_bytes(std::span(larger))));
+    QCOMPARE(engines[winner]->snapshot()->images.front().image->pixels.size(), std::size_t{4});
+    QCOMPARE(ztermy_ghostty_image_budget_usage(), std::size_t{4});
+    engines[winner].reset(); // Closing a session returns its charge, even with snapshots alive.
+    QCOMPARE(ztermy_ghostty_image_budget_usage(), std::size_t{0});
+    QVERIFY(!engines[loser]->feed(std::as_bytes(std::span(image))));
+    QCOMPARE(engines[loser]->snapshot()->images.size(), std::size_t{1});
+    const std::string_view remove = "\x1b_Ga=d,d=A;\x1b\\";
+    QVERIFY(!engines[loser]->feed(std::as_bytes(std::span(remove))));
+    QCOMPARE(ztermy_ghostty_image_budget_usage(), std::size_t{0});
+}
+
+void TerminalEngineTests::sharesImageAdmissionAcrossKittyAndSixel()
+{
+    QCOMPARE(ztermy_ghostty_image_budget_usage(), std::size_t{0});
+    QCOMPARE(ztermy_ghostty_configure_image_budget(24), GHOSTTY_SUCCESS);
+    const auto restoreBudget = qScopeGuard([] {
+        static_cast<void>(ztermy_ghostty_configure_image_budget(std::numeric_limits<std::size_t>::max()));
+    });
+    auto sixel = ztermy::terminal::GhosttyTerminalEngine::create(
+        {.columns = 10, .rows = 4, .cellWidthPixels = 8, .cellHeightPixels = 16});
+    auto kitty = ztermy::terminal::GhosttyTerminalEngine::create(
+        {.columns = 10, .rows = 4, .cellWidthPixels = 8, .cellHeightPixels = 16});
+    QVERIFY(sixel && kitty);
+    const auto feed = [](auto &engine, std::string_view value) {
+        return !engine->feed(std::as_bytes(std::span(value)));
+    };
+    const std::string_view sixelImage = "\x1bP0;1q\"1;1;1;6#1;2;100;0;0~\x1b\\";
+    const std::string_view kittyImage = "\x1b_Ga=T,f=32,s=1,v=1,i=7,C=1;/wAA/w==\x1b\\";
+    QVERIFY(feed(*sixel, sixelImage));
+    QCOMPARE((*sixel)->snapshot()->images.size(), std::size_t{1});
+    QCOMPARE(ztermy_ghostty_image_budget_usage(), std::size_t{24});
+    QVERIFY(feed(*kitty, kittyImage));
+    QVERIFY((*kitty)->snapshot()->images.empty());
+    QVERIFY(feed(*sixel, "\x1b_Ga=d,d=A;\x1b\\"));
+    QCOMPARE(ztermy_ghostty_image_budget_usage(), std::size_t{0});
+    QVERIFY(feed(*kitty, kittyImage));
+    QCOMPARE(ztermy_ghostty_image_budget_usage(), std::size_t{4});
+    QVERIFY(feed(*sixel, sixelImage));
+    QVERIFY((*sixel)->snapshot()->images.empty());
+    QCOMPARE(ztermy_ghostty_image_budget_usage(), std::size_t{4});
+    kitty->reset();
+    QVERIFY(feed(*sixel, sixelImage));
+    QCOMPARE((*sixel)->snapshot()->images.size(), std::size_t{1});
+    QCOMPARE(ztermy_ghostty_image_budget_usage(), std::size_t{24});
+}
+
+void TerminalEngineTests::inventoriesManyVirtualImagesWithoutProtectingUnusedPrototypes()
+{
+    GhosttyTerminal handle = nullptr;
+    QCOMPARE(ghostty_terminal_new(ztermy::terminal::ghosttyHostAllocator(), &handle, 10, 4), GHOSTTY_SUCCESS);
+    const std::unique_ptr<std::remove_pointer_t<GhosttyTerminal>, decltype(&ghostty_terminal_free)> terminal(
+        handle, &ghostty_terminal_free);
+    QCOMPARE(ztermy::terminal::installGhosttyImagePolicy(handle), GHOSTTY_SUCCESS);
+    QCOMPARE(ghostty_terminal_resize(handle, 10, 4, 8, 16), GHOSTTY_SUCCESS);
+    const auto feed = [&](std::string_view bytes) {
+        ghostty_terminal_vt_write(handle, reinterpret_cast<const std::uint8_t *>(bytes.data()), bytes.size());
+    };
+    for (int id = 1; id <= 4096; ++id)
+        feed("\x1b_Ga=T,f=24,s=1,v=1,U=1,c=1,r=1,q=2,i=" + std::to_string(id) + ";/wAA\x1b\\");
+    const auto placeholder = QString::fromUcs4(U"\U0010eeee\u0305\u0305").toStdString();
+    feed("\x1b[38;2;0;0;1m" + placeholder + "\x1b[38;2;0;16;0m" + placeholder);
+    std::vector<ZtermyGhosttyImageRecord> records(4096);
+    std::size_t count = 0;
+    QElapsedTimer timer;
+    timer.start();
+    for (int attempt = 0; attempt < 10; ++attempt)
+        QCOMPARE(ztermy_ghostty_image_inventory(handle, false, records.data(), records.size(), &count),
+                 GHOSTTY_SUCCESS);
+    qInfo() << "Image inventory 4096 prototypes, 10 captures, microseconds:" << timer.nsecsElapsed() / 1000;
+    QCOMPARE(count, records.size());
+    for (const auto &record : records)
+    {
+        QCOMPARE(record.bytes, std::uint64_t{3});
+        QCOMPARE(record.visible, std::uint32_t(record.imageId == 1 || record.imageId == 4096));
+    }
+}
+
+void TerminalEngineTests::reclaimsOnlyIdleInvisibleImagesAcrossEngines()
+{
+    using Native = std::unique_ptr<std::remove_pointer_t<GhosttyTerminal>, decltype(&ghostty_terminal_free)>;
+    std::vector<Native> terminals;
+    std::vector<std::shared_ptr<ztermy::terminal::GhosttyImageAccess>> accesses;
+    const auto detach = qScopeGuard([&] {
+        for (const auto &access : accesses)
+        {
+            std::scoped_lock lock(access->mutex);
+            access->terminal = nullptr;
+        }
+    });
+    for (int index = 0; index < 2; ++index)
+    {
+        GhosttyTerminal native = nullptr;
+        QCOMPARE(ghostty_terminal_new(ztermy::terminal::ghosttyHostAllocator(), &native, 10, 4), GHOSTTY_SUCCESS);
+        terminals.emplace_back(native, &ghostty_terminal_free);
+        QCOMPARE(ztermy::terminal::installGhosttyImagePolicy(native), GHOSTTY_SUCCESS);
+        QCOMPARE(ghostty_terminal_resize(native, 10, 4, 8, 16), GHOSTTY_SUCCESS);
+        auto access = std::make_shared<ztermy::terminal::GhosttyImageAccess>();
+        access->terminal = native;
+        ztermy::terminal::registerImageEngine(access);
+        accesses.push_back(std::move(access));
+    }
+    const auto feed = [&](std::size_t index, std::string_view bytes) {
+        std::scoped_lock lock(accesses[index]->mutex);
+        ghostty_terminal_vt_write(terminals[index].get(), reinterpret_cast<const std::uint8_t *>(bytes.data()),
+                                  bytes.size());
+    };
+    const auto reclaim = [&] {
+        std::scoped_lock lock(accesses[1]->mutex);
+        return ztermy::terminal::reclaimImageStorage(accesses[1], 3, 1);
+    };
+    feed(0, "\x1b_Ga=t,f=24,s=1,v=1,i=1;/wAA\x1b\\");
+    feed(1, "\x1b_Ga=T,f=24,s=1,v=1,i=1,c=1,r=1,C=1;/wAA\x1b\\");
+    QCOMPARE(reclaim(), std::size_t{3});
+    std::size_t count = 0;
+    QCOMPARE(ztermy_ghostty_image_inventory(terminals[0].get(), false, nullptr, 0, &count), GHOSTTY_SUCCESS);
+    QCOMPARE(count, std::size_t{0});
+    QCOMPARE(reclaim(), std::size_t{0}); // The other engine's visible image survives.
+
+    feed(0, "\x1b_Ga=t,f=24,s=1,v=1,i=2;/wAA\x1b\\");
+    std::promise<std::size_t> completed;
+    auto result = completed.get_future();
+    std::jthread requester;
+    std::future_status status;
+    {
+        std::scoped_lock busy(accesses[0]->mutex);
+        requester = std::jthread([&] {
+            completed.set_value(reclaim());
+        });
+        status = result.wait_for(std::chrono::milliseconds{250});
+    } // Release even on regression, so a blocking implementation cannot hang the test.
+    requester.join();
+    QVERIFY(status == std::future_status::ready);
+    QCOMPARE(result.get(), std::size_t{0});
+    QCOMPARE(reclaim(), std::size_t{3}); // Becomes eligible once its owner is idle.
+}
+
+void TerminalEngineTests::reclaimsHistoryBeforeRejectingNewTerminalImages()
+{
+    QCOMPARE(ztermy_ghostty_image_budget_usage(), std::size_t{0});
+    QCOMPARE(ztermy_ghostty_configure_image_budget(8), GHOSTTY_SUCCESS);
+    const auto restoreBudget = qScopeGuard([] {
+        static_cast<void>(ztermy_ghostty_configure_image_budget(std::numeric_limits<std::size_t>::max()));
+    });
+    std::array<std::unique_ptr<ztermy::terminal::GhosttyTerminalEngine>, 3> engines;
+    for (auto &engine : engines)
+    {
+        auto created = ztermy::terminal::GhosttyTerminalEngine::create(
+            {.columns = 10, .rows = 4, .cellWidthPixels = 8, .cellHeightPixels = 16});
+        QVERIFY(created);
+        engine = std::move(*created);
+    }
+    const auto feed = [&](std::size_t index, std::string_view value) {
+        return !engines[index]->feed(std::as_bytes(std::span(value)));
+    };
+    const std::string_view image = "\x1b_Ga=T,f=32,s=1,v=1,i=1,c=1,r=1,C=1;/wAA/w==\x1b\\";
+    QVERIFY(feed(0, "history\r\n"));
+    QVERIFY(feed(0, image));
+    QVERIFY(feed(1, image));
+    QVERIFY(feed(2, image));
+    QVERIFY(engines[2]->snapshot()->images.empty()); // All existing images are visible.
+    static_cast<void>(engines[2]->takePtyWrite());
+    QVERIFY(feed(0, "\r\n\r\n\r\n\r\n\r\n\r\n"));
+    const auto before = engines[0]->snapshot();
+    QVERIFY(before && before->images.empty());
+    QVERIFY(feed(2, image)); // Same request can now reclaim the historical raster.
+    QCOMPARE(engines[1]->snapshot()->images.size(), std::size_t{1});
+    QCOMPARE(engines[2]->snapshot()->images.size(), std::size_t{1});
+    QCOMPARE(ztermy_ghostty_image_budget_usage(), std::size_t{8});
+    const auto after = engines[0]->snapshot();
+    QVERIFY(after);
+    QCOMPARE(after->cursor.row, before->cursor.row);
+    QCOMPARE(after->cursor.column, before->cursor.column);
+    engines[0]->scrollViewport(-100);
+    QVERIFY(engines[0]->snapshot()->images.empty());
+    QVERIFY(engines[0]->plainText()->find("history") != std::string::npos);
 }
 
 void TerminalEngineTests::tracksKittyPlacementAcrossScreenAndScrollChanges()

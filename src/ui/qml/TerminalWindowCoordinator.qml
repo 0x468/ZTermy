@@ -10,11 +10,11 @@ QtObject {
     required property var terminalArea
     property var windows: ({})
     property var dropTarget: ({})
-    property var movingWindow: null
     property string draggedPaneId: ""
     property var preparedWindow: null
     property var placementCache: ({})
     property bool trackingPlacement: false
+    property bool applicationExiting: false
     property Timer placementTimer: Timer {
         interval: 200
         onTriggered: windowCoordinator.capturePlacements()
@@ -98,6 +98,15 @@ QtObject {
             capture(windows[id], id, windows[id].workspaceId);
     }
 
+    function beginApplicationExit() {
+        if (applicationExiting)
+            return;
+        capturePlacements();
+        applicationExiting = true;
+        trackingPlacement = false;
+        placementTimer.stop();
+    }
+
     function prepareWindow() {
         preparedWindow = windowComponent.createObject(hostRoot);
         if (!preparedWindow)
@@ -131,6 +140,8 @@ QtObject {
     }
 
     function syncWindows() {
+        if (applicationExiting)
+            return;
         const live = ({});
         for (const tab of hostRoot.controller.terminalTabs) {
             if (!tab.windowId || tab.windowId === "main")
@@ -183,6 +194,25 @@ QtObject {
             hostRoot.windowChrome.configureDetachedWindow(windows[id]);
     }
 
+    function reattachAll(window) {
+        const ids = window.tabs.map(tab => tab.id);
+        const selected = window.workspaceId;
+        for (const id of ids) {
+            if (!hostRoot.controller.insertTerminalWorkspace(id, hostRoot.controller.terminalTabs.filter(tab => tab.windowId === "main").length, "main"))
+                return;
+        }
+        hostRoot.activateMainTerminal(selected);
+        WindowControl.present(hostRoot.windowChrome);
+    }
+
+    function clearTabPreviews(keepWindowId = "") {
+        for (const id in windows) {
+            if (id === keepWindowId)
+                windows[id].tabBarVisible = true;
+            windows[id].tabBarPreview = false;
+        }
+    }
+
     function activateWorkspace(workspaceId) {
         syncWindows();
         const owner = hostRoot.controller.terminalWorkspace(workspaceId).windowId;
@@ -208,33 +238,24 @@ QtObject {
         return null;
     }
 
-    function updateWindowDrop(window, globalPosition) {
-        movingWindow = window;
-        updateDropTarget(globalPosition);
-        window.opacity = dropTarget.mode ? 0.72 : 1;
-    }
-
     function updateDropTarget(globalPosition) {
         dropTarget = ({});
         for (const id in windows) {
             const window = windows[id];
-            if (window === movingWindow || !window.visible)
+            const p = window.contentItem.mapFromGlobal(globalPosition.x, globalPosition.y);
+            window.tabBarPreview = !window.tabBarVisible && p.x >= 0 && p.x < window.width && p.y >= 0 && p.y < (window.tabBarPreview ? 32 : 20) && WindowControl.acceptsDropAt(window, p, null);
+        }
+        for (const id in windows) {
+            const window = windows[id];
+            if (!window.visible)
                 continue;
             const p = window.contentItem.mapFromGlobal(globalPosition.x, globalPosition.y);
             if (p.x < 0 || p.y < 0 || p.x >= window.width || p.y >= window.height)
                 continue;
-            if (!WindowControl.acceptsDropAt(window, p, movingWindow))
+            if (!WindowControl.acceptsDropAt(window, p, null))
                 continue;
-            if (p.y < 32 && p.x < window.width - 96) {
-                dropTarget = {
-                    mode: "insert",
-                    windowId: id,
-                    index: window.tabInsertionIndex(globalPosition),
-                    x: p.x,
-                    y: 4,
-                    width: 3,
-                    height: 24
-                };
+            if ((window.tabBarVisible || window.tabBarPreview) && p.y < 32) {
+                dropTarget = window.tabDropTarget(globalPosition);
             } else {
                 const view = viewportAt(window.contentItem, globalPosition);
                 if (view)
@@ -278,7 +299,7 @@ QtObject {
         dropTarget = ({});
         if (!hostRoot.visible || point.x < 0 || point.y < 0 || point.x >= hostRoot.width || point.y >= hostRoot.height)
             return;
-        if (!WindowControl.acceptsDropAt(hostRoot.windowChrome, point, movingWindow))
+        if (!WindowControl.acceptsDropAt(hostRoot.windowChrome, point, null))
             return;
         const tabs = hostRoot.mainTerminalTabs;
         if (point.y < hostRoot.titleBarHeight) {
@@ -375,6 +396,7 @@ QtObject {
                 hostRoot.detachTerminalPane(paneId);
                 return;
             }
+            clearTabPreviews(ok && target.mode === "insert" ? target.windowId : "");
             if (ok)
                 presentTarget(target);
         });
@@ -397,23 +419,7 @@ QtObject {
                 finishPreparation(hostRoot.controller.detachTerminalWorkspace(id) ? id : "");
                 return;
             }
-            if (ok)
-                presentTarget(target);
-        });
-    }
-
-    function finishWindowDrop(window, cancelled) {
-        if (movingWindow !== window)
-            return;
-        const target = dropTarget;
-        const id = window.workspaceId;
-        window.opacity = 1;
-        movingWindow = null;
-        dropTarget = ({});
-        if (cancelled || !target.mode)
-            return;
-        Qt.callLater(() => {
-            const ok = target.mode === "insert" ? hostRoot.controller.insertTerminalWorkspace(id, target.index, target.windowId || "main") : hostRoot.controller.mergeTerminalWorkspace(id, target.paneId, target.orientation, target.after);
+            clearTabPreviews(ok && target.mode === "insert" ? target.windowId : "");
             if (ok)
                 presentTarget(target);
         });

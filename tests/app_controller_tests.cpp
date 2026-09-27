@@ -283,6 +283,7 @@ private slots:
     void transfersTerminalTreesWithoutRestartingSessions();
     void groupsAndTransfersDetachedTabsWithoutRestartingSessions();
     void closingDetachedWorkspacePreservesMainSelection();
+    void closingDetachedTabKeepsItsWindowSuccessor();
     void scopesTabCommandsToTheirOwningWindow();
     void bulkClosePublishesOnlyTheFinalWorkspace();
     void resolvesWorkspaceIdsAfterOriginalSessionMoves();
@@ -3266,6 +3267,27 @@ void AppControllerTests::closingDetachedWorkspacePreservesMainSelection()
     QCOMPARE(controller.activeTerminalTabId(), b);
 }
 
+void AppControllerTests::closingDetachedTabKeepsItsWindowSuccessor()
+{
+    QTemporaryDir directory;
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")), [] {
+                                         return std::make_unique<FakeLocalTerminalSession>(
+                                             std::make_shared<FakeLocalSessionState>());
+                                     });
+    const auto a = controller.startLocalTerminal();
+    const auto b = controller.startLocalTerminal();
+    const auto main = controller.startLocalTerminal();
+    QVERIFY(controller.detachTerminalWorkspace(a));
+    const auto owner = controller.terminalWorkspace(a).value(QStringLiteral("windowId")).toString();
+    QVERIFY(controller.insertTerminalWorkspace(b, 1, owner));
+    QVERIFY(controller.activateTerminalTab(b));
+    QVERIFY(controller.closeTerminalTab(b, a));
+    QCOMPARE(controller.activeTerminalTabId(), a);
+    QCOMPARE(controller.activeTerminalWorkspace().value(QStringLiteral("windowId")).toString(), owner);
+    QVERIFY(!controller.terminalWorkspace(main).isEmpty());
+}
+
 void AppControllerTests::transfersTerminalTreesWithoutRestartingSessions()
 {
     QTemporaryDir directory;
@@ -3319,6 +3341,8 @@ void AppControllerTests::transfersTerminalTreesWithoutRestartingSessions()
     QCOMPARE(controller.terminalWorkspace(second).value(QStringLiteral("root")), beforeDetach);
     QVERIFY(controller.terminalWorkspace(second).value(QStringLiteral("windowId")).toString()
             != QStringLiteral("main"));
+    QVERIFY(controller.moveTerminalPane(a, c, QStringLiteral("swap"), false));
+    QVERIFY(controller.moveTerminalPane(c, a, QStringLiteral("swap"), false));
     QVERIFY(controller.reattachTerminalWorkspace(second));
     QCOMPARE(controller.terminalWorkspace(second).value(QStringLiteral("windowId")).toString(), QStringLiteral("main"));
     for (const auto &session : sessions)

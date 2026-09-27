@@ -115,11 +115,10 @@ inline bool verifyWholeTabMouseMerge(NativeWindow &window, AppController &contro
             destinationView->mapToScene({destinationView->width() / 2, destinationView->height() * 0.1});
         dragMouse(window, start, end, 12, std::chrono::milliseconds{40});
         processWindowEventsFor(std::chrono::milliseconds{250});
-        const bool unchanged = controller.terminalWorkspace(workspaceId).value(QStringLiteral("paneCount")).toInt() == 2
-                               && controller.terminalWorkspace(otherId).value(QStringLiteral("paneCount")).toInt() == 1;
-        qInfo() << "Tab drag into terminal does not merge or detach workspaces:" << unchanged;
-        passed = passed && unchanged;
-        controller.closeTerminalTab(otherId);
+        const bool merged = controller.terminalWorkspace(workspaceId).isEmpty()
+                            && controller.terminalWorkspace(otherId).value(QStringLiteral("paneCount")).toInt() == 3;
+        qInfo() << "Tab drag merges all source panes into the target workspace:" << merged;
+        passed = passed && merged;
     }
     else
     {
@@ -143,11 +142,10 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
     };
     const QString workspaceId = controller.activeTerminalTabId();
     const QString paneId = controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString();
-    QMetaObject::invokeMethod(root, "toggleTerminalPaneHeaders");
     settle();
     auto *pane = window.findChild<TerminalItem *>(QStringLiteral("terminalViewport-") + paneId);
-    bool passed = pane && pane->y() >= 32;
-    qInfo() << "Window transfer header geometry:" << passed;
+    bool passed = pane && qAbs(pane->y()) < 1;
+    qInfo() << "Terminal uses full pane height without a title strip:" << passed;
     if (auto *action = window.findChild<QQuickItem *>(QStringLiteral("alwaysOnTopAction")))
     {
         synthesizeMouse(window, action->mapToScene(QPointF{action->width() / 2, action->height() / 2}), Qt::NoButton,
@@ -162,7 +160,8 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
     const auto layout = controller.activeTerminalWorkspace().value(QStringLiteral("root")).toMap();
     const QString firstId = layout.value(QStringLiteral("first")).toMap().value(QStringLiteral("id")).toString();
     const QString secondId = layout.value(QStringLiteral("second")).toMap().value(QStringLiteral("id")).toString();
-    auto *header = window.findChild<QQuickItem *>(QStringLiteral("terminalPaneHeader-") + firstId);
+    auto *header =
+        visualQuickItem(root, (QStringLiteral("terminalPaneAction-headers-") + firstId).toLatin1().constData());
     auto *targetPane = window.findChild<TerminalItem *>(QStringLiteral("terminalViewport-") + secondId);
     if (targetPane)
     {
@@ -194,9 +193,10 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
         settle();
         const bool headerFocused =
             controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString() == firstId;
-        qInfo() << "Pane header click focuses pane:" << headerFocused;
+        qInfo() << "Pane drag handle click focuses pane:" << headerFocused;
         passed = passed && headerFocused;
-        header = window.findChild<QQuickItem *>(QStringLiteral("terminalPaneHeader-") + secondId);
+        header =
+            visualQuickItem(root, (QStringLiteral("terminalPaneAction-headers-") + secondId).toLatin1().constData());
         targetPane = window.findChild<TerminalItem *>(QStringLiteral("terminalViewport-") + firstId);
         if (!header || !targetPane)
             return false;
@@ -212,7 +212,7 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
             moved.value(QStringLiteral("paneCount")).toInt() == 2
             && moved.value(QStringLiteral("root")).toMap().value(QStringLiteral("orientation")).toString()
                    == QStringLiteral("vertical");
-        qInfo() << "Pane header drag reorders existing sessions:" << reordered;
+        qInfo() << "Pane handle drag reorders existing sessions:" << reordered;
         passed = passed && reordered;
         controller.moveTerminalPane(firstId, secondId, QStringLiteral("horizontal"), false);
         controller.activateTerminalPane(paneId);
@@ -220,16 +220,14 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
     }
     else
         passed = false;
-    QMetaObject::invokeMethod(root, "toggleTerminalPaneHeaders");
-    QMetaObject::invokeMethod(root, "toggleTerminalPaneZoom", Q_ARG(QVariant, paneId));
+    QMetaObject::invokeMethod(root, "toggleTerminalPaneZoom", Q_ARG(QVariant, paneId), Q_ARG(QVariant, workspaceId));
     settle();
     passed = passed && root->property("zoomedTerminalPaneId").toString() == paneId;
 
     const QString otherId = controller.startLocalTerminalWithShell(QStringLiteral("commandPrompt"));
     settle();
-    passed = passed && !otherId.isEmpty() && root->property("zoomedTerminalPaneId").toString().isEmpty()
-             && !root->property("paneHeadersVisible").toBool();
-    qInfo() << "Window transfer isolated zoom/header state:" << passed;
+    passed = passed && !otherId.isEmpty() && root->property("zoomedTerminalPaneId").toString().isEmpty();
+    qInfo() << "Window transfer isolated zoom state:" << passed;
     settle();
     const QString singlePaneId = controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString();
     auto *singleHandle =
@@ -239,13 +237,16 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
         QPointF start = singleHandle->mapToScene({singleHandle->width() / 2, singleHandle->height() / 2});
         clickMouse(window, start);
         settle();
-        const bool handleShowsTitle = root->property("paneHeadersVisible").toBool();
+        auto *singleViewport = window.findChild<TerminalItem *>(QStringLiteral("terminalViewport-") + singlePaneId);
+        const bool handleKeepsFullHeight = singleViewport && qAbs(singleViewport->y()) < 1;
         start = singleHandle->mapToScene({singleHandle->width() / 2, singleHandle->height() / 2});
         clickMouse(window, start);
         settle();
-        const bool handleHidesTitle = !root->property("paneHeadersVisible").toBool();
-        qInfo() << "Pane handle toggles titles on click:" << handleShowsTitle << handleHidesTitle;
-        passed = passed && handleShowsTitle && handleHidesTitle;
+        const bool handleKeepsFocus =
+            controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString() == singlePaneId;
+        qInfo() << "Main pane handle retains full viewport and pane focus:" << handleKeepsFullHeight
+                << handleKeepsFocus;
+        passed = passed && handleKeepsFullHeight && handleKeepsFocus;
         start = singleHandle->mapToScene({singleHandle->width() / 2, singleHandle->height() / 2});
         const QPointF end{-30, start.y()};
         dragMouse(window, start, end, 8);
@@ -261,7 +262,7 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
     settle();
     passed = passed && root->property("zoomedTerminalPaneId").toString() == paneId;
     qInfo() << "Window transfer original zoom restored:" << passed;
-    QMetaObject::invokeMethod(root, "toggleTerminalPaneZoom", Q_ARG(QVariant, paneId));
+    QMetaObject::invokeMethod(root, "toggleTerminalPaneZoom", Q_ARG(QVariant, paneId), Q_ARG(QVariant, workspaceId));
     QMetaObject::invokeMethod(root, "detachTerminalPane", Q_ARG(QVariant, paneId));
     settle();
     const QString detachedWorkspaceId = root->property("detachedTerminalWorkspaceId").toString();
@@ -279,14 +280,14 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
     qInfo() << "Window transfer independent native window:" << passed;
     if (detached)
     {
-        const auto *detachedHeader = detached->findChild<QQuickItem *>(QStringLiteral("terminalPaneHeader-") + paneId);
-        const bool detachedHeaderHidden =
-            !detached->property("paneHeadersVisible").toBool() && detachedHeader && !detachedHeader->isVisible();
-        qInfo() << "Detached pane title is hidden by default:" << detachedHeaderHidden;
+        const bool detachedHeaderHidden = !detached->property("tabBarVisible").toBool();
+        qInfo() << "Detached tab bar is hidden by default:" << detachedHeaderHidden;
         passed = passed && detachedHeaderHidden;
         const auto handle = reinterpret_cast<HWND>(detached->winId()); // NOLINT(performance-no-int-to-ptr)
         auto *actions = detached->findChild<QQuickItem *>(QStringLiteral("terminalPaneActions-") + paneId);
         const bool toolbarHidden = actions && actions->opacity() < 0.01;
+        QMetaObject::invokeMethod(detached, "toggleTabBar");
+        settle();
         auto *maximizeAction = visualQuickItem(detached->contentItem(), "detachedWindowAction-maximize");
         bool nativeSnapHit = false;
         if (maximizeAction)
@@ -333,15 +334,10 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
         passed = passed && detached->isVisible()
                  && root->property("detachedTerminalWorkspaceId").toString() == detachedWorkspaceId;
     }
-    auto *targetTab = visualQuickItem(root, (QStringLiteral("workspaceTitle-") + workspaceId).toLatin1().constData());
-    passed =
-        detached && targetTab
-        && verifyDetachedWindowTabMerge(window, controller, *detached, *targetTab, detachedWorkspaceId, workspaceId)
-        && passed;
-    passed = verifyWholeTabMouseMerge(window, controller, workspaceId, otherId, paneId) && passed;
+    passed = detached && verifyDetachedWindowReattach(window, controller, *detached, detachedWorkspaceId) && passed;
     passed = verifyNestedPaneEdges(window, controller, outputDirectory) && passed;
     passed = verifyDetachedCloseSelection(window, controller) && passed;
-    qInfo() << "Pane headers, per-workspace zoom, detached taskbar/resize regression:" << passed;
+    qInfo() << "Pane handles, per-workspace zoom, detached taskbar/resize regression:" << passed;
     return passed;
 }
 inline bool runWorkspaceTransferRuntimeSmoke(NativeWindow &window, AppController &controller,

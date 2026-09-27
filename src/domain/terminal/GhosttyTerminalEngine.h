@@ -10,6 +10,9 @@ namespace ztermy::terminal
 class GhosttyTerminalEngine final : public TerminalEngine
 {
 public:
+    // Application startup only, before creating terminal sessions.
+    [[nodiscard]] static bool initializeImageBudget() noexcept;
+
     [[nodiscard]] static std::expected<std::unique_ptr<GhosttyTerminalEngine>, std::error_code>
     create(TerminalGeometry geometry);
 

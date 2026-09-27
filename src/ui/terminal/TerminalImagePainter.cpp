@@ -76,6 +76,8 @@ void paintTerminalImages(QPainter &painter, std::span<const terminal::TerminalIm
     painter.setClipRect(viewport, Qt::IntersectClip);
     // Protocol pixels are not terminal text: do not apply theme contrast or opacity transforms.
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    const terminal::TerminalImage *previousImage = nullptr;
+    QImage pixels;
     for (const auto &placement : images)
     {
         if (!placement.image || layerOf(placement.z) != layer)
@@ -83,7 +85,15 @@ void paintTerminalImages(QPainter &painter, std::span<const terminal::TerminalIm
         const QRectF target = targetRect(placement, cell, origin);
         if (!target.intersects(viewport))
             continue;
-        const auto pixels = pixelView(*placement.image);
+        if (placement.image.get() != previousImage)
+        {
+            // Repeated placements share immutable pixels. Keep only the last
+            // conversion for this paint call, not a persistent raster cache.
+            // Release it first so two expanded gray-alpha rasters cannot overlap.
+            pixels = {};
+            previousImage = placement.image.get();
+            pixels = pixelView(*placement.image);
+        }
         if (pixels.isNull())
             continue;
         painter.drawImage(target, pixels,

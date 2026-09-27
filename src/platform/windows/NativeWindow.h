@@ -70,8 +70,6 @@ signals:
     void restartRequested();
     void titleBarPressed();
     void windowClosing(bool quitApplication);
-    void detachedWindowMoved(QQuickWindow *window, QPoint globalPosition, bool cancelled = false);
-    void detachedWindowMoving(QQuickWindow *window, QPoint globalPosition);
     void maximizedChanged();
     void maximizeButtonHoveredChanged();
     void maximizeButtonPressedChanged();
@@ -100,7 +98,7 @@ private:
     void removeTrayIcon() noexcept;
     void showTrayMenu();
     void restoreFromTray();
-    void exitFromTray();
+    Q_INVOKABLE void exitFromTray();
     void refreshAnimationsEnabled();
     void refreshHighContrast();
     void updateSystemAccentColor(windowing::RgbColor color);

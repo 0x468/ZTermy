@@ -4,6 +4,7 @@ Requires Paramiko in the explicitly selected test Python environment.
 Host key is generated in memory and discarded at exit.
 """
 
+import base64
 import re
 import socket
 import sys
@@ -37,6 +38,28 @@ class Server(paramiko.ServerInterface):
                                             pixelwidth, pixelheight):
         print("RESIZE", flush=True)
         return True
+
+
+def send_image(channel, shade):
+    payload = base64.b64encode(bytes([shade]) * (128 * 128 * 3))
+    for offset in range(0, len(payload), 4096):
+        header = (b"a=T,f=24,s=128,v=128,i=88,p=1,C=1,q=2,"
+                  if offset == 0 else b"q=2,")
+        more = b"m=1;" if offset + 4096 < len(payload) else b"m=0;"
+        channel.sendall(b"\x1b_G" + header + more + payload[offset:offset + 4096]
+                        + b"\x1b\\")
+
+
+def await_cursor_reply(channel):
+    channel.sendall(b"\x1b[6n")
+    response = b""
+    while not response.endswith(b"R"):
+        data = channel.recv(128)
+        if not data:
+            raise RuntimeError("EOF before image-burst CPR")
+        response += data
+    if not re.fullmatch(rb"\x1b\[\d+;\d+R", response):
+        raise RuntimeError("invalid image-burst CPR")
 
 
 def main():
@@ -77,6 +100,14 @@ def main():
                 elif command == b"next":
                     channel.sendall(b"\x1b[?2026hNEXT")
                     print("NEXT", flush=True)
+                elif command == b"image-seed":
+                    send_image(channel, 1)
+                elif command == b"image-burst":
+                    for shade in range(2, 82):
+                        send_image(channel, shade)
+                    channel.sendall(b"\x1b[HSSH_IMAGE_BURST_COMPLETE")
+                    await_cursor_reply(channel)
+                    print("IMAGES_DONE", flush=True)
                 elif command == b"exit":
                     channel.sendall(b"\x1b[?2026hBYE")
                     channel.send_exit_status(0)

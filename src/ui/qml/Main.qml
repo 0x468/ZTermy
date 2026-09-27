@@ -59,9 +59,7 @@ Rectangle {
     property string draggedTerminalTabId: ""
     property real draggedTerminalTabSceneX: 0
     property var paneZoomByWorkspace: ({})
-    property var paneHeadersByWorkspace: ({})
     readonly property string zoomedTerminalPaneId: paneZoomByWorkspace[root.mainWorkspaceId] || ""
-    readonly property bool paneHeadersVisible: !!paneHeadersByWorkspace[root.mainWorkspaceId]
     property string detachedTerminalWorkspaceId: ""
     property var detachedTerminalWorkspace: ({})
     property string detachedTerminalPaneId: ""
@@ -156,12 +154,6 @@ Rectangle {
 
     function requestTerminalTabClose(tab) {
         controller.closeTerminalTab(tab.id);
-    }
-
-    function toggleTerminalPaneHeaders() {
-        const next = Object.assign({}, paneHeadersByWorkspace);
-        next[root.mainWorkspaceId] = !paneHeadersVisible;
-        paneHeadersByWorkspace = next;
     }
 
     function detachTerminalPane(paneId) {
@@ -459,7 +451,7 @@ Rectangle {
         // controller publishes its workspace model. One extra event-loop turn
         // avoids focusing the viewport from the previous tab.
         Qt.callLater(() => Qt.callLater(() => {
-                if (root.currentPage === "terminal" && !renameTerminalDialog.visible && root.Window.window.active && !terminalWindows.movingWindow && !terminalWindows.draggedPaneId.length)
+                if (root.currentPage === "terminal" && !renameTerminalDialog.visible && root.Window.window.active && !terminalWindows.draggedPaneId.length)
                     terminalViewport.forceActiveFocus();
             }));
     }
@@ -545,7 +537,7 @@ Rectangle {
             controller.splitActiveTerminal("vertical", false);
             break;
         case "terminal.duplicatePane":
-            controller.splitActiveTerminal("horizontal", true);
+            controller.splitActiveTerminal("auto", true);
             break;
         case "terminal.focusNextPane":
             controller.focusRelativeTerminalPane(1);
@@ -888,6 +880,8 @@ Rectangle {
     Connections {
         target: root.windowChrome
         function onWindowClosing(quitApplication) {
+            if (quitApplication)
+                terminalWindows.beginApplicationExit();
             if (!quitApplication && root.controller.terminalTabs.some(tab => tab.windowId && tab.windowId !== "main")) {
                 const ids = root.mainTerminalTabs.map(tab => tab.id);
                 for (const id of ids)
@@ -896,12 +890,6 @@ Rectangle {
         }
         function onTitleBarPressed() {
             root.dismissTitleMenus();
-        }
-        function onDetachedWindowMoving(window, globalPosition) {
-            terminalWindows.updateWindowDrop(window, globalPosition);
-        }
-        function onDetachedWindowMoved(window, globalPosition, cancelled) {
-            terminalWindows.finishWindowDrop(window, cancelled);
         }
 
         function onSystemDarkModeChanged() {
@@ -1129,15 +1117,9 @@ Rectangle {
                     onCloseToRightRequested: root.controller.closeTerminalTabsToRight(modelData.id)
                     onMoveLeftRequested: root.controller.moveTerminalTab(modelData.id, modelData.tabIndex - 1)
                     onMoveRightRequested: root.controller.moveTerminalTab(modelData.id, modelData.tabIndex + 1)
-                    onDragMoved: sceneX => titleTerminalTabs.updateTabDrag(modelData.id, sceneX)
-                    onDragPositionChanged: globalPosition => {
-                        const p = root.mapFromGlobal(globalPosition.x, globalPosition.y);
-                        if (p.x >= 0 && p.x < root.width && p.y >= 0 && p.y < root.titleBarHeight && WindowControl.acceptsDropAt(root.windowChrome, p, null))
-                            terminalWindows.dropTarget = ({});
-                        else
-                            terminalWindows.updateDropTarget(globalPosition);
-                    }
+                    onDragPositionChanged: globalPosition => terminalWindows.updateDropTarget(globalPosition)
                     onDragCanceled: {
+                        terminalWindows.clearTabPreviews();
                         root.draggedTerminalTabId = "";
                         terminalWindows.dropTarget = ({});
                     }
@@ -1186,84 +1168,27 @@ Rectangle {
                 menuOpen: newTerminalMenu.visible
                 onActivated: newTerminalMenu.open()
 
-                AppMenu {
+                TerminalNewMenu {
                     id: newTerminalMenu
-
                     y: parent.height
-
-                    AppMenuItem {
-                        objectName: "newLocalTerminalMenuAction"
-                        text: qsTr("New local terminal")
-                        onTriggered: {
-                            root.startLocalTerminalTab();
+                    controller: root.controller
+                    mainWindowActions: true
+                    onLocalRequested: shellId => {
+                        root.startLocalTerminalTab(shellId);
+                        Qt.callLater(terminalViewport.forceActiveFocus);
+                    }
+                    onHostRequested: profile => {
+                        root.currentPage = "hosts";
+                        Qt.callLater(() => hostConnectionPane.connectSaved(profile, titleNewTabContainer));
+                    }
+                    onManageHostsRequested: {
+                        root.currentPage = "hosts";
+                        Qt.callLater(hostsTitleTab.focusAction);
+                    }
+                    onReopenRequested: {
+                        if (root.controller.reopenLastClosedTerminalTab()) {
+                            root.currentPage = "terminal";
                             Qt.callLater(terminalViewport.forceActiveFocus);
-                        }
-                    }
-
-                    AppMenu {
-                        id: localShellMenu
-
-                        title: qsTr("New terminal with")
-
-                        Instantiator {
-                            model: root.controller.availableLocalShells.filter(shell => shell.id !== "automatic" && shell.available)
-                            delegate: AppMenuItem {
-                                id: shellMenuItem
-
-                                required property var modelData
-                                text: modelData.name
-                                onTriggered: root.startLocalTerminalTab(modelData.id)
-
-                                AppToolTip {
-                                    text: shellMenuItem.modelData.detail
-                                }
-                            }
-                            onObjectAdded: (index, object) => localShellMenu.insertItem(index, object)
-                            onObjectRemoved: (index, object) => localShellMenu.removeItem(object)
-                        }
-                    }
-
-                    AppMenu {
-                        id: savedHostsMenu
-                        title: qsTr("Saved hosts")
-                        enabled: root.controller.hostProfiles.length > 0
-
-                        Instantiator {
-                            model: root.controller.hostProfiles
-                            delegate: AppMenuItem {
-                                required property var modelData
-                                text: modelData.name
-                                onTriggered: {
-                                    root.currentPage = "hosts";
-                                    Qt.callLater(() => hostConnectionPane.connectSaved(modelData, titleNewTabContainer));
-                                }
-                            }
-                            onObjectAdded: (index, object) => savedHostsMenu.insertItem(index, object)
-                            onObjectRemoved: (index, object) => savedHostsMenu.removeItem(object)
-                        }
-                    }
-
-                    AppMenuItem {
-                        objectName: "browseHostsMenuAction"
-                        text: qsTr("Manage hosts")
-                        onTriggered: {
-                            root.currentPage = "hosts";
-                            Qt.callLater(hostsTitleTab.focusAction);
-                        }
-                    }
-
-                    AppMenuSeparator {
-                        visible: root.controller.canReopenClosedTerminalTab
-                    }
-
-                    AppMenuItem {
-                        visible: root.controller.canReopenClosedTerminalTab
-                        text: qsTr("Reopen closed terminal")
-                        onTriggered: {
-                            if (root.controller.reopenLastClosedTerminalTab()) {
-                                root.currentPage = "terminal";
-                                Qt.callLater(terminalViewport.forceActiveFocus);
-                            }
                         }
                     }
                 }
@@ -2124,8 +2049,6 @@ Rectangle {
                             node: root.visibleTerminalLayoutRoot
                             zoomedPaneId: root.zoomedTerminalPaneId
                             paneCount: root.mainWorkspace.paneCount || 1
-                            headersVisible: root.paneHeadersVisible
-                            onToggleHeadersRequested: root.toggleTerminalPaneHeaders()
                             defaultFontFamily: root.controller.terminalFontFamily
                             defaultFontSize: root.controller.terminalFontSize
                             defaultLigatures: root.controller.terminalLigatures
@@ -2591,14 +2514,6 @@ Rectangle {
         sequence: "Escape"
         enabled: paneDragCapture.dragging
         onActivated: paneDragCapture.cancelDrag()
-    }
-
-    DragPreview {
-        z: 91
-        visible: paneDragCapture.dragging
-        x: paneDragCapture.pointerPoint.x + 16
-        y: paneDragCapture.pointerPoint.y + 18
-        title: paneDragCapture.paneTitle
     }
 
     DropTargetIndicator {

@@ -96,6 +96,12 @@ int resizeBorderForWindow(const HWND windowHandle) noexcept
 
 bool handleDetachedWindowFrameMessage(QQuickWindow &window, const MSG &message, qintptr *result)
 {
+    const bool captionVisible = window.property("tabBarVisible").toBool() || window.property("tabBarPreview").toBool();
+    if (!captionVisible)
+    {
+        window.setProperty("nativeMaximizeButtonHovered", false);
+        window.setProperty("nativeMaximizeButtonPressed", false);
+    }
     if (message.message == WM_NCCALCSIZE && message.wParam != FALSE)
     {
         if (result == nullptr)
@@ -128,8 +134,8 @@ bool handleDetachedWindowFrameMessage(QQuickWindow &window, const MSG &message, 
                                      .caption = {},
                                      .maximizeButton = {.x = width - qRound(buttonWidth * 2 * scale),
                                                         .y = 0,
-                                                        .width = qRound(buttonWidth * scale),
-                                                        .height = qRound(buttonHeight * scale)}};
+                                                        .width = captionVisible ? qRound(buttonWidth * scale) : 0,
+                                                        .height = captionVisible ? qRound(buttonHeight * scale) : 0}};
         *result = toNativeHitArea(classifyHitTest(
             {.x = GET_X_LPARAM(message.lParam) - bounds.left, .y = GET_Y_LPARAM(message.lParam) - bounds.top},
             {.width = width, .height = bounds.bottom - bounds.top}, metrics, IsZoomed(message.hwnd) != FALSE));
@@ -137,7 +143,7 @@ bool handleDetachedWindowFrameMessage(QQuickWindow &window, const MSG &message, 
     }
     if (message.message == WM_NCMOUSEMOVE)
     {
-        const bool hovered = message.wParam == HTMAXBUTTON;
+        const bool hovered = captionVisible && message.wParam == HTMAXBUTTON;
         window.setProperty("nativeMaximizeButtonHovered", hovered);
         if (hovered)
         {
@@ -159,7 +165,7 @@ bool handleDetachedWindowFrameMessage(QQuickWindow &window, const MSG &message, 
     }
     if (message.message == WM_NCLBUTTONDOWN && message.wParam == HTMAXBUTTON)
     {
-        window.setProperty("nativeMaximizeButtonPressed", true);
+        window.setProperty("nativeMaximizeButtonPressed", captionVisible);
         if (result != nullptr)
             *result = 0;
         return true;

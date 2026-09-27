@@ -4,6 +4,7 @@
 #include <QQuickItemGrabResult>
 #include <QScreen>
 #include <QStyleHints>
+#include "ui/terminal/DetachedChromeRuntimeSmoke.h"
 #include "ui/terminal/DetachedPaneWindowRuntimeSmoke.h"
 #include "ui/terminal/DetachedWindowActionsRuntimeSmoke.h"
 
@@ -101,13 +102,15 @@ inline bool verifyDetachedCrossWindowTabs(AppController &controller, QQuickWindo
     const auto drag = [&](QQuickWindow &from, QQuickWindow &to, const bool cancel) {
         auto *tab = detachedVisualQuickItem(from.contentItem(), QStringLiteral("workspaceTitle-") + tabId);
         return tab
-               && nativeTabDrag(from, tab->mapToGlobal({60, 16}).toPoint(), to.mapToGlobal(QPoint{300, 16}), cancel);
+               && nativeTabDrag(from, tab->mapToGlobal({60, 16}).toPoint(), to.mapToGlobal(QPoint{160, 16}), cancel);
     };
     const bool canceled = drag(source, *target, true)
-                          && controller.terminalWorkspace(tabId).value(QStringLiteral("windowId")).toString() == owner;
+                          && controller.terminalWorkspace(tabId).value(QStringLiteral("windowId")).toString() == owner
+                          && !target->property("tabBarPreview").toBool() && !target->property("tabBarVisible").toBool();
     const bool transferred =
         drag(source, *target, false)
-        && controller.terminalWorkspace(tabId).value(QStringLiteral("windowId")).toString() == targetOwner;
+        && controller.terminalWorkspace(tabId).value(QStringLiteral("windowId")).toString() == targetOwner
+        && target->property("tabBarVisible").toBool() && !target->property("tabBarPreview").toBool();
     const bool returned = transferred && drag(*target, source, false)
                           && controller.terminalWorkspace(tabId).value(QStringLiteral("windowId")).toString() == owner;
     const bool restored = controller.insertTerminalWorkspace(otherId, 0, QStringLiteral("main"));
@@ -142,9 +145,8 @@ inline bool verifyDetachedDropOcclusion(NativeWindow &mainWindow, QQuickWindow &
     windowing::present(blocker);
     processWindowEventsFor(200ms);
     const bool obscured = resolve().isEmpty();
-    coordinator->setProperty("movingWindow", QVariant::fromValue(static_cast<QObject *>(&blocker)));
-    const bool ignoresMovingSource = resolve().value(QStringLiteral("paneId")).toString() == paneId;
-    coordinator->setProperty("movingWindow", QVariant::fromValue(static_cast<QObject *>(nullptr)));
+    const bool ignoresMovingSource =
+        windowing::isUnobscuredDropTarget(detached, detached.mapFromGlobal(point.toPoint()), &blocker);
     blocker.hide();
     processWindowEventsFor(100ms);
     const bool visibleAgain = resolve().value(QStringLiteral("paneId")).toString() == paneId;
@@ -252,6 +254,13 @@ inline bool verifyDetachedTabGrouping(NativeWindow &window, AppController &contr
         }
     if (count != 1 || !detached || detached->property("workspaceId").toString() != b)
         return false;
+    if (detached->property("tabBarVisible").toBool() || !QMetaObject::invokeMethod(detached, "toggleTabBar"))
+        return false;
+    settle();
+    if (QCoreApplication::arguments().contains(QStringLiteral("--detached-chrome-only")))
+        return verifyDetachedCreationMenu(window, controller, *detached, outputDirectory)
+               && verifyDetachedLogicalTabMerge(window, controller, *detached, a, b)
+               && verifyDetachedCaptionStateRoundTrip(*detached, outputDirectory);
     auto *tab = detachedVisualQuickItem(detached->contentItem(), QStringLiteral("workspaceTitle-") + a);
     if (!tab || !QMetaObject::invokeMethod(tab, "activated"))
         return false;
@@ -268,7 +277,7 @@ inline bool verifyDetachedTabGrouping(NativeWindow &window, AppController &contr
         return false;
     const auto tabStart = tab->mapToScene({60, 16});
     const bool pointerDrag =
-        nativeTabDrag(*detached, detached->mapToGlobal(tabStart.toPoint()), detached->mapToGlobal(QPoint{300, 16}));
+        nativeTabDrag(*detached, detached->mapToGlobal(tabStart.toPoint()), detached->mapToGlobal(QPoint{319, 16}));
     settle();
     QStringList reordered;
     for (const auto &entry : controller.terminalTabs())
@@ -285,6 +294,15 @@ inline bool verifyDetachedTabGrouping(NativeWindow &window, AppController &contr
     if (!verifyDetachedPaneZoom(window, controller, *detached, a, b))
         return false;
     if (!verifyDetachedSearch(window, controller, *detached, a, main))
+        return false;
+    if (!verifyDetachedSmartSplit(controller, *detached))
+        return false;
+    if (!verifyDetachedCreationMenu(window, controller, *detached, outputDirectory))
+        return false;
+    if (!verifyDetachedInactiveTabMerge(window, controller, *detached, a, b,
+                                        [](QQuickWindow &source, const QPoint &start, const QPoint &end) {
+                                            return nativeTabDrag(source, start, end);
+                                        }))
         return false;
     tab = detachedVisualQuickItem(detached->contentItem(), QStringLiteral("workspaceTitle-") + a);
     if (!tab || !QMetaObject::invokeMethod(tab, "renameRequested"))
@@ -312,6 +330,16 @@ inline bool verifyDetachedTabGrouping(NativeWindow &window, AppController &contr
     if (!duplicated)
         return false;
     QMetaObject::invokeMethod(detached, "closeTab", Q_ARG(QVariant, duplicate));
+    settle();
+    // The preceding round trip leaves a, b; duplication inserts between them.
+    const bool successor = controller.activeTerminalTabId() == b && detached->property("workspaceId").toString() == b
+                           && window.rootObject()->property("mainWorkspaceId").toString() == main;
+    qInfo() << "Detached close keeps displayed and active successor together:" << successor;
+    qInfo() << "Detached close actual active/displayed/main, expected successor/main:"
+            << controller.activeTerminalTabId() << detached->property("workspaceId")
+            << window.rootObject()->property("mainWorkspaceId") << b << main;
+    if (!successor)
+        return false;
     QMetaObject::invokeMethod(detached, "selectWorkspace", Q_ARG(QVariant, a));
     settle();
     const bool captionRoundTrip = verifyDetachedCaptionStateRoundTrip(*detached, outputDirectory);
@@ -325,6 +353,25 @@ inline bool verifyDetachedTabGrouping(NativeWindow &window, AppController &contr
             },
             3s)
         && capture->image().save(QDir(outputDirectory).filePath(QStringLiteral("detached-multi-tab.png")));
+    if (QCoreApplication::arguments().contains(QStringLiteral("--reattach-all-only")))
+    {
+        const auto layoutA = controller.terminalWorkspace(a).value(QStringLiteral("root"));
+        const auto layoutB = controller.terminalWorkspace(b).value(QStringLiteral("root"));
+        auto *button = detachedVisualQuickItem(detached->contentItem(), QStringLiteral("detachedReattachAllButton"));
+        if (!button || !QMetaObject::invokeMethod(button, "activated"))
+            return false;
+        settle();
+        const bool returned =
+            detached.isNull()
+            && controller.terminalWorkspace(a).value(QStringLiteral("windowId")).toString() == QStringLiteral("main")
+            && controller.terminalWorkspace(b).value(QStringLiteral("windowId")).toString() == QStringLiteral("main")
+            && controller.terminalWorkspace(a).value(QStringLiteral("root")) == layoutA
+            && controller.terminalWorkspace(b).value(QStringLiteral("root")) == layoutB
+            && window.rootObject()->property("mainWorkspaceId").toString() == a;
+        qInfo() << "Explicit reattach all: both tabs, unchanged pane trees, selected tab and closed empty window:"
+                << returned;
+        return selected && independent && captured && returned && captionRoundTrip;
+    }
     QMetaObject::invokeMethod(detached, "closeTab", Q_ARG(QVariant, a));
     settle();
     const bool keptWindow = detached && detached->isVisible() && detached->property("workspaceId").toString() == b

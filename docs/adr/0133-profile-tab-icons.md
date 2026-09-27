@@ -34,5 +34,13 @@ unchanged. This does not change application-settings or workspace schema version
 
 Controller and real-QML interaction checks cover separate boundaries: Profile
 edits feeding Tab models, and the six-entry picker selecting/resetting the field.
-Cross-window rendered icon appearance and full mouse/keyboard acceptance remain
-explicit UI checks; passing serialization tests alone does not establish them.
+The 2026-09-27 two-process restore check also captures the actual main Tab,
+detached Tab and picker content. Both restored Tabs render the saved security
+icon, and all six picker entries are visible. Evidence is under
+`build/msvc-dynamic-release/test-data/window-restore-c5dd24bdac6a4baeb0842510776eb87f`
+(`profile-icon-main.png`, `profile-icon-detached.png`, `profile-icon-menu.png`).
+These item captures have transparent backgrounds; they establish icon geometry
+and placement, not contrast against every theme. The Windows hidden-launch
+harness re-presents the test window only when it has not become exposed, before
+requesting a frame. Picker activation is programmatic; full physical
+mouse/keyboard and theme-contrast acceptance remain separate UI checks.

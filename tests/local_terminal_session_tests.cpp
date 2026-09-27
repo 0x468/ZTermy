@@ -33,7 +33,8 @@ class LocalTerminalSessionTestPeer
 public:
     static bool start(LocalTerminalSession &session)
     {
-        auto engine = GhosttyTerminalEngine::create({.columns = 80, .rows = 24});
+        auto engine =
+            GhosttyTerminalEngine::create({.columns = 80, .rows = 24, .cellWidthPixels = 8, .cellHeightPixels = 16});
         if (!engine)
             return false;
         session.m_engine = std::move(*engine);
@@ -129,6 +130,7 @@ private slots:
     void restoresPromptAfterHelixAlternateScreen();
     void measuresInteractiveInputQueueLatency();
     void buildsAtMostOneSnapshotPerDelivery();
+    void coalescesImageReplacementsWhileGuiIsStalled();
     void processesLargeOutputWithoutStarvingEventLoop();
     void survivesSustainedInteractionWithoutLatencyGrowth();
 };
@@ -705,6 +707,57 @@ void LocalTerminalSessionTests::buildsAtMostOneSnapshotPerDelivery()
     {
         QFAIL(exception.what());
     }
+}
+
+void LocalTerminalSessionTests::coalescesImageReplacementsWhileGuiIsStalled()
+{
+    using Peer = ztermy::terminal::LocalTerminalSessionTestPeer;
+    ztermy::terminal::LocalTerminalSession session;
+    ztermy::terminal::TerminalSnapshotPtr latest;
+    connect(&session, &ztermy::terminal::LocalTerminalSession::snapshotReady, this,
+            [&latest](ztermy::terminal::TerminalSnapshotPtr snapshot) {
+                latest = std::move(snapshot);
+            });
+    QVERIFY(Peer::start(session));
+    const auto upload = [](char shade) {
+        const QByteArray encoded = QByteArray(qsizetype{128} * 128 * 3, shade).toBase64();
+        QByteArray command;
+        for (qsizetype offset = 0; offset < encoded.size(); offset += 4096)
+        {
+            command += offset == 0 ? "\x1b_Ga=T,f=24,s=128,v=128,i=88,C=1,q=2," : "\x1b_Gq=2,";
+            command += offset + 4096 < encoded.size() ? "m=1;" : "m=0;";
+            command += encoded.mid(offset, 4096);
+            command += "\x1b\\";
+        }
+        return command.toStdString();
+    };
+    QVERIFY(Peer::output(session, upload(1)));
+    QTRY_VERIFY(latest && !latest->images.empty());
+    std::weak_ptr<const ztermy::terminal::TerminalImage> original = latest->images.front().image;
+    const auto before = session.snapshotCounters();
+    bool consumed = true;
+    // Join deliberately does not pump the GUI event loop. The producer must
+    // finish without a UI consumer, and cannot hide a backlog in this fixture.
+    std::jthread producer([&] {
+        for (int replacement = 2; replacement <= 81; ++replacement)
+            consumed = Peer::output(session, upload(static_cast<char>(replacement))) && consumed;
+        consumed = Peer::output(session, "\x1b[HIMAGE_STALL_COMPLETE") && consumed;
+    });
+    producer.join();
+    QVERIFY(consumed);
+    const auto stalled = session.snapshotCounters();
+    QCOMPARE(stalled.delivered, before.delivered);
+    QVERIFY2(stalled.produced <= before.produced + 1, "Stalled GUI accumulated undisplayable image snapshots");
+    QVERIFY(!original.expired());
+    QTRY_VERIFY_WITH_TIMEOUT(latest && snapshotText(*latest).find(U"IMAGE_STALL_COMPLETE") != std::u32string::npos,
+                             2000);
+    QVERIFY(!latest->images.empty());
+    QCOMPARE(latest->images.front().image->pixels.front(), std::uint8_t{81});
+    QTRY_VERIFY(original.expired());
+    const auto recovered = session.snapshotCounters();
+    qInfo() << "Image GUI stall: replacements=80 pendingBuilds=" << stalled.produced - before.produced
+            << "recoveryDeliveries=" << recovered.delivered - stalled.delivered;
+    session.stop();
 }
 
 void LocalTerminalSessionTests::processesLargeOutputWithoutStarvingEventLoop()

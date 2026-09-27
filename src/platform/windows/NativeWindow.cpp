@@ -943,14 +943,6 @@ bool NativeWindow::nativeEventFilter(const QByteArray &, void *message, qintptr 
     const auto window = m_detachedWindows.value(reinterpret_cast<WId>(native->hwnd));
     if (!window)
         return false;
-    const bool paneDockMoveActive = window->property("paneDockMoveActive").toBool();
-    if (paneDockMoveActive && (native->message == WM_MOVING || native->message == WM_MOVE))
-        emit detachedWindowMoving(window, QCursor::pos());
-    if (paneDockMoveActive && native->message == WM_EXITSIZEMOVE)
-    {
-        window->setProperty("paneDockMoveActive", false);
-        emit detachedWindowMoved(window, QCursor::pos(), GetAsyncKeyState(VK_ESCAPE) < 0);
-    }
     return windowing::handleDetachedWindowFrameMessage(*window, *native, result);
 }
 
