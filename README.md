@@ -27,7 +27,7 @@ Other platforms are out of scope until the Windows version is stable.
 
 ## Project status
 
-V1 through V5 have been delivered through 0.5.1. The current product includes:
+V1 through V5 have been delivered; the current revision is 0.5.2. The product includes:
 
 - a fully custom Windows 11 title bar with native resize, Snap Layouts, DPI,
   work-area, theme, opacity, and backdrop integration;

@@ -6,6 +6,28 @@ Release assets are published through GitHub Releases.
 
 ## Unreleased
 
+## 0.5.2 — 汐 — 2026-09-27
+
+半轮月，一道水
+
+- Support static Kitty and Sixel terminal images with bounded decoding and a
+  process-wide raster memory budget. Reclaim off-screen history images while
+  protecting visible content and avoid repeated image-conversion allocations.
+- Restore detached windows, their tabs, pane layouts, selected tabs and window
+  placement with the workspace. Connection behavior follows startup preferences.
+- Hide detached Tab strips by default. With the strip hidden, the drag handle
+  moves the whole window; with it visible, pane dragging rearranges the layout.
+  Add an explicit action to return all detached tabs to the main window.
+- Support hovering an inactive Tab during a drag to select it and merge into
+  its pane layout. Keep drag previews visible outside the source window and
+  choose new-pane split direction from the available viewport dimensions.
+- Share terminal creation menus and credential dialogs across main and detached
+  windows. Route shortcuts to their owning window and remove obsolete Pane
+  title components and automatic window-drag docking paths.
+- Fix invisible caption hit targets when a detached Tab strip is hidden, and
+  ensure tray Exit closes detached windows and terminates local child processes
+  without discarding the saved workspace.
+
 - Render SGR blinking text independently of the cursor, keeping selected text
   readable and reusing cached ink between phases. Reduced/disabled motion and
   performance mode keep text visible; hidden views stop the text blink timer.
