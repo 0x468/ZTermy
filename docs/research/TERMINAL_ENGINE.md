@@ -1127,13 +1127,88 @@ but the coordinator target is empty before mouse release; the source remains
 in its original window and the main layout remains two panes. The failing check
 is retained, not waived. An experimental pointer grab-permission change did not
 help and was reverted. This checkpoint is not a release-ready drag acceptance;
-diagnosing event delivery/target loss is the next goal task.
+diagnosing event delivery/target loss was the next goal task.
+
+Follow-up resolves that regression: the detached strip enabled Flickable mouse
+dragging only when tabs overflowed. With three tabs in a 320px strip, it consumed
+the gesture before the Tab DragHandler activated. The same native gesture passed
+when Flickable interaction was disabled. Detached tabs now match the main strip:
+mouse dragging belongs to tab reorder/drop; a WheelHandler retains bounded wheel
+and touchpad-axis scrolling. The final native check passed, including dropping
+into the non-active main-window pane, keeping its sibling and original session
+identities, Escape cancellation and the detached-window round trip:
+`build/msvc-dynamic-release/test-data/native-drag-events-9f0008d21e6545489f8e4190148cc567`
+(exit 0, no direct children left). Dynamic Release, 93-file QML checks and focused
+clang-tidy passed. Temporary event/hit-test logs were removed. The input helper
+also waits out the system double-click interval after an activation click, so
+the following drag cannot accidentally invoke tab rename; this alone did not
+fix the overflow failure. Wheel/trackpad hardware scrolling, drag-edge overflow
+navigation and mixed-monitor gestures still require separate acceptance.
+
+Detached Pane zoom no longer has an empty signal handler. Main and detached
+windows share the workspace-keyed zoom map and leaf lookup, so changing the
+visible subtree does not mutate the stored split topology. The real-QML smoke
+splits a detached Tab, requests zoom through its viewport signal, switches to a
+different Tab and back, then restores the split. It verifies the chosen leaf,
+other-Tab isolation, retained zoom, exact restored layout and unchanged main
+layout. All five assertions passed in
+`build/msvc-dynamic-release/test-data/native-drag-events-7b974e0258cd432bbda686718633f60d`
+(exit 0, no direct children). This is component/layout evidence, not a physical
+toolbar click or exhaustive keyboard-focus check. Dynamic Release and QML gates
+passed; no persistence schema or user-visible strings changed.
+
+Terminal search now uses one `TerminalSearchBar` in each window instead of
+opening the main-window search UI from a detached Pane. The component is bound
+to its workspace and tracks the active Pane; delayed searches are canceled on
+window deactivation or workspace/Pane changes, and execution rechecks ownership.
+Real-QML evidence explicitly edits the detached field, switches sessions before
+the 250ms debounce, and checks that a main-session sentinel query is unchanged.
+Detached search/close and main-window reuse then pass; main search UI remains
+closed when opening the detached search. Evidence:
+`build/msvc-dynamic-release/test-data/native-drag-events-8c2eb93366e8475ba09b4b772db24b06`
+(exit 0, no direct children). Dynamic Release, 94-file QML checks, 2,404-entry
+translations, focused clang-tidy and code-health checks pass. Shortcut routing,
+physical keyboard/focus and visual search-result acceptance remain separate;
+this does not claim all detached-window commands are now window-local.
+
+Detached search shortcut follow-up: each detached window now binds the existing
+`terminal.find` action's configured sequence using window-local shortcut scope.
+Real Win32 keyboard input verifies default Ctrl+Shift+F opens and closes only the
+detached search, then changing the configured sequence to F8 takes effect without
+recreating the window. The isolated fixture resets that override afterwards.
+Evidence: `build/msvc-dynamic-release/test-data/native-drag-events-6c32532dfb3e49a7a8fe50b48fa8374a`
+(exit 0, no direct children). Input is guarded by native foreground ownership
+and refuses already-held keys. Dynamic Release, QML and focused static analysis
+pass. This closes search-key routing only; other detached commands, overflow
+navigation, broad focus/visual and mixed-monitor acceptance remain outstanding.
+
+The suspected detached "browse hosts" reattachment was stale wiring, not a
+currently reachable control: `TerminalSessionStateOverlay` no longer emitted
+that signal after its browse button was removed. The unused overlay/split-node
+signal chain and main/detached handlers are now removed. The live SFTP browse
+action remains intact. Repository-wide source checks found no other emitters;
+Dynamic Release, QML and translation checks pass. No artificial runtime test
+was added to invoke a user-inaccessible signal and call it a product regression.
+
+Kitty unsupported-operation audit found that the pinned engine drops `i`/`I`
+when parsing animation commands, then emits an unimplemented error with no
+identity. Its encoder discards that empty response. A fail-closed dependency
+patch now retains response identity and rejects animation upload/control/compose
+with `ENOTSUP`, honoring quiet modes; this does not implement animation playback.
+The regression failed before the patch on missing identity, then passed after
+it. It covers all three actions, ID/number identity, all three quiet modes,
+unchanged shared static pixels and normal image/text recovery. Six related
+engine cases passed (eight including setup/cleanup, 820ms); inflation admission,
+failed multipart release, Kitty/Sixel separation and metadata bounds also pass.
+Cross-session budgets, queue pressure, performance-mode policy and external
+client interoperability remain open; these tests do not establish a process-wide
+memory ceiling.
 
 The existing active goal remains authoritative; this checkpoint does not mark
 the broader terminal/window work complete.
 
 1. Finish detached Tab drag and exact-pane transfers using real mouse gestures;
-   audit selection after close, pane zoom and window-local actions. Check native
+   audit selection after close, shortcut routing and remaining window-local actions. Check native
    Snap UI and mixed-monitor DPI without relying only on synthetic signals.
 2. Complete physical mixed-display/hot-unplug acceptance. Per-window selection,
    geometry/maximization persistence, startup absent-screen recovery and restore

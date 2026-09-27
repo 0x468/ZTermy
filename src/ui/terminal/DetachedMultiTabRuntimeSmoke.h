@@ -3,7 +3,9 @@
 #include <QGuiApplication>
 #include <QQuickItemGrabResult>
 #include <QScreen>
+#include <QStyleHints>
 #include "ui/terminal/DetachedPaneWindowRuntimeSmoke.h"
+#include "ui/terminal/DetachedWindowActionsRuntimeSmoke.h"
 
 namespace ztermy::ui
 {
@@ -33,7 +35,9 @@ inline bool nativeTabDrag(QQuickWindow &source, const QPoint &start, const QPoin
         // prerequisites before sending a drag or keyboard cancellation.
         const bool pressed = mouse(MOUSEEVENTF_LEFTDOWN);
         const bool released = mouse(MOUSEEVENTF_LEFTUP);
-        processWindowEventsFor(150ms);
+        // The next press is a drag, not the second click of a tab rename.
+        processWindowEventsFor(
+            std::chrono::milliseconds(QGuiApplication::styleHints()->mouseDoubleClickInterval() + 50));
         pointerAvailable = GetCursorPos(&pointer) != FALSE;
         pointerTarget = pointerAvailable && GetAncestor(WindowFromPoint(pointer), GA_ROOT) == handle;
         foreground = pressed && released && GetForegroundWindow() == handle;
@@ -277,6 +281,10 @@ inline bool verifyDetachedTabGrouping(NativeWindow &window, AppController &contr
     if (!verifyDetachedCrossWindowTabs(controller, *detached, b, main))
         return false;
     if (!verifyNativeExactPaneDrop(window, controller, *detached, main))
+        return false;
+    if (!verifyDetachedPaneZoom(window, controller, *detached, a, b))
+        return false;
+    if (!verifyDetachedSearch(window, controller, *detached, a, main))
         return false;
     tab = detachedVisualQuickItem(detached->contentItem(), QStringLiteral("workspaceTitle-") + a);
     if (!tab || !QMetaObject::invokeMethod(tab, "renameRequested"))

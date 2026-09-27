@@ -8,7 +8,6 @@ Item {
     required property var controller
     required property var tab
     signal closeRequested
-    signal browseHostsRequested
 
     StatePanel {
         anchors.centerIn: parent

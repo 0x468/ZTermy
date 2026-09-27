@@ -52,6 +52,14 @@ limit but uses a separate 400-MiB loader/inflater limit.
   selection backgrounds after below-text images, and clear only the protected
   selection/preedit rectangles from the above-text image overlay. The image
   remains visible outside those rectangles and returns after interaction ends.
+- Kitty animation frame transmission, playback control and frame composition
+  remain unsupported. Reject these commands with an identified `ENOTSUP`
+  response rather than discarding the image ID and silently losing the error.
+  Preserve the caller's `i` or `I` and the protocol's quiet-response semantics;
+  specifying both produces `EINVAL`. Existing static image data is unchanged.
+  No animation frames are retained or timers started by these commands. This
+  is an explicit compatibility boundary, not full Kitty animation support.
+  Reference: [Kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/#animation).
 
 ## Consequences and unfinished validation
 

@@ -38,7 +38,7 @@ Rectangle {
     property string settingsReturnPage: "hosts"
     property bool startupVaultPromptPresented: false
     property real pageReveal: 1.0
-    property bool terminalSearchVisible: false
+    property alias terminalSearchVisible: searchPanel.visible
     property int pendingPasteLineCount: 0
     property var pendingPasteViewport: null
     property bool appearancePreviewActive: false
@@ -148,9 +148,9 @@ Rectangle {
         return findTerminalPane(node.first, paneId) || findTerminalPane(node.second, paneId);
     }
 
-    function toggleTerminalPaneZoom(paneId) {
+    function toggleTerminalPaneZoom(paneId, workspaceId = root.mainWorkspaceId) {
         const next = Object.assign({}, paneZoomByWorkspace);
-        next[root.mainWorkspaceId] = zoomedTerminalPaneId === paneId ? "" : paneId;
+        next[workspaceId] = next[workspaceId] === paneId ? "" : paneId;
         paneZoomByWorkspace = next;
     }
 
@@ -404,11 +404,7 @@ Rectangle {
 
     function openTerminalSearch() {
         currentPage = "terminal";
-        terminalSearchVisible = true;
-        searchField.text = controller.terminalSearchQuery;
-        caseSensitiveButton.checked = controller.terminalSearchCaseSensitive;
-        searchField.forceActiveFocus();
-        searchField.selectAll();
+        searchPanel.openSearch();
     }
 
     function toggleTerminalSearch() {
@@ -420,10 +416,7 @@ Rectangle {
     }
 
     function closeTerminalSearch() {
-        terminalSearchVisible = false;
-        searchDelay.stop();
-        controller.clearTerminalSearch();
-        terminalViewport.forceActiveFocus();
+        searchPanel.closeSearch();
     }
 
     function applyWindowAppearance() {
@@ -808,16 +801,6 @@ Rectangle {
 
     Connections {
         target: root.controller
-
-        function onTerminalSearchChanged() {
-            if (!root.terminalSearchVisible) {
-                return;
-            }
-            if (searchField.text !== root.controller.terminalSearchQuery) {
-                searchField.text = root.controller.terminalSearchQuery;
-            }
-            caseSensitiveButton.checked = root.controller.terminalSearchCaseSensitive;
-        }
 
         function onApplicationSettingsChanged() {
             if (!workspaceNavigationResizeHandle.pressed) {
@@ -2169,7 +2152,6 @@ Rectangle {
                             }
                             onZoomPaneRequested: paneId => root.toggleTerminalPaneZoom(paneId)
                             onDetachPaneRequested: paneId => root.detachTerminalPane(paneId)
-                            onBrowseHostsRequested: root.currentPage = "hosts"
                             onTerminalSearchRequested: root.openTerminalSearch()
 
                             Behavior on anchors.rightMargin {
@@ -2208,125 +2190,18 @@ Rectangle {
                             terminalTab: root.activeTerminalTab
                         }
 
-                        AppSurface {
+                        TerminalSearchBar {
                             id: searchPanel
-
+                            objectName: "mainTerminalSearch"
+                            controller: root.controller
+                            workspaceId: root.mainWorkspaceId
+                            windowActive: root.windowChrome.active
                             anchors.top: parent.top
                             anchors.right: parent.right
                             anchors.margins: 12
                             anchors.rightMargin: (root.activeTerminalWorkbenchSide === "right" ? root.activeTerminalWorkbenchWidth : 0) + 12
-                            width: 420
-                            height: 42
-                            elevation: 2
-                            compact: true
-                            visible: root.terminalSearchVisible
+                            onClosed: terminalViewport.forceActiveFocus()
                             z: 10
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 8
-                                anchors.rightMargin: 6
-                                spacing: 4
-
-                                AppTextField {
-                                    id: searchField
-
-                                    objectName: "terminalSearchQuery"
-                                    Layout.fillWidth: true
-                                    Layout.preferredHeight: 30
-                                    compact: true
-                                    placeholderText: qsTr("Find in terminal")
-                                    accessibleName: qsTr("Terminal search query")
-
-                                    onTextEdited: searchDelay.restart()
-                                    Keys.onPressed: event => {
-                                        if (event.key === Qt.Key_Escape) {
-                                            root.closeTerminalSearch();
-                                            event.accepted = true;
-                                        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                                            searchDelay.stop();
-                                            root.controller.searchTerminal(text, (event.modifiers & Qt.ShiftModifier) !== 0, caseSensitiveButton.checked);
-                                            event.accepted = true;
-                                        }
-                                    }
-                                }
-
-                                Text {
-                                    Layout.preferredWidth: 46
-                                    horizontalAlignment: Text.AlignHCenter
-                                    text: root.controller.terminalSearchTotal > 0 ? root.controller.terminalSearchCurrent + "/" + root.controller.terminalSearchTotal : "0/0"
-                                    color: root.mutedColor
-                                    font.family: Theme.terminalFont
-                                    font.pixelSize: 10
-                                }
-
-                                ToolButton {
-                                    id: caseSensitiveButton
-
-                                    Layout.preferredWidth: 30
-                                    Layout.preferredHeight: 30
-                                    checkable: true
-                                    text: "Aa"
-                                    checked: root.controller.terminalSearchCaseSensitive
-                                    hoverEnabled: true
-                                    onClicked: {
-                                        searchDelay.stop();
-                                        root.controller.searchTerminal(searchField.text, false, checked);
-                                    }
-                                    Accessible.name: qsTr("Match case")
-                                    Accessible.checked: checked
-
-                                    contentItem: Text {
-                                        text: "Aa"
-                                        color: caseSensitiveButton.checked ? Theme.accentText : root.textColor
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-                                        font.family: Theme.uiFont
-                                        font.pixelSize: Theme.textLabel
-                                        font.weight: caseSensitiveButton.checked ? Font.Bold : Font.Medium
-                                    }
-
-                                    background: Rectangle {
-                                        radius: Theme.radiusSmall
-                                        color: caseSensitiveButton.checked ? Theme.accent : caseSensitiveButton.down ? Theme.controlPressed : caseSensitiveButton.hovered ? Theme.controlHover : Theme.controlBackground
-                                        border.color: caseSensitiveButton.visualFocus ? Theme.focus : caseSensitiveButton.checked ? Theme.accentHover : root.borderColor
-                                        border.width: caseSensitiveButton.visualFocus ? 2 : 1
-                                    }
-                                }
-
-                                ToolButton {
-                                    Layout.preferredWidth: 30
-                                    Layout.preferredHeight: 30
-                                    contentItem: AppIcon {
-                                        name: "chevron-up"
-                                        color: root.textColor
-                                    }
-                                    onClicked: root.controller.searchTerminal(searchField.text, true, caseSensitiveButton.checked)
-                                    Accessible.name: qsTr("Previous match")
-                                }
-
-                                ToolButton {
-                                    Layout.preferredWidth: 30
-                                    Layout.preferredHeight: 30
-                                    contentItem: AppIcon {
-                                        name: "chevron-down"
-                                        color: root.textColor
-                                    }
-                                    onClicked: root.controller.searchTerminal(searchField.text, false, caseSensitiveButton.checked)
-                                    Accessible.name: qsTr("Next match")
-                                }
-
-                                ToolButton {
-                                    Layout.preferredWidth: 30
-                                    Layout.preferredHeight: 30
-                                    contentItem: AppIcon {
-                                        name: "close"
-                                        color: root.textColor
-                                    }
-                                    onClicked: root.closeTerminalSearch()
-                                    Accessible.name: qsTr("Close terminal search")
-                                }
-                            }
                         }
 
                         TerminalComposer {
@@ -2434,14 +2309,6 @@ Rectangle {
                                 accessibleName: qsTr("Browse saved SSH hosts")
                                 onClicked: root.currentPage = "hosts"
                             }
-                        }
-
-                        Timer {
-                            id: searchDelay
-
-                            interval: 250
-                            repeat: false
-                            onTriggered: root.controller.searchTerminal(searchField.text, false, caseSensitiveButton.checked)
                         }
                     }
                 }

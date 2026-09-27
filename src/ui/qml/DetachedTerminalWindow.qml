@@ -12,6 +12,8 @@ Window {
     property var tabs: []
     property string workspaceId: ""
     property var workspace: ({})
+    readonly property string zoomedPaneId: hostRoot.paneZoomByWorkspace[workspaceId] || ""
+    readonly property var visibleLayoutRoot: zoomedPaneId.length > 0 ? hostRoot.findTerminalPane(workspace.root, zoomedPaneId) || workspace.root : workspace.root
     property var pendingPasteViewport: null
     property int pendingPasteLineCount: 0
     property bool paneHeadersVisible: false
@@ -21,6 +23,20 @@ Window {
     readonly property var controller: hostRoot.controller
     readonly property string currentPage: "terminal"
     readonly property bool maximized: visibility === Window.Maximized
+    readonly property var findAction: controller.actions.find(action => action.id === "terminal.find") || ({})
+
+    Shortcut {
+        sequence: detachedTerminalWindow.findAction.shortcut || ""
+        enabled: detachedTerminalWindow.active && detachedTerminalWindow.findAction.enabled === true && (detachedTerminalWindow.findAction.shortcut || "").length > 0
+        autoRepeat: false
+        context: Qt.WindowShortcut
+        onActivated: {
+            if (searchPanel.visible)
+                searchPanel.closeSearch();
+            else
+                detachedTerminalWindow.openTerminalSearch();
+        }
+    }
 
     function selectWorkspace(id) {
         if (!tabs.some(tab => tab.id === id))
@@ -28,6 +44,9 @@ Window {
         workspaceId = id;
         controller.activateTerminalTab(id);
         workspace = controller.terminalWorkspace(id);
+    }
+    function openTerminalSearch() {
+        searchPanel.openSearch();
     }
     function toggleTerminalPaneHeaders() {
         paneHeadersVisible = !paneHeadersVisible;
@@ -90,12 +109,22 @@ Window {
         }
         Flickable {
             id: tabScroll
+            objectName: "detachedTabScroll"
             width: Math.max(0, parent.width - 160)
             height: parent.height
             contentWidth: tabRow.width
-            interactive: contentWidth > width
+            interactive: false
             clip: true
             flickableDirection: Flickable.HorizontalFlick
+            WheelHandler {
+                target: null
+                blocking: true
+                onWheel: event => {
+                    const delta = event.pixelDelta.x !== 0 ? event.pixelDelta.x : event.pixelDelta.y !== 0 ? event.pixelDelta.y : event.angleDelta.x !== 0 ? event.angleDelta.x / 2 : event.angleDelta.y / 2;
+                    tabScroll.contentX = Math.max(0, Math.min(tabScroll.contentWidth - tabScroll.width, tabScroll.contentX - delta));
+                    event.accepted = true;
+                }
+            }
             Row {
                 id: tabRow
                 Repeater {
@@ -190,10 +219,12 @@ Window {
 
     TerminalSplitNode {
         id: detachedViewport
+        objectName: "detachedWorkspaceViewport"
         anchors.fill: parent
         anchors.topMargin: tabBar.height
         controller: detachedTerminalWindow.hostRoot.controller
-        node: detachedTerminalWindow.workspace.root || ({})
+        node: detachedTerminalWindow.visibleLayoutRoot || ({})
+        zoomedPaneId: detachedTerminalWindow.zoomedPaneId
         paneCount: detachedTerminalWindow.workspace.paneCount || 1
         headersVisible: detachedTerminalWindow.paneHeadersVisible
         detachedPane: false
@@ -218,18 +249,29 @@ Window {
             else
                 detachedTerminalWindow.hostRoot.reattachWorkspace(detachedTerminalWindow.workspaceId);
         }
-        onZoomPaneRequested: paneId => {}
+        onZoomPaneRequested: paneId => detachedTerminalWindow.hostRoot.toggleTerminalPaneZoom(paneId, detachedTerminalWindow.workspaceId)
         onToggleHeadersRequested: detachedTerminalWindow.paneHeadersVisible = !detachedTerminalWindow.paneHeadersVisible
         onMultilinePasteConfirmationRequested: (viewport, lineCount) => {
             detachedTerminalWindow.pendingPasteViewport = viewport;
             detachedTerminalWindow.pendingPasteLineCount = lineCount;
             Qt.callLater(() => pasteDialog.openFrom(viewport));
         }
-        onTerminalSearchRequested: detachedTerminalWindow.hostRoot.openTerminalSearch()
-        onBrowseHostsRequested: {
-            detachedTerminalWindow.hostRoot.reattachWorkspace(detachedTerminalWindow.workspaceId);
-            detachedTerminalWindow.hostRoot.currentPage = "hosts";
-        }
+        onTerminalSearchRequested: detachedTerminalWindow.openTerminalSearch()
+    }
+
+    TerminalSearchBar {
+        id: searchPanel
+        objectName: "detachedTerminalSearch"
+        controller: detachedTerminalWindow.controller
+        workspaceId: detachedTerminalWindow.workspaceId
+        windowActive: detachedTerminalWindow.active
+        anchors.top: parent.top
+        anchors.topMargin: tabBar.height + 12
+        anchors.right: parent.right
+        anchors.rightMargin: 12
+        width: Math.min(420, parent.width - 24)
+        onClosed: detachedViewport.forceActiveFocus()
+        z: 80
     }
 
     PaneDragSurface {

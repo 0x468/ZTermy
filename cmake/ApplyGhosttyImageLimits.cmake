@@ -29,6 +29,19 @@ ztermy_replace_ghostty_text("src/terminal/kitty/graphics_exec.zig"
     "        try loading.addData(alloc, cmd.data);"
     "        loading.addData(alloc, cmd.data) catch |err| {\n            loading.deinit(alloc);\n            alloc.destroy(loading);\n            storage.loading = null;\n            return err;\n        };")
 
+# Unsupported animation commands still need an identifiable failure response.
+# The pinned parser otherwise discards i/I for these actions, making its error
+# response empty. Keep static image support explicit; do not pretend to animate.
+ztermy_replace_ghostty_text("src/terminal/kitty/graphics_command.zig"
+    "pub const Command = struct {\n    control: Control,"
+    "pub const Command = struct {\n    response_id: u32 = 0,\n    response_image_number: u32 = 0,\n    control: Control,")
+ztermy_replace_ghostty_text("src/terminal/kitty/graphics_command.zig"
+    "            .control = control,\n            .quiet = quiet,"
+    "            .control = control,\n            .quiet = quiet,\n            .response_id = self.kv.get('i') orelse 0,\n            .response_image_number = self.kv.get('I') orelse 0,")
+ztermy_replace_ghostty_text("src/terminal/kitty/graphics_exec.zig"
+    "        => .{ .message = \"ERROR: unimplemented action\" },"
+    "        => .{ .id = cmd.response_id, .image_number = cmd.response_image_number, .message = if (cmd.response_id != 0 and cmd.response_image_number != 0) \"EINVAL: specify either image id or number\" else \"ENOTSUP: animation is not supported\" },")
+
 # Pixel budgets alone do not bound tiny-image metadata or tracked placements.
 # Existing IDs may still be replaced at capacity; deletion restores admission.
 ztermy_replace_ghostty_text("src/terminal/kitty/graphics_storage.zig"
@@ -71,6 +84,10 @@ string(REPLACE
     "\"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/c/ztermy_image.zig\"\n"
     "\"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/c/ztermy_image.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_storage.zig\"\n"
     updated_wrapper "${updated_wrapper}")
+string(REPLACE
+    "\"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_storage.zig\"\n"
+    "\"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_storage.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_command.zig\"\n"
+    updated_wrapper "${updated_wrapper}")
 if(NOT updated_wrapper STREQUAL wrapper)
     file(WRITE "${wrapper_path}" "${updated_wrapper}")
 endif()
@@ -79,4 +96,4 @@ endif()
 # Zig source changes. This dependency is specific to our patched policy file.
 ztermy_replace_ghostty_text("CMakeLists.txt"
     "    COMMENT \"Building libghostty-vt via zig build...\""
-    "    DEPENDS \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_image.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_exec.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/lib_vt.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/c/ztermy_image.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_storage.zig\"\n    COMMENT \"Building libghostty-vt via zig build...\"")
+    "    DEPENDS \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_image.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_exec.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/lib_vt.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/c/ztermy_image.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_storage.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_command.zig\"\n    COMMENT \"Building libghostty-vt via zig build...\"")

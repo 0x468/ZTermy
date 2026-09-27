@@ -41,7 +41,6 @@ Item {
     readonly property string statusText: activeViewport ? activeViewport.statusText : ""
 
     signal multilinePasteConfirmationRequested(var viewport, int lineCount)
-    signal browseHostsRequested
     signal terminalSearchRequested
     signal zoomPaneRequested(string paneId)
     signal detachPaneRequested(string paneId)
@@ -1003,7 +1002,6 @@ Item {
                 controller: root.controller
                 tab: leaf.tab
                 onCloseRequested: leaf.closePane()
-                onBrowseHostsRequested: root.browseHostsRequested()
             }
         }
     }
@@ -1174,9 +1172,6 @@ Item {
                     function onMultilinePasteConfirmationRequested(viewport, lineCount) {
                         root.multilinePasteConfirmationRequested(viewport, lineCount);
                     }
-                    function onBrowseHostsRequested() {
-                        root.browseHostsRequested();
-                    }
                     function onTerminalSearchRequested() {
                         root.terminalSearchRequested();
                     }
@@ -1338,9 +1333,6 @@ Item {
                     target: secondLoader.item
                     function onMultilinePasteConfirmationRequested(viewport, lineCount) {
                         root.multilinePasteConfirmationRequested(viewport, lineCount);
-                    }
-                    function onBrowseHostsRequested() {
-                        root.browseHostsRequested();
                     }
                     function onTerminalSearchRequested() {
                         root.terminalSearchRequested();

@@ -1341,6 +1341,10 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS TerminalRenameDialog.qml
 )
 set_source_files_properties(
+    src/ui/qml/TerminalSearchBar.qml
+    PROPERTIES QT_RESOURCE_ALIAS TerminalSearchBar.qml
+)
+set_source_files_properties(
     src/ui/qml/HostProfileNameField.qml
     PROPERTIES QT_RESOURCE_ALIAS HostProfileNameField.qml
 )
@@ -1494,6 +1498,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/TerminalTabAction.qml
         src/ui/qml/TerminalRenameDialog.qml
         src/ui/qml/HostProfileNameField.qml
+        src/ui/qml/TerminalSearchBar.qml
         src/ui/qml/TitleTabOverflow.qml
         src/ui/qml/TerminalSessionStateOverlay.qml
         src/ui/qml/TelemetrySparkline.qml

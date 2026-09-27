@@ -67,6 +67,7 @@ private slots:
     void rejectsInflationBeyondImageBudgetAndRecovers();
     void releasesRejectedMultipartImageBeforeNextTransmission();
     void keepsKittyUploadIndependentOfSixelOutput();
+    void rejectsKittyAnimationWithIdentityAndRecovers();
     void placesAbsoluteSixelWithoutChangingCursorOrWrap();
     void reportsSixelCapabilitiesWithoutChangingScreen();
     void decodesFragmentedSixelOverprintsAndDecColors();
@@ -373,6 +374,54 @@ void TerminalEngineTests::keepsKittyUploadIndependentOfSixelOutput()
     });
     QVERIFY(blue != snapshot->images.end());
     QCOMPARE(blue->image->pixels, std::vector<std::uint8_t>({0, 0, 255, 0, 0, 255}));
+}
+
+void TerminalEngineTests::rejectsKittyAnimationWithIdentityAndRecovers()
+{
+    auto created = ztermy::terminal::GhosttyTerminalEngine::create(
+        {.columns = 10, .rows = 4, .cellWidthPixels = 8, .cellHeightPixels = 16});
+    QVERIFY(created);
+    auto &engine = **created;
+    const auto feed = [&](std::string_view value) {
+        return !engine.feed(std::as_bytes(std::span(value)));
+    };
+    QVERIFY(feed("\x1b_Ga=T,f=32,s=1,v=1,i=41,C=1;/wAA/w==\x1b\\"));
+    const auto original = engine.snapshot();
+    QVERIFY(original);
+    QCOMPARE(original->images.size(), std::size_t{1});
+    QVERIFY(!engine.takePtyWrite().empty());
+    for (const auto action : {'f', 'a', 'c'})
+        for (const auto &identity : {std::string("i=41"), std::string("I=41")})
+            for (const auto quiet : {0, 1, 2})
+            {
+                const std::string command = "\x1b_Ga=" + std::string(1, action) + "," + identity
+                                            + ",q=" + std::to_string(quiet)
+                                            + (action == 'f' ? ",f=32,s=1,v=1;AP8A/w==" : ",c=1,r=1") + "\x1b\\";
+                QVERIFY(feed(command));
+                const auto bytes = engine.takePtyWrite();
+                const std::string reply(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+                if (quiet == 2)
+                    QVERIFY(reply.empty());
+                else
+                {
+                    QVERIFY2(reply.find(identity) != std::string::npos,
+                             "Animation rejection must identify the request");
+                    QVERIFY(reply.find("ENOTSUP:") != std::string::npos);
+                }
+                const auto after = engine.snapshot();
+                QVERIFY(after);
+                QCOMPARE(after->images.size(), std::size_t{1});
+                QCOMPARE(after->images[0].image, original->images[0].image);
+            }
+    QVERIFY(feed("\x1b_Ga=a,i=41,I=41,s=3\x1b\\"));
+    const auto invalid = engine.takePtyWrite();
+    const std::string invalidReply(reinterpret_cast<const char *>(invalid.data()), invalid.size());
+    QVERIFY(invalidReply.find("EINVAL:") != std::string::npos);
+    QVERIFY(feed("\x1b_Ga=T,f=32,s=1,v=1,i=42,C=1;AP8A/w==\x1b\\healthy"));
+    const auto recovered = engine.snapshot();
+    QVERIFY(recovered);
+    QCOMPARE(recovered->images.size(), std::size_t{2});
+    QCOMPARE(recovered->cursor.column, std::uint16_t{7});
 }
 
 void TerminalEngineTests::placesAbsoluteSixelWithoutChangingCursorOrWrap()
