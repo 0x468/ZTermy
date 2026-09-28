@@ -443,13 +443,23 @@ inline std::optional<bool> runWorkbenchRuntimeCheck(NativeWindow &window, AppCon
         window.resize(1000, 760);
         window.show();
         bool passed = true;
-        for (const auto *mode : {"dark", "light"})
+        int repeats = arguments.contains(QStringLiteral("--repeat-profile-icons")) ? 10 : 1;
+        for (const auto &argument : arguments)
+            if (argument.startsWith(QStringLiteral("--profile-icon-cycles=")))
+                repeats = qBound(1, argument.sliced(22).toInt(), 30);
+        for (int repeat = 0; repeat < repeats; ++repeat)
         {
-            theme->setProperty("terminalPalette", QVariantMap{});
-            theme->setProperty("preference", QString::fromLatin1(mode));
-            processWindowEventsFor(std::chrono::milliseconds{250});
-            passed = passed && theme->property("dark").toBool() == (QLatin1StringView{mode} == "dark");
-            passed = verifyHostProfileIconPicker(window, QStringLiteral("profile-icons-%1.png").arg(mode)) && passed;
+            for (const auto *mode : {"dark", "light"})
+            {
+                theme->setProperty("terminalPalette", QVariantMap{});
+                theme->setProperty("preference", QString::fromLatin1(mode));
+                processWindowEventsFor(std::chrono::milliseconds{250});
+                passed = passed && theme->property("dark").toBool() == (QLatin1StringView{mode} == "dark");
+                passed =
+                    verifyHostProfileIconPicker(window, QStringLiteral("profile-icons-%1.png").arg(mode)) && passed;
+            }
+            qInfo() << "Profile icon lifecycle round=" << repeat + 1
+                    << "liveTreeObjects=" << window.contentItem()->findChildren<QObject *>().size();
         }
         return passed;
     }

@@ -4742,7 +4742,9 @@ int main(int argc, char *argv[])
     if (const auto checked = ztermy::ui::runWorkbenchRuntimeCheck(window, appController, QCoreApplication::arguments()))
     {
         appController.shutdown();
-        window.releaseResources();
+        // Exercise the same QML teardown as ordinary application exit. Merely
+        // releasing scene-graph resources leaves a different heap baseline.
+        window.releaseQmlResources();
         return *checked ? EXIT_SUCCESS : EXIT_FAILURE;
     }
     if (QCoreApplication::arguments().contains(QStringLiteral("--title-navigation-mouse-smoke")))

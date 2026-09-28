@@ -3430,6 +3430,15 @@ if(BUILD_TESTING)
         tests/terminal_engine_tests.cpp
     )
     if(WIN32)
+        add_executable(ztermy_leak_detector_probe EXCLUDE_FROM_ALL tools/leak_detector_probe.cpp)
+        target_compile_features(ztermy_leak_detector_probe PRIVATE cxx_std_23)
+        add_executable(ztermy_qt_heap_lifetime_probe EXCLUDE_FROM_ALL
+            tools/qt_heap_lifetime_probe.cpp src/ui/icons/SvgIconImageProvider.cpp)
+        target_compile_features(ztermy_qt_heap_lifetime_probe PRIVATE cxx_std_23)
+        target_include_directories(ztermy_qt_heap_lifetime_probe PRIVATE src)
+        target_compile_definitions(ztermy_qt_heap_lifetime_probe PRIVATE
+            ZTERMY_PROBE_ICON_DIRECTORY="${CMAKE_CURRENT_SOURCE_DIR}/resources/icons")
+        target_link_libraries(ztermy_qt_heap_lifetime_probe PRIVATE Qt6::Core Qt6::Quick Qt6::Svg)
         add_executable(ztermy_terminal_image_memory_probe EXCLUDE_FROM_ALL
             tools/terminal_image_memory_probe.cpp)
         target_compile_features(ztermy_terminal_image_memory_probe PRIVATE cxx_std_23)
@@ -5177,6 +5186,9 @@ if(TARGET ztermy_terminal_image_memory_probe)
     # EXCLUDE_FROM_ALL probes still appear in the analysis compilation database.
     # Generate their Ninja module response files before clang-tidy reads it.
     add_dependencies(ztermy_clang_tidy_prerequisites ztermy_terminal_image_memory_probe)
+endif()
+if(TARGET ztermy_leak_detector_probe)
+    add_dependencies(ztermy_clang_tidy_prerequisites ztermy_leak_detector_probe ztermy_qt_heap_lifetime_probe)
 endif()
 if(BUILD_TESTING)
     add_dependencies(ztermy_clang_tidy_prerequisites ztermy_test_binaries)
