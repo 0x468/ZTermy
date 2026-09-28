@@ -136,7 +136,8 @@ template <typename Predicate>
            && capture->image().save(QDir(arguments[dataIndex + 1]).filePath(name));
 }
 
-[[nodiscard]] inline bool verifyHostProfileIconPicker(NativeWindow &window)
+[[nodiscard]] inline bool
+verifyHostProfileIconPicker(NativeWindow &window, const QString &captureName = QStringLiteral("profile-icon-menu.png"))
 {
     using namespace std::chrono_literals;
     auto *pane = window.rootObject()->findChild<QObject *>(QStringLiteral("hostConnectionPane"));
@@ -149,17 +150,16 @@ template <typename Predicate>
     if (!QMetaObject::invokeMethod(button, "clicked"))
         return false;
     processWindowEventsFor(300ms);
-    QQuickItem *choice = nullptr;
-    QMetaObject::invokeMethod(menu, "itemAt", Q_RETURN_ARG(QQuickItem *, choice), Q_ARG(int, 4));
-    const bool visible = menu->property("visible").toBool() && menu->property("count").toInt() == 6;
-    const bool captured = captureWindowSmokeItem(qvariant_cast<QQuickItem *>(menu->property("contentItem")),
-                                                 QStringLiteral("profile-icon-menu.png"));
-    const bool selected = choice && QMetaObject::invokeMethod(choice, "triggered")
-                          && field->property("profileIcon").toString() == QStringLiteral("security");
+    auto *content = qvariant_cast<QQuickItem *>(menu->property("contentItem"));
+    auto *choice = findWindowSmokeItem(content, QStringLiteral("hostProfileIcon-brand-ubuntu"));
+    const bool visible = menu->property("visible").toBool() && choice && choice->isVisible();
+    const bool captured = captureWindowSmokeItem(content ? content->parentItem() : nullptr, captureName);
+    const bool selected = choice && QMetaObject::invokeMethod(choice, "click")
+                          && field->property("profileIcon").toString() == QStringLiteral("brand-ubuntu");
     QMetaObject::invokeMethod(menu, "close");
     const bool reset = QMetaObject::invokeMethod(pane, "clearEditor")
                        && field->property("profileIcon").toString() == QStringLiteral("terminal");
-    qInfo() << "Profile icon menu: six choices visible, selection, new-profile reset:" << visible << selected << reset;
+    qInfo() << "Profile icon grid: visible, distribution selection, new-profile reset:" << visible << selected << reset;
     return visible && captured && selected && reset;
 }
 

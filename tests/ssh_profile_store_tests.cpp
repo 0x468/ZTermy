@@ -82,6 +82,7 @@ private slots:
     void loadsPreviousSchemaWithDefaultStageTimeouts();
     void loadsStageTimeoutSchemaWithoutIdentityReference();
     void migratesIdentitySchemaWithDefaultIcon();
+    void migratesIconSchemaAndPreservesHosts();
     void rejectsInvalidIconsWithoutOverwriting();
     void rejectsMalformedSessionOptions();
     void rejectsMalformedProxyOptions();
@@ -226,7 +227,7 @@ void SshProfileStoreTests::loadsPreviousSchemaWithDefaultStageTimeouts()
     QFile file(path);
     QVERIFY(file.open(QIODevice::ReadOnly));
     const QByteArray persisted = file.readAll();
-    QVERIFY(persisted.contains("\"version\": 9"));
+    QVERIFY(persisted.contains("\"version\": 10"));
     QVERIFY(persisted.contains("\"authenticationTimeoutSeconds\": 30"));
     QVERIFY(persisted.contains("\"terminalOpenTimeoutSeconds\": 30"));
 }
@@ -248,7 +249,7 @@ void SshProfileStoreTests::loadsStageTimeoutSchemaWithoutIdentityReference()
     QVERIFY(store.save(*profiles));
     QFile file(path);
     QVERIFY(file.open(QIODevice::ReadOnly));
-    QVERIFY(file.readAll().contains("\"version\": 9"));
+    QVERIFY(file.readAll().contains("\"version\": 10"));
 }
 
 void SshProfileStoreTests::createsMissingParentDirectory()
@@ -282,7 +283,7 @@ void SshProfileStoreTests::migratesIdentitySchemaWithDefaultIcon()
     QFile savedFile(path);
     QVERIFY(savedFile.open(QIODevice::ReadOnly));
     auto migrated = QJsonDocument::fromJson(savedFile.readAll()).object();
-    QCOMPARE(migrated.value(QStringLiteral("version")).toInt(), 9);
+    QCOMPARE(migrated.value(QStringLiteral("version")).toInt(), 10);
     auto entries = migrated.value(QStringLiteral("profiles")).toArray();
     for (qsizetype index = 0; index < entries.size(); ++index)
     {
@@ -297,6 +298,37 @@ void SshProfileStoreTests::migratesIdentitySchemaWithDefaultIcon()
     profiles->front().iconName = "security";
     QVERIFY(store.save(*profiles));
     QCOMPARE(store.load(), profiles);
+}
+
+void SshProfileStoreTests::migratesIconSchemaAndPreservesHosts()
+{
+    QTemporaryDir directory;
+    QFile fixture(QFINDTESTDATA("fixtures/ssh/schema-9.json"));
+    QVERIFY(fixture.open(QIODevice::ReadOnly));
+    const auto legacy = QJsonDocument::fromJson(fixture.readAll()).object();
+    const QString path = directory.filePath(QStringLiteral("profiles.json"));
+    QVERIFY(writeFile(path, QJsonDocument(legacy).toJson()));
+    const ztermy::ssh::SshProfileStore store(path);
+    auto profiles = store.load();
+    QVERIFY(profiles);
+    QCOMPARE(profiles->front().iconName, std::string("security"));
+    QCOMPARE(profiles->back().iconName, std::string("hosts"));
+    QVERIFY(store.save(*profiles));
+    QFile saved(path);
+    QVERIFY(saved.open(QIODevice::ReadOnly));
+    auto migrated = QJsonDocument::fromJson(saved.readAll()).object();
+    QCOMPARE(migrated.value(QStringLiteral("version")).toInt(), 10);
+    migrated.insert(QStringLiteral("version"), 9);
+    QCOMPARE(migrated, legacy);
+    saved.close();
+    for (const auto *icon :
+         {"server", "cloud", "database", "router", "device-desktop", "world", "brand-ubuntu", "brand-debian",
+          "brand-redhat", "brand-windows", "brand-apple", "brand-docker", "brand-github"})
+    {
+        profiles->front().iconName = icon;
+        QVERIFY(store.save(*profiles));
+        QCOMPARE(store.load(), profiles);
+    }
 }
 
 void SshProfileStoreTests::rejectsInvalidIconsWithoutOverwriting()
@@ -319,7 +351,7 @@ void SshProfileStoreTests::rejectsInvalidIconsWithoutOverwriting()
     QVERIFY(savedFile.open(QIODevice::ReadOnly));
     const auto document = QJsonDocument::fromJson(savedFile.readAll()).object();
     int index = 0;
-    for (const QJsonValue invalid : {QJsonValue(QJsonValue::Undefined), QJsonValue(17), QJsonValue("../terminal")})
+    for (const QJsonValue &invalid : {QJsonValue(QJsonValue::Undefined), QJsonValue(17), QJsonValue("../terminal")})
     {
         auto malformed = document;
         auto entries = malformed.value(QStringLiteral("profiles")).toArray();
@@ -415,7 +447,7 @@ void SshProfileStoreTests::rejectsMalformedAndUnsupportedDocuments()
     QVERIFY(!malformed);
     QCOMPARE(malformed.error(), ztermy::ssh::SshProfileStoreError::InvalidFormat);
 
-    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":10,"profiles":[]})")));
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":11,"profiles":[]})")));
     auto unsupported = store.load();
     QVERIFY(!unsupported);
     QCOMPARE(unsupported.error(), ztermy::ssh::SshProfileStoreError::UnsupportedVersion);

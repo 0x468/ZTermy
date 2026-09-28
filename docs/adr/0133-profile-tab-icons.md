@@ -25,6 +25,32 @@ Connection/progress coloring remains independent of the selected icon.
 
 ## Compatibility and verification
 
+### 2026-09-29: curated Profile icon pilot
+
+Adopt a curated subset of Tabler Icons **v3.35.0**, under its MIT license,
+for additional Profile categories and recognizable OS/distribution marks.
+Preserve the existing six icon IDs and all existing interface assets during
+this pilot. Record upstream names in the accompanying third-party notice and
+embed that notice in the application resources. Brand marks identify remote
+systems only; copyright permission does not imply trademark endorsement.
+
+Normalize the upstream 24-unit outline grid into the existing 20-unit grid
+with a uniform transform and 1.5-unit effective stroke. Retain currentColor,
+the existing SVG image provider, and no runtime network dependency.
+
+Profile schema 10 expands the supported icon names. Read schema 9 unchanged
+and preserve all non-icon fields; old releases must reject the future schema
+rather than partially rewriting a host collection with unfamiliar icon names.
+The application settings and workspace schemas are unchanged.
+
+The pilot exposes 19 choices in a grouped keyboard-focusable grid (12 general,
+7 system/platform), including the original six IDs. Verification covers a
+literal schema-9 fixture with jump-host and credential references, round trips
+of all new IDs, and themed raster output at 16/20/30/40 pixels. The isolated
+`--profile-icons-smoke --data-dir <test-directory>` check captures the complete
+popup in dark/light themes and verifies distribution selection and editor reset.
+Do not use an installed release's data directory when previewing schema 10.
+
 The fixed schema-8 fixture contains a target, jump host, identity/credential
 references and non-default session settings. Migration compares the complete
 JSON document after removing only the newly added icon fields and resetting the

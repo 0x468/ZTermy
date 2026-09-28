@@ -1,6 +1,7 @@
 #include "ui/icons/SvgIconImageProvider.h"
 
 #include <QColor>
+#include <QDir>
 #include <QImage>
 #include <QTest>
 
@@ -15,6 +16,7 @@ class SvgIconImageProviderTests final : public QObject
 
 private slots:
     void rendersKnownIconAtRequestedSizeAndColor();
+    void rendersAllInterfaceIconsWithThemeColors();
     void rendersBrandAssetAtRequestedSize();
     void rejectsInvalidOrUnknownNames();
     void reusesRenderedIconsPerIdAndSize();
@@ -45,6 +47,48 @@ void SvgIconImageProviderTests::rendersKnownIconAtRequestedSizeAndColor()
         }
     }
     QVERIFY(foundColoredPixel);
+}
+
+void SvgIconImageProviderTests::rendersAllInterfaceIconsWithThemeColors()
+{
+    ztermy::ui::SvgIconImageProvider provider(QStringLiteral(ZTERMY_TEST_ICON_DIRECTORY));
+    const auto files =
+        QDir(QStringLiteral(ZTERMY_TEST_ICON_DIRECTORY)).entryList({QStringLiteral("*.svg")}, QDir::Files);
+    QCOMPARE(files.size(), 79);
+    for (const auto &file : files)
+        for (const auto *color : {"eeeeee", "222222"})
+            for (const int size : {16, 20, 30, 40})
+            {
+                const auto image =
+                    provider.requestImage(QStringLiteral("%1/%2").arg(file.chopped(4), color), nullptr, {size, size});
+                QVERIFY2(!image.isNull(), qPrintable(file));
+                int painted = 0;
+                const QColor expected(QStringLiteral("#%1").arg(color));
+                for (int y = 0; y < image.height(); ++y)
+                    for (int x = 0; x < image.width(); ++x)
+                    {
+                        const auto pixel = image.pixelColor(x, y);
+                        if (pixel.alpha() > 128)
+                        {
+                            ++painted;
+                            const auto detail = QStringLiteral("%1 size=%2 at %3,%4 actual=%5 expected=%6")
+                                                    .arg(file)
+                                                    .arg(size)
+                                                    .arg(x)
+                                                    .arg(y)
+                                                    .arg(pixel.name(QColor::HexArgb), expected.name());
+                            // Compare premultiplied channels: unpremultiplying
+                            // half-covered antialiased edges amplifies rounding.
+                            const QRgb actual = image.pixel(x, y);
+                            const QRgb reference =
+                                qPremultiply(qRgba(expected.red(), expected.green(), expected.blue(), pixel.alpha()));
+                            QVERIFY2(qAbs(qRed(actual) - qRed(reference)) <= 2, qPrintable(detail));
+                            QVERIFY2(qAbs(qGreen(actual) - qGreen(reference)) <= 2, qPrintable(detail));
+                            QVERIFY2(qAbs(qBlue(actual) - qBlue(reference)) <= 2, qPrintable(detail));
+                        }
+                    }
+                QVERIFY2(painted > 0, qPrintable(file));
+            }
 }
 
 void SvgIconImageProviderTests::rendersBrandAssetAtRequestedSize()

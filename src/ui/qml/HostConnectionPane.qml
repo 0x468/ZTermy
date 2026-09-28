@@ -892,10 +892,11 @@ Rectangle {
                                     color: Theme.selectedBackground
 
                                     AppIcon {
+                                        objectName: "recentHostProfileIcon-" + recentProfileCard.modelData.id
                                         anchors.centerIn: parent
                                         width: 17
                                         height: 17
-                                        name: "terminal"
+                                        name: recentProfileCard.modelData.iconName || "terminal"
                                         color: pane.accentColor
                                     }
                                 }
@@ -1076,10 +1077,11 @@ Rectangle {
                                         color: Theme.selectedBackground
 
                                         AppIcon {
+                                            objectName: "savedHostProfileIcon-" + profileCard.modelData.id
                                             anchors.centerIn: parent
                                             width: 17
                                             height: 17
-                                            name: "terminal"
+                                            name: profileCard.modelData.iconName || "terminal"
                                             color: pane.accentColor
                                         }
                                     }

@@ -1117,6 +1117,19 @@ set(ZTERMY_INTERFACE_ICON_FILES
     resources/icons/split-vertical.svg
     resources/icons/swap-horizontal.svg
     resources/icons/terminal.svg
+    resources/icons/brand-apple.svg
+    resources/icons/brand-debian.svg
+    resources/icons/brand-docker.svg
+    resources/icons/brand-github.svg
+    resources/icons/brand-redhat.svg
+    resources/icons/brand-ubuntu.svg
+    resources/icons/brand-windows.svg
+    resources/icons/cloud.svg
+    resources/icons/database.svg
+    resources/icons/device-desktop.svg
+    resources/icons/router.svg
+    resources/icons/server.svg
+    resources/icons/world.svg
     resources/icons/transfer.svg
     resources/icons/tree.svg
     resources/icons/trash.svg
@@ -1140,6 +1153,11 @@ endforeach()
 qt_add_resources(ztermy ztermy_interface_icons
     PREFIX "/ztermy/icons"
     FILES ${ZTERMY_INTERFACE_ICON_FILES}
+)
+
+qt_add_resources(ztermy ztermy_icon_notices
+    PREFIX "/ztermy/licenses"
+    FILES resources/third-party/Tabler-Icons-NOTICE.txt
 )
 
 set_source_files_properties(
@@ -5155,6 +5173,11 @@ add_custom_target(ztermy_format_check
 
 add_custom_target(ztermy_clang_tidy_prerequisites)
 add_dependencies(ztermy_clang_tidy_prerequisites ztermy)
+if(TARGET ztermy_terminal_image_memory_probe)
+    # EXCLUDE_FROM_ALL probes still appear in the analysis compilation database.
+    # Generate their Ninja module response files before clang-tidy reads it.
+    add_dependencies(ztermy_clang_tidy_prerequisites ztermy_terminal_image_memory_probe)
+endif()
 if(BUILD_TESTING)
     add_dependencies(ztermy_clang_tidy_prerequisites ztermy_test_binaries)
 endif()

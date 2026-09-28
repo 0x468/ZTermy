@@ -1,0 +1,83 @@
+{
+  "version": 9,
+  "profiles": [
+    {
+      "id": "target",
+      "name": "Production",
+      "group": "Lab",
+      "host": "target.example.test",
+      "port": 2222,
+      "username": "operator",
+      "identityReference": "identity-target",
+      "authentication": "password",
+      "privateKeyPath": "",
+      "privateKeyPassphraseRequired": false,
+      "credentialReference": "credential-target",
+      "lastConnectedUtcMs": 1754000000123,
+      "keywordHighlightEnabled": true,
+      "keywordHighlightRules": [],
+      "sessionOptions": {
+        "terminalType": "screen-256color",
+        "connectionTimeoutSeconds": 20,
+        "authenticationTimeoutSeconds": 45,
+        "terminalOpenTimeoutSeconds": 60,
+        "keepaliveIntervalSeconds": 30,
+        "keepaliveFailureThreshold": 4,
+        "startupCommand": "uname -a",
+        "startupCommandMode": "paste",
+        "startupLineDelayMilliseconds": 100,
+        "environment": [],
+        "reconnectPolicy": "never",
+        "reconnectMaximumAttempts": 3,
+        "reconnectInitialBackoffMilliseconds": 1000
+      },
+      "proxy": {
+        "type": "none",
+        "host": "",
+        "port": 0,
+        "username": ""
+      },
+      "jumpProfileIds": [
+        "jump"
+      ],
+      "iconName": "security"
+    },
+    {
+      "id": "jump",
+      "name": "Bastion",
+      "group": "Lab",
+      "host": "jump.example.test",
+      "port": 22,
+      "username": "operator",
+      "identityReference": "identity-jump",
+      "authentication": "agent",
+      "privateKeyPath": "",
+      "privateKeyPassphraseRequired": false,
+      "keywordHighlightEnabled": true,
+      "keywordHighlightRules": [],
+      "sessionOptions": {
+        "terminalType": "xterm-256color",
+        "connectionTimeoutSeconds": 10,
+        "authenticationTimeoutSeconds": 30,
+        "terminalOpenTimeoutSeconds": 30,
+        "keepaliveIntervalSeconds": 0,
+        "keepaliveFailureThreshold": 3,
+        "startupCommand": "",
+        "startupCommandMode": "paste",
+        "startupLineDelayMilliseconds": 100,
+        "environment": [],
+        "reconnectPolicy": "never",
+        "reconnectMaximumAttempts": 3,
+        "reconnectInitialBackoffMilliseconds": 1000
+      },
+      "proxy": {
+        "type": "none",
+        "host": "",
+        "port": 0,
+        "username": ""
+      },
+      "jumpProfileIds": [],
+      "iconName": "hosts"
+    }
+  ]
+}

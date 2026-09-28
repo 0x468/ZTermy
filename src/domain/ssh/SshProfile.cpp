@@ -191,9 +191,14 @@ std::uint32_t reconnectBackoffMilliseconds(const SshSessionOptions &options, con
 
 bool validSshProfile(const SshProfile &profile) noexcept
 {
-    const bool knownIcon = profile.iconName == "terminal" || profile.iconName == "hosts"
-                           || profile.iconName == "network" || profile.iconName == "folder"
-                           || profile.iconName == "security" || profile.iconName == "commands";
+    const bool knownIcon =
+        profile.iconName == "terminal" || profile.iconName == "hosts" || profile.iconName == "network"
+        || profile.iconName == "folder" || profile.iconName == "security" || profile.iconName == "commands"
+        || profile.iconName == "brand-apple" || profile.iconName == "brand-debian" || profile.iconName == "brand-docker"
+        || profile.iconName == "brand-github" || profile.iconName == "brand-redhat"
+        || profile.iconName == "brand-ubuntu" || profile.iconName == "brand-windows" || profile.iconName == "cloud"
+        || profile.iconName == "database" || profile.iconName == "device-desktop" || profile.iconName == "router"
+        || profile.iconName == "server" || profile.iconName == "world";
     if (!nonEmptyWithin(profile.id, maximumIdLength) || !nonEmptyWithin(profile.name, maximumNameLength)
         || profile.group.size() > maximumGroupLength || !nonEmptyWithin(profile.host, maximumHostLength)
         || !nonEmptyWithin(profile.username, maximumUsernameLength) || profile.port == 0

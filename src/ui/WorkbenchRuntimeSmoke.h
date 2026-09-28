@@ -265,6 +265,34 @@ TerminalWorkbench {
     }
     button->forceActiveFocus(Qt::TabFocusReason);
     passed = button->property("visualFocus").toBool() && passed;
+    // Real press/release: feedback must not move the hit target or leave the
+    // glyph shrunken after release. Reduced/off effects suppress scaling.
+    auto *theme = window.engine()->singletonInstance<QObject *>(qmlTypeId("Ztermy", 1, 0, "Theme"));
+    auto *glyph = button->property("contentItem").value<QQuickItem *>();
+    if (!theme || !glyph)
+        return false;
+    const auto previousTier = theme->property("effectsTier");
+    const QRectF originalBounds(button->position(), button->size());
+    const QPointF pressPoint = button->mapToScene(QPointF{button->width() / 2, button->height() / 2});
+    for (const auto *tier : {"full", "reduced", "off"})
+    {
+        theme->setProperty("effectsTier", QString::fromLatin1(tier));
+        move(pressPoint);
+        qt_handleMouseEvent(&window, pressPoint, window.mapToGlobal(pressPoint.toPoint()), Qt::LeftButton,
+                            Qt::LeftButton, QEvent::MouseButtonPress, Qt::NoModifier, static_cast<int>(GetTickCount()));
+        processWindowEventsFor(std::chrono::milliseconds{150});
+        const bool full = QString::fromLatin1(tier) == QStringLiteral("full");
+        const bool pressValid = button->property("down").toBool()
+                                && (full ? glyph->scale() < 1 : qAbs(glyph->scale() - 1) < 0.001)
+                                && QRectF(button->position(), button->size()) == originalBounds;
+        qt_handleMouseEvent(&window, pressPoint, window.mapToGlobal(pressPoint.toPoint()), Qt::NoButton, Qt::LeftButton,
+                            QEvent::MouseButtonRelease, Qt::NoModifier, static_cast<int>(GetTickCount()));
+        processWindowEventsFor(std::chrono::milliseconds{150});
+        const bool valid = pressValid && !button->property("down").toBool() && qAbs(glyph->scale() - 1) < 0.001;
+        qInfo() << "Shared icon button press/release" << tier << "passed=" << valid;
+        passed = valid && passed;
+    }
+    theme->setProperty("effectsTier", previousTier);
     for (const auto *supplied : {"label: \"fixture\"", "iconName: \"folder\""})
     {
         QQmlComponent missingProperty(window.engine());
@@ -389,6 +417,42 @@ inline std::optional<bool> runWorkbenchRuntimeCheck(NativeWindow &window, AppCon
         return verifyPaneScrollbarLayout(window, controller);
     if (arguments.contains(QStringLiteral("--script-form-layout-smoke")))
         return verifyScriptFormLayout(window, controller) && verifySidePanelLayout(window, controller);
+    if (arguments.contains(QStringLiteral("--profile-card-icons-smoke")))
+    {
+        window.resize(1000, 760);
+        window.show();
+        processWindowEventsFor(std::chrono::milliseconds{600});
+        bool passed = true;
+        for (const auto &[name, expected] :
+             {QPair{QStringLiteral("savedHostProfileIcon-target"), QStringLiteral("brand-ubuntu")},
+              QPair{QStringLiteral("savedHostProfileIcon-jump"), QStringLiteral("database")},
+              QPair{QStringLiteral("recentHostProfileIcon-target"), QStringLiteral("brand-ubuntu")}})
+        {
+            auto *icon = findWindowSmokeItem(window.contentItem(), name);
+            const bool valid = icon && icon->isVisible() && icon->property("name").toString() == expected;
+            qInfo() << "Host card profile icon" << name << "passed=" << valid;
+            passed = passed && valid;
+        }
+        return captureWindowSmokeItem(window.contentItem(), QStringLiteral("profile-card-icons.png")) && passed;
+    }
+    if (arguments.contains(QStringLiteral("--profile-icons-smoke")))
+    {
+        auto *theme = window.engine()->singletonInstance<QObject *>(qmlTypeId("Ztermy", 1, 0, "Theme"));
+        if (!theme)
+            return false;
+        window.resize(1000, 760);
+        window.show();
+        bool passed = true;
+        for (const auto *mode : {"dark", "light"})
+        {
+            theme->setProperty("terminalPalette", QVariantMap{});
+            theme->setProperty("preference", QString::fromLatin1(mode));
+            processWindowEventsFor(std::chrono::milliseconds{250});
+            passed = passed && theme->property("dark").toBool() == (QLatin1StringView{mode} == "dark");
+            passed = verifyHostProfileIconPicker(window, QStringLiteral("profile-icons-%1.png").arg(mode)) && passed;
+        }
+        return passed;
+    }
     return runSideDrawerRuntimeCheck(window, controller, arguments);
 }
 } // namespace ztermy::ui

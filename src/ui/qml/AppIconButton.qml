@@ -35,6 +35,15 @@ ToolButton {
     contentItem: AppIcon {
         name: control.iconName
         color: control.enabled ? control.iconColor : control.onWorkspace ? Theme.workspaceTextSubtle : Theme.textSubtle
+        // Animate geometry, not SVG tint: interpolated colors would generate
+        // a new raster/cache entry every frame. Hit targets never move.
+        scale: control.enabled && control.down && Motion.enabled && !Motion.reduced ? 0.94 : 1
+        Behavior on scale {
+            NumberAnimation {
+                duration: Motion.enabled && !Motion.reduced ? 70 : 0
+                easing.type: Easing.OutCubic
+            }
+        }
     }
 
     background: Item {
@@ -43,7 +52,10 @@ ToolButton {
             width: Math.min(parent.width, parent.height)
             height: width
             radius: width / 2
-            property real feedbackAmount: control.down || control.hovered ? 1 : 0
+            property real feedbackAmount: control.enabled && (control.down || control.hovered) ? 1 : 0
+            Behavior on feedbackAmount {
+                MotionFeedback {}
+            }
             readonly property color feedbackColor: control.down ? (control.onWorkspace ? Theme.workspaceControlPressed : Theme.controlPressed) : control.onWorkspace ? Theme.workspaceControlHover : Theme.controlHover
             color: Theme.withAlpha(feedbackColor, feedbackColor.a * feedbackAmount)
             border.color: control.visualFocus ? Theme.focus : "transparent"

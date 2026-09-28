@@ -26,7 +26,7 @@ constexpr qint64 jumpHostSchemaVersion = 6;
 constexpr qint64 stageTimeoutSchemaVersion = 7;
 constexpr qint64 identitySchemaVersion = 8;
 constexpr qint64 iconSchemaVersion = 9;
-constexpr qint64 currentSchemaVersion = iconSchemaVersion;
+constexpr qint64 currentSchemaVersion = 10;
 constexpr qsizetype maximumEnvironmentVariableCount = 32;
 
 [[nodiscard]] std::optional<ztermy::ssh::SshStartupCommandMode> parseStartupCommandMode(const QString &value)
@@ -580,7 +580,8 @@ parseProfilesPayload(const QByteArrayView payload)
             && versionValue.toInteger() != sessionOptionsSchemaVersion && versionValue.toInteger() != proxySchemaVersion
             && versionValue.toInteger() != jumpHostSchemaVersion
             && versionValue.toInteger() != stageTimeoutSchemaVersion
-            && versionValue.toInteger() != identitySchemaVersion && versionValue.toInteger() != currentSchemaVersion))
+            && versionValue.toInteger() != identitySchemaVersion && versionValue.toInteger() != iconSchemaVersion
+            && versionValue.toInteger() != currentSchemaVersion))
     {
         return std::unexpected(versionValue.isDouble() ? ztermy::ssh::SshProfileStoreError::UnsupportedVersion
                                                        : ztermy::ssh::SshProfileStoreError::InvalidFormat);

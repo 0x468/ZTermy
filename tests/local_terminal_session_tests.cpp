@@ -187,27 +187,13 @@ void LocalTerminalSessionTests::recognizesLocalShellExit()
 
 void LocalTerminalSessionTests::returnsCursorPositionQueryToLocalChild()
 {
-    const QString executable = QStandardPaths::findExecutable(QStringLiteral("pwsh.exe"));
-    if (executable.isEmpty())
-        QSKIP("PowerShell 7 is not installed");
-
-    const QString script = QStringLiteral(
-        "$esc=[char]27; [Console]::Write([string]$esc+'[6n'); $reply=''; "
-        "$until=[DateTime]::UtcNow.AddSeconds(5); "
-        "while([DateTime]::UtcNow -lt $until -and -not $reply.EndsWith('R')) { "
-        "if([Console]::KeyAvailable) { $reply += [Console]::ReadKey($true).KeyChar } "
-        "else { Start-Sleep -Milliseconds 10 } }; "
-        "[Console]::WriteLine('ZTERMY_CPR_REPLY='+[Convert]::ToHexString([Text.Encoding]::ASCII.GetBytes($reply)))");
-    const QByteArray encoded = QByteArray(reinterpret_cast<const char *>(script.utf16()), script.size() * 2).toBase64();
-
     ztermy::terminal::LocalTerminalSession session;
     const auto output = std::make_shared<MemoryOutputSink>();
     session.setOutputSink(output);
-    session.setLaunchSpec({.id = QStringLiteral("pwsh"),
-                           .displayName = QStringLiteral("PowerShell 7"),
-                           .executable = executable,
-                           .arguments = {QStringLiteral("-NoLogo"), QStringLiteral("-NoProfile"),
-                                         QStringLiteral("-EncodedCommand"), QString::fromLatin1(encoded)},
+    session.setLaunchSpec({.id = QStringLiteral("cpr-probe"),
+                           .displayName = QStringLiteral("CPR probe"),
+                           .executable = QCoreApplication::applicationFilePath(),
+                           .arguments = {QStringLiteral("--query-cursor-position")},
                            .powerShellIntegration = false});
     QVERIFY(!session.start({.columns = 80, .rows = 24}));
     QTRY_VERIFY_WITH_TIMEOUT(
@@ -405,7 +391,9 @@ void LocalTerminalSessionTests::keepsNushellPromptsOnAdjacentRows()
                 snapshot = std::move(next);
             });
     QVERIFY(!session.start({.columns = 140, .rows = 42}));
-    QTRY_VERIFY_WITH_TIMEOUT(output->bytes().size() >= 900, 5000);
+    // Welcome text length varies by installed Nushell version. Wait for the
+    // actual prompt rather than an incidental byte count.
+    QTRY_VERIFY_WITH_TIMEOUT(snapshot && snapshotText(*snapshot).find(U"> ") != std::u32string::npos, 5000);
     QTest::qWait(250);
     QTRY_VERIFY_WITH_TIMEOUT(snapshot && snapshot->cursor.visible && snapshot->columns == 140 && snapshot->rows == 42,
                              5000);
@@ -973,6 +961,38 @@ void LocalTerminalSessionTests::survivesSustainedInteractionWithoutLatencyGrowth
 
 } // namespace
 
-QTEST_GUILESS_MAIN(LocalTerminalSessionTests)
+int main(int argc, char **argv)
+{
+    if (argc == 2 && std::string_view(argv[1]) == "--query-cursor-position")
+    {
+        // Read VT bytes, not Console.ReadKey's translated keyboard events.
+        const HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
+        const HANDLE output = GetStdHandle(STD_OUTPUT_HANDLE);
+        DWORD inputMode = 0;
+        DWORD outputMode = 0;
+        if (!GetConsoleMode(input, &inputMode) || !GetConsoleMode(output, &outputMode)
+            || !SetConsoleMode(input,
+                               (inputMode | ENABLE_VIRTUAL_TERMINAL_INPUT) & ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT))
+            || !SetConsoleMode(output, outputMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING))
+            return 2;
+        DWORD written = 0;
+        if (!WriteFile(output, "\x1b[6n", 4, &written, nullptr) || written != 4)
+            return 3;
+        QByteArray reply;
+        while (reply.size() < 64 && !reply.endsWith('R'))
+        {
+            char byte = 0;
+            DWORD read = 0;
+            if (!ReadFile(input, &byte, 1, &read, nullptr) || read != 1)
+                return 4;
+            reply.append(byte);
+        }
+        const QByteArray report = "ZTERMY_CPR_REPLY=" + reply.toHex().toUpper() + "\r\n";
+        return WriteFile(output, report.constData(), static_cast<DWORD>(report.size()), &written, nullptr) ? 0 : 5;
+    }
+    QCoreApplication application(argc, argv);
+    LocalTerminalSessionTests tests;
+    return QTest::qExec(&tests, argc, argv);
+}
 
 #include "local_terminal_session_tests.moc"

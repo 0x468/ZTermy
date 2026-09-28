@@ -46,7 +46,7 @@ bool verifyDetachedInactiveTabMerge(NativeWindow &mainWindow, AppController &con
     const bool dragged =
         handle && tab
         && drag(mainWindow, handle->mapToGlobal({14, 14}).toPoint(), tab->mapToGlobal({60, 16}).toPoint());
-    qInfo() << "Detached merge fixture:" << bool(handle) << bool(tab) << dragged;
+    qInfo() << "Detached merge fixture:" << (handle != nullptr) << (tab != nullptr) << dragged;
     processWindowEventsFor(400ms);
     const bool merged =
         dragged && controller.terminalWorkspace(movingId).isEmpty()
@@ -68,7 +68,7 @@ inline bool verifyDetachedLogicalTabMerge(NativeWindow &mainWindow, AppControlle
             const auto sourceId = mainWindow.rootObject()->property("mainWorkspaceId").toString();
             const auto paneId = controller.terminalWorkspace(sourceId).value(QStringLiteral("activePaneId"));
             QVariant drop;
-            qInfo() << "Detached coordinator found:" << bool(coordinator);
+            qInfo() << "Detached coordinator found:" << (coordinator != nullptr);
             if (!coordinator
                 || !QMetaObject::invokeMethod(&target, "tabDropTarget", Q_RETURN_ARG(QVariant, drop),
                                               Q_ARG(QVariant, QPointF(end))))

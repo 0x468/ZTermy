@@ -280,7 +280,7 @@ void WorkspaceStateStoreTests::rejectsInvalidWindowPlacementWithoutOverwriting()
     file.close();
 
     const auto root = QJsonDocument::fromJson(original).object();
-    for (const QJsonValue badWidth : {QJsonValue(0), QJsonValue(960.5), QJsonValue("960"), QJsonValue(1e20)})
+    for (const QJsonValue &badWidth : {QJsonValue(0), QJsonValue(960.5), QJsonValue("960"), QJsonValue(1e20)})
     {
         auto badRoot = root;
         auto windows = root.value(QStringLiteral("terminalWindows")).toArray();

@@ -6,6 +6,17 @@ Release assets are published through GitHub Releases.
 
 ## Unreleased
 
+- Unify interface icons using the reviewed Tabler outline set while preserving
+  branding, stable icon IDs and native window behavior; retain documented
+  memory/disk silhouettes where no matching upstream shape exists.
+
+- Pilot a grouped Profile icon picker with curated Tabler category, distribution
+  and platform icons; retain existing icons and migrate Profile schema 9 to 10
+  without changing other host fields.
+- Show each Profile's selected icon on saved-host and recent-connection cards.
+- Add restrained hover/press feedback to shared icon buttons, respecting effect
+  settings without changing hit targets or native caption controls.
+
 - Remove the unused built-in notes UI, storage operations and AI note tools
   without deleting existing Markdown files. Restore retired notes pages as
   command history while retaining the rest of the workspace.

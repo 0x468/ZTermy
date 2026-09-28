@@ -4,8 +4,8 @@ endif()
 
 file(GLOB icon_files LIST_DIRECTORIES FALSE "${ZTERMY_ICON_DIRECTORY}/*.svg")
 list(LENGTH icon_files icon_count)
-if(NOT icon_count EQUAL 66)
-    message(FATAL_ERROR "Expected 66 production interface icons, found ${icon_count}")
+if(NOT icon_count EQUAL 79)
+    message(FATAL_ERROR "Expected 79 production interface icons, found ${icon_count}")
 endif()
 
 foreach(required_icon IN ITEMS activity.svg ai.svg application.svg bookmark.svg chevron-left.svg close.svg cpu.svg disk.svg external-link.svg highlight.svg

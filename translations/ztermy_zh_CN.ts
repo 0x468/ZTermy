@@ -3291,6 +3291,14 @@
 </context>
 <context>
     <name>HostProfileNameField</name>
+    <message><source>Server</source><translation>服务器</translation></message>
+    <message><source>Cloud</source><translation>云主机</translation></message>
+    <message><source>Database</source><translation>数据库</translation></message>
+    <message><source>Router</source><translation>路由器</translation></message>
+    <message><source>Desktop</source><translation>桌面</translation></message>
+    <message><source>Internet</source><translation>互联网</translation></message>
+    <message><source>General</source><translation>通用</translation></message>
+    <message><source>Systems and platforms</source><translation>系统与平台</translation></message>
     <message>
         <location filename="../src/ui/qml/HostProfileNameField.qml" line="32"/>
         <source>Profile icon</source>

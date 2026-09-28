@@ -1832,8 +1832,9 @@ struct ResizeHitRuntimeCase
 
 [[nodiscard]] bool verifyHostEditorTabOrder(ztermy::NativeWindow &window, QQuickItem *rootObject)
 {
-    constexpr std::array<const char *, 13> passwordOrder{
+    constexpr std::array<const char *, 14> passwordOrder{
         "hostName",
+        "hostProfileIconButton",
         "hostGroup",
         "hostAddress",
         "hostPort",
@@ -1863,6 +1864,27 @@ struct ResizeHitRuntimeCase
             qCWarning(applicationLog) << "Host editor Tab order mismatch"
                                       << "index=" << index << "expected=" << expectedName << "actual=" << actualName;
             return false;
+        }
+        if (expectedName == QStringLiteral("hostProfileIconButton"))
+        {
+            sendKey(window, Qt::Key_Return);
+            processWindowEventsFor(std::chrono::milliseconds{250});
+            auto *picker = rootObject->findChild<QObject *>(QStringLiteral("hostProfileIconMenu"));
+            if (!picker || !picker->property("visible").toBool())
+                return false;
+            sendKey(window, Qt::Key_Tab);
+            if (!namedFocusItem(window).startsWith(QStringLiteral("hostProfileIcon-")))
+            {
+                qCWarning(applicationLog) << "Profile icon choices not keyboard reachable:" << namedFocusItem(window);
+                return false;
+            }
+            sendKey(window, Qt::Key_Escape);
+            processWindowEventsFor(std::chrono::milliseconds{250});
+            if (picker->property("visible").toBool() || namedFocusItem(window) != QStringLiteral("hostName"))
+                return false;
+            sendKey(window, Qt::Key_Tab);
+            if (namedFocusItem(window) != expectedName)
+                return false;
         }
     }
     return true;
@@ -2416,7 +2438,10 @@ struct ResizeHitRuntimeCase
         hostName != nullptr && hostName->property("text").toString() == QStringView{generatedName};
     if (hostName != nullptr)
     {
-        sendMouseClick(window, *hostName, QPointF{hostName->width() - 12.0, hostName->height() / 2.0});
+        // Click the editable area, not the trailing Profile icon action.
+        sendMouseClick(
+            window, *hostName,
+            QPointF{hostName->width() - hostName->property("rightPadding").toReal() - 12.0, hostName->height() / 2.0});
     }
     const bool profileNameSelectionStable =
         hostName != nullptr && namedFocusItem(window) == QStringLiteral("hostName")
