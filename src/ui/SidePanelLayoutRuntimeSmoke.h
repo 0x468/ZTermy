@@ -6,6 +6,7 @@
 
 #include <QDir>
 #include <QQmlComponent>
+#include <QQmlEngine>
 #include <QQuickItem>
 
 #include <memory>
@@ -72,6 +73,45 @@ inline bool verifySidePanelLayout(NativeWindow &window, AppController &controlle
         qInfo() << "Side panel geometry" << size << "passed=" << valid;
         passed = valid && passed;
     }
+    // Spy on navigation requests while retaining the real controller's read-only
+    // presentation properties. No Shell, SSH connection or AI request is started.
+    auto *engine = window.engine();
+    QQmlEngine::setObjectOwnership(&controller, QQmlEngine::CppOwnership);
+    auto navigation = engine->evaluate(QStringLiteral(
+        "(function() { const state = {requestCount: 0};"
+        "state.toggleTerminalWorkbench = function(page) { state.requestCount++; state.requestedPage = page; };"
+        "return state; })()"));
+    navigation.setPrototype(engine->newQObject(&controller));
+    pane->setProperty("controller", QVariant::fromValue(navigation));
+    const QList<QPair<QString, QString>> pages{
+        {QStringLiteral("sftp"), QStringLiteral("terminalRemoteFilesPageButton")},
+        {QStringLiteral("history"), QStringLiteral("terminalHistoryPageButton")},
+        {QStringLiteral("scripts"), QStringLiteral("terminalScriptsPageButton")},
+        {QStringLiteral("ai"), QStringLiteral("terminalAiAssistantButton")}};
+    for (const auto &[page, buttonName] : pages)
+    {
+        pane->setProperty("activeTab", QVariantMap{{QStringLiteral("workbenchPage"), page}});
+        processWindowEventsFor(std::chrono::milliseconds{100});
+        auto *button = pane->findChild<QQuickItem *>(buttonName);
+        if (!button)
+            return false;
+        const int before = navigation.property(QStringLiteral("requestCount")).toInt();
+        for (int click = 0; click < 2; ++click)
+            sendMouseClick(window, *button, {button->width() / 2, button->height() / 2});
+        const bool unchanged = navigation.property(QStringLiteral("requestCount")).toInt() == before
+                               && button->property("checked").toBool() && button->property("selected").toBool();
+        // The same button must still request navigation when another page is active.
+        pane->setProperty("activeTab", QVariantMap{{QStringLiteral("workbenchPage"), page == QStringLiteral("history")
+                                                                                         ? QStringLiteral("scripts")
+                                                                                         : QStringLiteral("history")}});
+        processWindowEventsFor(std::chrono::milliseconds{100});
+        sendMouseClick(window, *button, {button->width() / 2, button->height() / 2});
+        const bool switched = navigation.property(QStringLiteral("requestCount")).toInt() == before + 1
+                              && navigation.property(QStringLiteral("requestedPage")).toString() == page;
+        qInfo() << "Side panel navigation" << page << "repeatNoOp=" << unchanged << "switch=" << switched;
+        passed = passed && unchanged && switched;
+    }
+    pane->setProperty("controller", QVariant::fromValue(&controller));
     return passed;
 }
 } // namespace ztermy::ui

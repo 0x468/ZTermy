@@ -243,8 +243,12 @@ SidePanelSurface {
                     Layout.preferredHeight: 28
                     checkable: true
                     checked: workbench.currentPage === "sftp"
+                    autoExclusive: true
                     selected: checked
-                    onClicked: workbench.controller.toggleTerminalWorkbench("sftp")
+                    onClicked: {
+                        if (workbench.currentPage !== "sftp")
+                            workbench.controller.toggleTerminalWorkbench("sftp");
+                    }
                     label: qsTr("Remote files")
                     iconName: "folder"
                     iconColor: sftpPageButton.checked ? Theme.accent : Theme.textSoft
@@ -261,8 +265,12 @@ SidePanelSurface {
                     Layout.preferredHeight: 28
                     checkable: true
                     checked: workbench.currentPage === "history"
+                    autoExclusive: true
                     selected: checked
-                    onClicked: workbench.controller.toggleTerminalWorkbench("history")
+                    onClicked: {
+                        if (workbench.currentPage !== "history")
+                            workbench.controller.toggleTerminalWorkbench("history");
+                    }
                     label: qsTr("Command history")
                     iconName: "history"
                     iconColor: historyPageButton.checked ? Theme.accent : Theme.textSoft
@@ -278,8 +286,12 @@ SidePanelSurface {
                     Layout.preferredHeight: 28
                     checkable: true
                     checked: workbench.currentPage === "scripts"
+                    autoExclusive: true
                     selected: checked
-                    onClicked: workbench.controller.toggleTerminalWorkbench("scripts")
+                    onClicked: {
+                        if (workbench.currentPage !== "scripts")
+                            workbench.controller.toggleTerminalWorkbench("scripts");
+                    }
                     label: qsTr("Scripts")
                     iconName: "commands"
                     iconColor: quickCommandsPageButton.checked ? Theme.accent : Theme.textSoft
@@ -295,8 +307,12 @@ SidePanelSurface {
                     Layout.preferredHeight: 28
                     checkable: true
                     checked: workbench.currentPage === "ai"
+                    autoExclusive: true
                     selected: checked
-                    onClicked: workbench.controller.toggleTerminalWorkbench("ai")
+                    onClicked: {
+                        if (workbench.currentPage !== "ai")
+                            workbench.controller.toggleTerminalWorkbench("ai");
+                    }
                     label: qsTr("Terminal AI assistant")
                     iconName: "ai"
                     iconColor: aiPageButton.checked ? Theme.accent : Theme.textSoft

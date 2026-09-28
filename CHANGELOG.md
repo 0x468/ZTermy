@@ -12,6 +12,8 @@ Release assets are published through GitHub Releases.
 - Keep sidebar headers and search tools at their natural height. Group empty
   state text and actions together instead of distributing them across tall
   panels; share the history and script page layout contract.
+- Keep an active sidebar page open when its navigation icon is clicked again;
+  retain explicit closing and navigation to other pages.
 
 ## 0.5.2 — 汐 — 2026-09-27
 
