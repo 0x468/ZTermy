@@ -356,6 +356,11 @@ std::optional<ProfileWorkspaceState> parseProfile(const QJsonValue &value, const
         .workbenchWidth = object.value(QStringLiteral("workbenchWidth")).toDouble(),
         .composerHeight = object.value(QStringLiteral("composerHeight")).toDouble(),
     };
+    // Retired Notes page is a readable tombstone, not an invalid workspace.
+    if (state.workbenchPage == "notes")
+    {
+        state.workbenchPage = "history";
+    }
     if (schemaVersion >= 4)
     {
         state.sftpViewMode = bytes(object.value(QStringLiteral("sftpViewMode")).toString());

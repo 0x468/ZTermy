@@ -6,6 +6,13 @@ Release assets are published through GitHub Releases.
 
 ## Unreleased
 
+- Remove the unused built-in notes UI, storage operations and AI note tools
+  without deleting existing Markdown files. Restore retired notes pages as
+  command history while retaining the rest of the workspace.
+- Keep sidebar headers and search tools at their natural height. Group empty
+  state text and actions together instead of distributing them across tall
+  panels; share the history and script page layout contract.
+
 ## 0.5.2 — 汐 — 2026-09-27
 
 半轮月，一道水

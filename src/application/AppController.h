@@ -6,7 +6,6 @@
 #include "application/ai/AiActivityModel.h"
 #include "application/ai/AiConversationHistoryModel.h"
 #include "application/ai/AiConversationModel.h"
-#include "application/ai/AiNoteReadTool.h"
 #include "application/ai/AiReadToolDispatcher.h"
 #include "application/ai/AiSecretStore.h"
 #include "application/ai/AiSftpListTool.h"
@@ -47,7 +46,6 @@
 #include "infrastructure/logging/SessionLogWriter.h"
 #include "infrastructure/ssh/SshKeychainStore.h"
 #include "infrastructure/ssh/SshProfileStore.h"
-#include "infrastructure/workbench/NoteStore.h"
 #include "infrastructure/workbench/PowerShellHistoryReader.h"
 #include "infrastructure/workbench/ScriptStore.h"
 #include "infrastructure/workbench/WorkspaceStateStore.h"
@@ -120,13 +118,6 @@ class AppController final : public QObject
     Q_PROPERTY(bool canReopenClosedTerminalTab READ canReopenClosedTerminalTab NOTIFY terminalTabsChanged)
     Q_PROPERTY(QVariantList quickCommands READ quickCommands NOTIFY quickCommandsChanged)
     Q_PROPERTY(QString quickCommandOperationError READ quickCommandOperationError NOTIFY quickCommandsChanged)
-    Q_PROPERTY(QVariantList notes READ notes NOTIFY notesChanged)
-    Q_PROPERTY(QVariantList noteSearchResults READ noteSearchResults NOTIFY notesChanged)
-    Q_PROPERTY(QString activeNotePath READ activeNotePath NOTIFY notesChanged)
-    Q_PROPERTY(QString activeNoteContent READ activeNoteContent NOTIFY notesChanged)
-    Q_PROPERTY(bool activeNoteDirty READ activeNoteDirty NOTIFY notesChanged)
-    Q_PROPERTY(QString noteSearchState READ noteSearchState NOTIFY notesChanged)
-    Q_PROPERTY(QString noteOperationError READ noteOperationError NOTIFY notesChanged)
     Q_PROPERTY(QVariantList terminalHistory READ terminalHistory NOTIFY terminalHistoryChanged)
     Q_PROPERTY(QVariantList actions READ actions NOTIFY actionRegistryChanged)
     Q_PROPERTY(QString terminalHistoryState READ terminalHistoryState NOTIFY terminalHistoryChanged)
@@ -302,13 +293,6 @@ public:
     [[nodiscard]] bool canReopenClosedTerminalTab() const noexcept;
     [[nodiscard]] QVariantList quickCommands() const;
     [[nodiscard]] QString quickCommandOperationError() const;
-    [[nodiscard]] QVariantList notes() const;
-    [[nodiscard]] QVariantList noteSearchResults() const;
-    [[nodiscard]] QString activeNotePath() const;
-    [[nodiscard]] QString activeNoteContent() const;
-    [[nodiscard]] bool activeNoteDirty() const noexcept;
-    [[nodiscard]] QString noteSearchState() const;
-    [[nodiscard]] QString noteOperationError() const;
     [[nodiscard]] QVariantList terminalHistory() const;
     [[nodiscard]] QVariantList actions() const;
     [[nodiscard]] QString terminalHistoryState() const;
@@ -546,18 +530,6 @@ public:
     Q_INVOKABLE bool exportWorkspace(const QString &localFileUrl);
     Q_INVOKABLE bool importWorkspace(const QString &localFileUrl);
     Q_INVOKABLE bool importOpenSshConfig(const QString &localFileUrl = {});
-    Q_INVOKABLE void refreshNotes();
-    Q_INVOKABLE bool openNote(const QString &relativePath, bool discardUnsavedChanges = false);
-    Q_INVOKABLE void updateActiveNoteContent(const QString &content);
-    Q_INVOKABLE bool saveActiveNote();
-    Q_INVOKABLE bool discardActiveNoteChanges();
-    Q_INVOKABLE bool createNote(const QString &relativePath);
-    Q_INVOKABLE bool createNoteFolder(const QString &relativePath);
-    Q_INVOKABLE bool renameNoteEntry(const QString &sourceRelativePath, const QString &destinationRelativePath);
-    Q_INVOKABLE bool deleteNoteEntry(const QString &relativePath);
-    Q_INVOKABLE void searchNotes(const QString &query);
-    Q_INVOKABLE bool importNote(const QString &localFileUrl, const QString &destinationFolder = {});
-    Q_INVOKABLE bool exportActiveNote(const QString &localFileUrl);
     Q_INVOKABLE void refreshTerminalHistory();
     Q_INVOKABLE void refreshSessionHistory();
     Q_INVOKABLE void setTerminalTelemetryVisible(bool visible);
@@ -756,7 +728,6 @@ signals:
     void hostWorkspaceChanged();
     void terminalTabsChanged();
     void quickCommandsChanged();
-    void notesChanged();
     void terminalHistoryChanged();
     void sftpChanged();
     void transferTasksChanged();
@@ -794,9 +765,6 @@ private:
     friend class AppControllerTestAccess;
     Q_SIGNAL void terminalHistoryTaskCompleted(const QString &tabId, quint64 requestId, ShellHistoryEntries entries,
                                                const QString &error);
-    Q_SIGNAL void noteSearchTaskCompleted(quint64 requestId, NoteSearchResults results, const QString &error);
-    Q_SIGNAL void aiNoteReadTaskCompleted(const QString &tabId, quint64 requestId, quint64 generation,
-                                          const QString &relativePath, const QByteArray &outputJson);
     Q_SIGNAL void aiTextAttachmentTaskCompleted(const QString &tabId, AiTextAttachments attachments,
                                                 const QStringList &rejectedFiles);
     Q_SIGNAL void aiImageAttachmentTaskCompleted(const QString &tabId, AiImageAttachments attachments,
@@ -934,15 +902,11 @@ private:
     [[nodiscard]] QVariantMap shortcutResult(const actions::ShortcutValidation &validation) const;
     void applyTerminalHistoryTaskResult(const QString &tabId, quint64 requestId, ShellHistoryEntries entries,
                                         const QString &error);
-    void applyNoteSearchTaskResult(quint64 requestId, const NoteSearchResults &results, const QString &error);
-    void applyAiNoteReadTaskResult(const QString &tabId, quint64 requestId, quint64 generation,
-                                   const QString &relativePath, const QByteArray &outputJson);
     void applyAiTextAttachmentTaskResult(const QString &tabId, AiTextAttachments attachments,
                                          const QStringList &rejectedFiles);
     void applyAiImageAttachmentTaskResult(const QString &tabId, AiImageAttachments attachments,
                                           const QStringList &rejectedFiles);
     void applyAiUserSkillTaskResult(quint64 requestGeneration, AiUserSkills skills, bool succeeded);
-    void setNoteOperationError(QString message);
     void setQuickCommandOperationError(QString message);
     void setAiQuickMessageError(QString message);
     [[nodiscard]] QString aiUserSkillWarningText(ai::AiUserSkillWarning warning) const;
@@ -1040,7 +1004,6 @@ private:
     actions::ActionRegistry m_actionRegistry;
     workbench::ScriptStore m_scriptStore;
     QString m_legacyQuickCommandPath;
-    workbench::NoteStore m_noteStore;
     workbench::WorkspaceStateStore m_workspaceStateStore;
     ai::AiActivityModel m_aiActivity;
     ai::AiPermissionRuleStore m_aiPermissionRuleStore;
@@ -1050,14 +1013,6 @@ private:
     workbench::WorkspaceState m_workspaceState;
     std::vector<workbench::ScriptDefinition> m_scripts;
     QString m_quickCommandOperationError;
-    QVariantList m_notes;
-    QVariantList m_noteSearchResults;
-    QString m_activeNotePath;
-    QString m_activeNoteContent;
-    QString m_noteSearchState = QStringLiteral("idle");
-    QString m_noteOperationError;
-    std::uint64_t m_noteSearchRequestId = 0;
-    bool m_activeNoteDirty = false;
     std::unique_ptr<security::CredentialVaultCoordinator> m_credentialVaults;
     std::unique_ptr<ai::AiConversationHistoryModel> m_aiConversationHistory;
     std::unique_ptr<sftp::TransferManager> m_transferManager;

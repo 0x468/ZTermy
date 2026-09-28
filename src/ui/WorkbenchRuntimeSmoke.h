@@ -6,6 +6,7 @@
 #include "ui/ResizeRuntimeSmoke.h"
 #include "ui/RuntimeSmokeItems.h"
 #include "ui/SideDrawerRuntimeSmoke.h"
+#include "ui/SidePanelLayoutRuntimeSmoke.h"
 #include "ui/terminal/TerminalPaneRuntimeSmoke.h"
 
 #include <QColor>
@@ -247,7 +248,7 @@ TerminalWorkbench {
     const qreal finalComposite = 255.0 * (finalColor.redF() * finalColor.alphaF() + (1 - finalColor.alphaF()));
     bool passed = stayedHovered && darkestComposite + 2 >= finalComposite;
     for (const auto *name : {"terminalRemoteFilesPageButton", "terminalHistoryPageButton", "terminalScriptsPageButton",
-                             "terminalNotesPageButton", "terminalAiAssistantButton"})
+                             "terminalAiAssistantButton"})
     {
         auto *page = workbench->findChild<QQuickItem *>(QLatin1StringView{name});
         if (!page)
@@ -387,7 +388,7 @@ inline std::optional<bool> runWorkbenchRuntimeCheck(NativeWindow &window, AppCon
     if (arguments.contains(QStringLiteral("--pane-scrollbar-smoke")))
         return verifyPaneScrollbarLayout(window, controller);
     if (arguments.contains(QStringLiteral("--script-form-layout-smoke")))
-        return verifyScriptFormLayout(window, controller);
+        return verifyScriptFormLayout(window, controller) && verifySidePanelLayout(window, controller);
     return runSideDrawerRuntimeCheck(window, controller, arguments);
 }
 } // namespace ztermy::ui

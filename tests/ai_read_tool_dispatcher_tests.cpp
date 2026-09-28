@@ -60,7 +60,6 @@ using ztermy::terminal::TerminalSemanticCapability;
          .steps = {{.command = "OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz123456 ls {{path}}",
                     .continuation = "immediate",
                     .timeoutMs = 30000}}}};
-    operations.notes = {{.path = "ops.md", .name = "ops.md", .size = 24, .modifiedUtcMs = 789}};
     operations.portForwarding = {{.id = "forward-1",
                                   .label = "Web",
                                   .profileName = "Test",
@@ -107,12 +106,11 @@ void AiReadToolDispatcherTests::publishesStrictReadOnlyCatalog()
 {
     const auto definitions = AiReadToolDispatcher::definitions();
     constexpr std::array expected{
-        std::string_view{"read_terminal_info"},   std::string_view{"read_terminal"},
-        std::string_view{"read_command_block"},   std::string_view{"read_command_output"},
-        std::string_view{"list_sftp_directory"},  std::string_view{"list_shell_history"},
-        std::string_view{"list_scripts"},         std::string_view{"read_script"},
-        std::string_view{"list_notes"},           std::string_view{"read_remote_telemetry"},
-        std::string_view{"list_port_forwarding"},
+        std::string_view{"read_terminal_info"},    std::string_view{"read_terminal"},
+        std::string_view{"read_command_block"},    std::string_view{"read_command_output"},
+        std::string_view{"list_sftp_directory"},   std::string_view{"list_shell_history"},
+        std::string_view{"list_scripts"},          std::string_view{"read_script"},
+        std::string_view{"read_remote_telemetry"}, std::string_view{"list_port_forwarding"},
     };
     QCOMPARE(definitions.size(), expected.size());
     for (std::size_t index = 0; index < definitions.size(); ++index)
@@ -183,10 +181,6 @@ void AiReadToolDispatcherTests::executesBoundedReads()
     QCOMPARE(variable.value("name").toString(), QStringLiteral("path"));
     QVERIFY(!variable.contains("default_value"));
     QVERIFY(scriptContent.value("untrusted_evidence").toBool());
-
-    result = object(dispatcher.execute("list_notes", R"({"offset":0,"limit":10})", snapshot));
-    QCOMPARE(result.value("notes").toObject().value("items").toArray().at(0).toObject().value("path").toString(),
-             QStringLiteral("ops.md"));
 
     result = object(dispatcher.execute("read_remote_telemetry", "{}", snapshot));
     QCOMPARE(result.value("telemetry").toObject().value("cpu_percent").toDouble(), 12.5);

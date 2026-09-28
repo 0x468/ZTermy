@@ -2,6 +2,10 @@
 
 Status: accepted
 
+2026-09-28 amendment: the Notes feature and `read_note`/`list_notes` tools
+have been retired; existing Markdown files remain untouched. The script-read
+and untrusted-content rules below remain applicable. See ADR 0117.
+
 ## Context
 
 Script and note metadata is useful for discovery but insufficient for an

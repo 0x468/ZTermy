@@ -1,7 +1,6 @@
 #include "application/ai/AiNativeToolCatalog.h"
 
 #include "application/ai/AiActionToolDispatcher.h"
-#include "application/ai/AiNoteReadTool.h"
 #include "application/ai/AiReadToolDispatcher.h"
 #include "application/ai/AiSftpListTool.h"
 #include "application/ai/AiSftpReadTool.h"
@@ -58,10 +57,6 @@ std::vector<AiToolDefinition> AiNativeToolCatalog::build(const AiTerminalReadSna
         readNames.emplace_back("list_scripts");
         readNames.emplace_back("read_script");
     }
-    if (!terminal.operations.notes.empty())
-    {
-        readNames.emplace_back("list_notes");
-    }
     if (capabilities.remoteTelemetryAvailable)
     {
         readNames.emplace_back("read_remote_telemetry");
@@ -92,10 +87,6 @@ std::vector<AiToolDefinition> AiNativeToolCatalog::build(const AiTerminalReadSna
     {
         result.push_back(AiSftpReadTool::definition());
         result.push_back(AiSftpListTool::definition());
-    }
-    if (!terminal.operations.notes.empty())
-    {
-        result.push_back(AiNoteReadTool::definition());
     }
 
     if (capabilities.actionsAllowed)

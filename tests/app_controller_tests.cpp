@@ -302,7 +302,6 @@ private slots:
     void scansAndExposesAiUserSkills();
     void importsAndExportsScriptLibraryWithoutOverwritingIds();
     void rendersAndRunsScriptAgainstFixedTerminal();
-    void managesLocalMarkdownNotesAndLatestSearch();
     void loadsRecentProfilesAndParsesQuickTargets();
     void reconnectsSavedKeyProfileOnRealHost();
 };
@@ -2546,9 +2545,9 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QVERIFY(controller.toggleTerminalWorkbench(QStringLiteral("scripts")));
     QCOMPARE(controller.terminalTabs().at(1).toMap().value(QStringLiteral("workbenchPage")).toString(),
              QStringLiteral("scripts"));
-    QVERIFY(controller.toggleTerminalWorkbench(QStringLiteral("notes")));
+    QVERIFY(!controller.toggleTerminalWorkbench(QStringLiteral("notes")));
     QCOMPARE(controller.terminalTabs().at(1).toMap().value(QStringLiteral("workbenchPage")).toString(),
-             QStringLiteral("notes"));
+             QStringLiteral("scripts"));
     QVERIFY(controller.runTerminalCommand(QStringLiteral("Write-Output second-tab")));
     const QVariantList globalHistory = controller.terminalHistory();
     QCOMPARE(globalHistory.size(), 1);
@@ -4033,58 +4032,6 @@ void AppControllerTests::rendersAndRunsScriptAgainstFixedTerminal()
     QVERIFY(controller.cancelScript(firstSessionId));
     QCOMPARE(firstTab().value(QStringLiteral("scriptExecutionState")).toString(), QStringLiteral("cancelled"));
     QVERIFY(!controller.cancelScript(firstSessionId));
-}
-
-void AppControllerTests::managesLocalMarkdownNotesAndLatestSearch()
-{
-    QTemporaryDir directory;
-    QVERIFY(directory.isValid());
-    const QString profilesPath = directory.filePath(QStringLiteral("profiles.json"));
-    const QString knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json"));
-    const QString settingsPath = directory.filePath(QStringLiteral("settings.json"));
-    ztermy::AppController controller(profilesPath, knownHostsPath, settingsPath);
-
-    QVERIFY(controller.notes().isEmpty());
-    QVERIFY(controller.createNoteFolder(QStringLiteral("手册")));
-    QVERIFY(controller.createNote(QStringLiteral("手册/first.md")));
-    QCOMPARE(controller.activeNotePath(), QStringLiteral("手册/first.md"));
-    controller.updateActiveNoteContent(QStringLiteral("# First\n\nfirst marker"));
-    QVERIFY(controller.activeNoteDirty());
-    QVERIFY(!controller.createNote(QStringLiteral("手册/blocked.md")));
-    QVERIFY(!controller.openNote(QStringLiteral("missing.md")));
-    QVERIFY(controller.saveActiveNote());
-    QVERIFY(!controller.activeNoteDirty());
-
-    QVERIFY(controller.createNote(QStringLiteral("手册/second.md")));
-    controller.updateActiveNoteContent(QStringLiteral("# Second\n\nsecond marker"));
-    QVERIFY(controller.saveActiveNote());
-    QVERIFY(controller.openNote(QStringLiteral("手册/first.md")));
-    controller.updateActiveNoteContent(QStringLiteral("unsaved draft"));
-    QVERIFY(!controller.openNote(QStringLiteral("手册/second.md")));
-    QVERIFY(controller.discardActiveNoteChanges());
-    QCOMPARE(controller.activeNoteContent(), QStringLiteral("# First\n\nfirst marker"));
-
-    controller.searchNotes(QStringLiteral("second marker"));
-    controller.searchNotes(QStringLiteral("first marker"));
-    QTRY_COMPARE(controller.noteSearchState(), QStringLiteral("ready"));
-    QCOMPARE(controller.noteSearchResults().size(), 1);
-    QCOMPARE(controller.noteSearchResults().constFirst().toMap().value(QStringLiteral("path")).toString(),
-             QStringLiteral("手册/first.md"));
-
-    QVERIFY(controller.renameNoteEntry(QStringLiteral("手册/first.md"), QStringLiteral("手册/renamed.md")));
-    QCOMPARE(controller.activeNotePath(), QStringLiteral("手册/renamed.md"));
-    const QString exportPath = directory.filePath(QStringLiteral("exported.md"));
-    QVERIFY(controller.exportActiveNote(QUrl::fromLocalFile(exportPath).toString()));
-    QFile exported(exportPath);
-    QVERIFY(exported.open(QIODevice::ReadOnly));
-    QVERIFY(exported.readAll().contains("first marker"));
-
-    ztermy::AppController reloaded(profilesPath, knownHostsPath, settingsPath);
-    QCOMPARE(reloaded.notes().size(), 3);
-    QVERIFY(reloaded.openNote(QStringLiteral("手册/renamed.md")));
-    QCOMPARE(reloaded.activeNoteContent(), QStringLiteral("# First\n\nfirst marker"));
-    QVERIFY(reloaded.deleteNoteEntry(QStringLiteral("手册")));
-    QVERIFY(reloaded.notes().isEmpty());
 }
 
 void AppControllerTests::reconnectsSavedKeyProfileOnRealHost()

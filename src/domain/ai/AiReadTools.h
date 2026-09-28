@@ -89,15 +89,6 @@ struct AiScriptSnapshot final
     std::vector<Step> steps;
 };
 
-struct AiNoteSnapshot final
-{
-    std::string path;
-    std::string name;
-    std::uint64_t size = 0;
-    std::int64_t modifiedUtcMs = 0;
-    bool folder = false;
-};
-
 struct AiPortForwardingSnapshot final
 {
     std::string id;
@@ -138,7 +129,6 @@ struct AiOperationsReadSnapshot final
     std::vector<AiSftpEntrySnapshot> sftpEntries;
     std::vector<AiShellHistorySnapshot> shellHistory;
     std::vector<AiScriptSnapshot> scripts;
-    std::vector<AiNoteSnapshot> notes;
     std::vector<AiPortForwardingSnapshot> portForwarding;
     AiTelemetrySnapshot telemetry;
 };

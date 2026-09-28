@@ -90,7 +90,7 @@ SidePanelSurface {
 
     focus: visible
     Keys.onEscapePressed: closeRequested()
-    panelTitle: currentPage === "sftp" ? qsTr("Remote files") : currentPage === "history" ? qsTr("Command history") : currentPage === "notes" ? qsTr("Notes") : currentPage === "ai" ? qsTr("Terminal AI assistant") : qsTr("Scripts")
+    panelTitle: currentPage === "sftp" ? qsTr("Remote files") : currentPage === "history" ? qsTr("Command history") : currentPage === "ai" ? qsTr("Terminal AI assistant") : qsTr("Scripts")
     onVisibleChanged: {
         Qt.callLater(ensureHistoryLoaded);
     }
@@ -287,24 +287,6 @@ SidePanelSurface {
                 }
 
                 AppIconButton {
-                    id: notesPageButton
-                    objectName: "terminalNotesPageButton"
-
-                    Layout.alignment: Qt.AlignVCenter
-                    Layout.preferredWidth: 28
-                    Layout.preferredHeight: 28
-                    checkable: true
-                    checked: workbench.currentPage === "notes"
-                    selected: checked
-                    onClicked: workbench.controller.toggleTerminalWorkbench("notes")
-                    label: qsTr("Notes")
-                    iconName: "file"
-                    iconColor: notesPageButton.checked ? Theme.accent : Theme.textSoft
-
-                    toolTipText: qsTr("Notes")
-                }
-
-                AppIconButton {
                     id: aiPageButton
 
                     objectName: "terminalAiAssistantButton"
@@ -365,13 +347,6 @@ SidePanelSurface {
                     controller: workbench.controller
                 }
 
-                NotesPane {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    visible: workbench.currentPage === "notes"
-                    controller: workbench.controller
-                }
-
                 AiAssistantPane {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
@@ -386,12 +361,11 @@ SidePanelSurface {
                     Layout.fillHeight: true
                     visible: workbench.currentPage === "history"
 
-                    ColumnLayout {
+                    SidePanelPage {
                         anchors.fill: parent
-                        anchors.margins: 8
                         spacing: 1
 
-                        RowLayout {
+                        tools: RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
 
@@ -421,7 +395,7 @@ SidePanelSurface {
                             }
                         }
 
-                        RowLayout {
+                        header: RowLayout {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 26
                             spacing: 3
@@ -599,14 +573,13 @@ SidePanelSurface {
                     }
                 }
 
-                ColumnLayout {
+                SidePanelPage {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    Layout.margins: 8
                     spacing: 6
                     visible: workbench.currentPage === "scripts"
 
-                    RowLayout {
+                    header: RowLayout {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 26
                         visible: workbench.scriptSurface === "library"
@@ -668,13 +641,14 @@ SidePanelSurface {
                         }
                     }
 
-                    RowLayout {
+                    tools: RowLayout {
                         Layout.fillWidth: true
                         visible: workbench.scriptSurface === "library"
                         spacing: 8
 
                         AppTextField {
                             id: quickCommandSearch
+                            objectName: "scriptLibrarySearch"
 
                             Layout.fillWidth: true
                             compact: true
@@ -904,6 +878,7 @@ SidePanelSurface {
                     }
 
                     StatePanel {
+                        objectName: "scriptLibraryEmptyState"
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         visible: workbench.scriptSurface === "library" && workbench.filteredQuickCommands.length === 0
@@ -913,6 +888,7 @@ SidePanelSurface {
                         description: quickCommandSearch.text.length > 0 ? qsTr("Try a different search term.") : qsTr("Build reusable, typed command sequences and run them against one explicit terminal.")
 
                         ActionButton {
+                            objectName: "scriptLibraryCreateButton"
                             text: qsTr("New script")
                             accessibleName: qsTr("Create the first script")
                             onClicked: workbench.beginNewCommand("")

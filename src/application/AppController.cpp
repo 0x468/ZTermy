@@ -256,11 +256,6 @@ private:
     return QFileInfo(settingsPath).dir().filePath(QStringLiteral("scripts.json"));
 }
 
-[[nodiscard]] QString siblingNotesDirectory(const QString &settingsPath)
-{
-    return QFileInfo(settingsPath).dir().filePath(QStringLiteral("notes"));
-}
-
 [[nodiscard]] QString siblingThemesDirectory(const QString &settingsPath)
 {
     return QFileInfo(settingsPath).dir().filePath(QStringLiteral("themes"));
@@ -2505,7 +2500,6 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
       m_terminalThemes(siblingThemesDirectory(m_settingsStore.filePath())),
       m_scriptStore(siblingScriptsFile(m_settingsStore.filePath())),
       m_legacyQuickCommandPath(siblingQuickCommandsFile(m_settingsStore.filePath())),
-      m_noteStore(siblingNotesDirectory(m_settingsStore.filePath())),
       m_workspaceStateStore(siblingWorkspaceStateFile(m_settingsStore.filePath())),
       m_aiActivity(siblingAiAuditFile(m_settingsStore.filePath())),
       m_aiPermissionRuleStore(siblingAiPermissionRulesFile(m_settingsStore.filePath())),
@@ -2548,7 +2542,6 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
       m_terminalThemes(siblingThemesDirectory(m_settingsStore.filePath())),
       m_scriptStore(siblingScriptsFile(m_settingsStore.filePath())),
       m_legacyQuickCommandPath(siblingQuickCommandsFile(m_settingsStore.filePath())),
-      m_noteStore(siblingNotesDirectory(m_settingsStore.filePath())),
       m_workspaceStateStore(siblingWorkspaceStateFile(m_settingsStore.filePath())),
       m_aiActivity(siblingAiAuditFile(m_settingsStore.filePath())),
       m_aiPermissionRuleStore(siblingAiPermissionRulesFile(m_settingsStore.filePath())),
@@ -2584,17 +2577,12 @@ void AppController::initializeRuntime()
     QObject::connect(this, &AppController::openSshConfigImportCompleted, this, &AppController::applyOpenSshConfigImport,
                      Qt::QueuedConnection);
     qRegisterMetaType<ShellHistoryEntries>();
-    qRegisterMetaType<NoteSearchResults>();
     qRegisterMetaType<AiTextAttachments>();
     qRegisterMetaType<AiImageAttachments>();
     qRegisterMetaType<AiUserSkills>();
     QObject::connect(this, &AppController::terminalTabsChanged, this, &AppController::terminalWorkspaceChanged);
     QObject::connect(this, &AppController::terminalHistoryTaskCompleted, this,
                      &AppController::applyTerminalHistoryTaskResult, Qt::QueuedConnection);
-    QObject::connect(this, &AppController::noteSearchTaskCompleted, this, &AppController::applyNoteSearchTaskResult,
-                     Qt::QueuedConnection);
-    QObject::connect(this, &AppController::aiNoteReadTaskCompleted, this, &AppController::applyAiNoteReadTaskResult,
-                     Qt::QueuedConnection);
     QObject::connect(this, &AppController::aiTextAttachmentTaskCompleted, this,
                      &AppController::applyAiTextAttachmentTaskResult, Qt::QueuedConnection);
     QObject::connect(this, &AppController::aiImageAttachmentTaskCompleted, this,
@@ -2629,7 +2617,6 @@ void AppController::initializeRuntime()
     initializeScriptExecutionTimer();
     loadQuickCommands();
     loadWorkspaceState();
-    refreshNotes();
     initializeAiModelCatalogRefresh();
 }
 
@@ -3161,41 +3148,6 @@ QVariantList AppController::quickCommands() const
 QString AppController::quickCommandOperationError() const
 {
     return m_quickCommandOperationError;
-}
-
-QVariantList AppController::notes() const
-{
-    return m_notes;
-}
-
-QVariantList AppController::noteSearchResults() const
-{
-    return m_noteSearchResults;
-}
-
-QString AppController::activeNotePath() const
-{
-    return m_activeNotePath;
-}
-
-QString AppController::activeNoteContent() const
-{
-    return m_activeNoteContent;
-}
-
-bool AppController::activeNoteDirty() const noexcept
-{
-    return m_activeNoteDirty;
-}
-
-QString AppController::noteSearchState() const
-{
-    return m_noteSearchState;
-}
-
-QString AppController::noteOperationError() const
-{
-    return m_noteOperationError;
 }
 
 QVariantList AppController::terminalHistory() const
@@ -5695,7 +5647,7 @@ bool AppController::toggleTerminalWorkbench(const QString &page)
     TerminalTab *tab = activeTab();
     if (tab == nullptr
         || (page != QStringLiteral("history") && page != QStringLiteral("scripts") && page != QStringLiteral("sftp")
-            && page != QStringLiteral("notes") && page != QStringLiteral("ai")))
+            && page != QStringLiteral("ai")))
     {
         return false;
     }
@@ -6621,243 +6573,6 @@ bool AppController::exportQuickCommands(const QString &localFileUrl)
     return true;
 }
 
-void AppController::refreshNotes()
-{
-    const auto entries = m_noteStore.entries();
-    if (!entries)
-    {
-        setNoteOperationError(tr("The local notes folder could not be read."));
-        return;
-    }
-    QVariantList values;
-    values.reserve(static_cast<qsizetype>(entries->size()));
-    for (const workbench::NoteEntry &entry : *entries)
-    {
-        values.append(QVariantMap{{QStringLiteral("path"), entry.path},
-                                  {QStringLiteral("name"), entry.name},
-                                  {QStringLiteral("folder"), entry.folder},
-                                  {QStringLiteral("size"), QVariant::fromValue<qulonglong>(entry.size)},
-                                  {QStringLiteral("modifiedUtcMs"), entry.modifiedUtcMs}});
-    }
-    m_notes = std::move(values);
-    m_noteOperationError.clear();
-    emit notesChanged();
-}
-
-bool AppController::openNote(const QString &relativePath, const bool discardUnsavedChanges)
-{
-    if (m_activeNoteDirty && !discardUnsavedChanges)
-    {
-        if (relativePath == m_activeNotePath)
-        {
-            return true;
-        }
-        setNoteOperationError(tr("Save or discard the current note before opening another one."));
-        return false;
-    }
-    const auto content = m_noteStore.read(relativePath);
-    if (!content)
-    {
-        setNoteOperationError(tr("The note could not be opened."));
-        return false;
-    }
-    m_activeNotePath = relativePath;
-    m_activeNoteContent = *content;
-    m_activeNoteDirty = false;
-    m_noteOperationError.clear();
-    emit notesChanged();
-    return true;
-}
-
-void AppController::updateActiveNoteContent(const QString &content)
-{
-    if (m_activeNotePath.isEmpty() || m_activeNoteContent == content)
-    {
-        return;
-    }
-    m_activeNoteContent = content;
-    m_activeNoteDirty = true;
-    emit notesChanged();
-}
-
-bool AppController::saveActiveNote()
-{
-    if (m_activeNotePath.isEmpty())
-    {
-        setNoteOperationError(tr("Open a note before saving."));
-        return false;
-    }
-    if (const auto saved = m_noteStore.save(m_activeNotePath, m_activeNoteContent); !saved)
-    {
-        setNoteOperationError(saved.error() == workbench::NoteStoreError::noteTooLarge
-                                  ? tr("The note exceeds the 2 MiB limit.")
-                                  : tr("The note could not be saved."));
-        return false;
-    }
-    m_activeNoteDirty = false;
-    m_noteOperationError.clear();
-    refreshNotes();
-    return true;
-}
-
-bool AppController::discardActiveNoteChanges()
-{
-    if (m_activeNotePath.isEmpty())
-    {
-        return false;
-    }
-    return openNote(m_activeNotePath, true);
-}
-
-bool AppController::createNote(const QString &relativePath)
-{
-    if (m_activeNoteDirty)
-    {
-        setNoteOperationError(tr("Save or discard the current note before creating another one."));
-        return false;
-    }
-    if (const auto saved = m_noteStore.save(relativePath, QString{}); !saved)
-    {
-        setNoteOperationError(tr("The note could not be created. Use a safe relative path ending in .md."));
-        return false;
-    }
-    refreshNotes();
-    return openNote(relativePath, true);
-}
-
-bool AppController::createNoteFolder(const QString &relativePath)
-{
-    if (const auto created = m_noteStore.createFolder(relativePath); !created)
-    {
-        setNoteOperationError(tr("The note folder could not be created."));
-        return false;
-    }
-    refreshNotes();
-    return true;
-}
-
-bool AppController::renameNoteEntry(const QString &sourceRelativePath, const QString &destinationRelativePath)
-{
-    if (const auto renamed = m_noteStore.renameEntry(sourceRelativePath, destinationRelativePath); !renamed)
-    {
-        setNoteOperationError(tr("The note or folder could not be moved or renamed."));
-        return false;
-    }
-    if (m_activeNotePath == sourceRelativePath)
-    {
-        m_activeNotePath = destinationRelativePath;
-    }
-    else if (m_activeNotePath.startsWith(sourceRelativePath + QLatin1Char('/')))
-    {
-        m_activeNotePath = destinationRelativePath + m_activeNotePath.sliced(sourceRelativePath.size());
-    }
-    refreshNotes();
-    return true;
-}
-
-bool AppController::deleteNoteEntry(const QString &relativePath)
-{
-    if ((m_activeNotePath == relativePath || m_activeNotePath.startsWith(relativePath + QLatin1Char('/')))
-        && m_activeNoteDirty)
-    {
-        setNoteOperationError(tr("Discard the active note changes before deleting it."));
-        return false;
-    }
-    if (const auto removed = m_noteStore.removeEntry(relativePath); !removed)
-    {
-        setNoteOperationError(tr("The note or folder could not be deleted."));
-        return false;
-    }
-    if (m_activeNotePath == relativePath || m_activeNotePath.startsWith(relativePath + QLatin1Char('/')))
-    {
-        m_activeNotePath.clear();
-        m_activeNoteContent.clear();
-        m_activeNoteDirty = false;
-    }
-    refreshNotes();
-    return true;
-}
-
-void AppController::searchNotes(const QString &query)
-{
-    const std::uint64_t requestId = ++m_noteSearchRequestId;
-    const QString normalized = query.trimmed();
-    if (normalized.isEmpty())
-    {
-        m_noteSearchResults.clear();
-        m_noteSearchState = QStringLiteral("idle");
-        emit notesChanged();
-        return;
-    }
-    m_noteSearchState = QStringLiteral("loading");
-    m_noteOperationError.clear();
-    emit notesChanged();
-
-    const QString rootPath = m_noteStore.rootPath();
-    const QString searchError = tr("The local notes search could not be completed.");
-    const QPointer<AppController> self(this);
-    QThreadPool::globalInstance()->start([self, rootPath, normalized, requestId, searchError] {
-        NoteSearchResults results;
-        QString error;
-        try
-        {
-            auto searched = workbench::NoteStore(rootPath).search(normalized);
-            if (searched)
-            {
-                results = std::move(*searched);
-            }
-            else
-            {
-                error = searchError;
-            }
-        }
-        catch (const std::bad_alloc &)
-        {
-            error = searchError;
-        }
-        if (self)
-        {
-            emit self->noteSearchTaskCompleted(requestId, std::move(results), error);
-        }
-    });
-}
-
-bool AppController::importNote(const QString &localFileUrl, const QString &destinationFolder)
-{
-    if (m_activeNoteDirty)
-    {
-        setNoteOperationError(tr("Save or discard the current note before importing another one."));
-        return false;
-    }
-    const QUrl url(localFileUrl);
-    const QString path = url.isLocalFile() ? url.toLocalFile() : localFileUrl;
-    const auto imported = m_noteStore.importNote(path, destinationFolder);
-    if (!imported)
-    {
-        setNoteOperationError(tr("Only valid UTF-8 Markdown notes up to 2 MiB can be imported."));
-        return false;
-    }
-    refreshNotes();
-    return openNote(*imported, true);
-}
-
-bool AppController::exportActiveNote(const QString &localFileUrl)
-{
-    if (m_activeNotePath.isEmpty())
-    {
-        return false;
-    }
-    const QUrl url(localFileUrl);
-    const QString path = url.isLocalFile() ? url.toLocalFile() : localFileUrl;
-    if (const auto exported = m_noteStore.exportNote(m_activeNotePath, path); !exported)
-    {
-        setNoteOperationError(tr("The note could not be exported."));
-        return false;
-    }
-    setNoteOperationError({});
-    return true;
-}
-
 void AppController::refreshSessionHistory()
 {
     auto entries = terminalHistory();
@@ -7712,61 +7427,6 @@ void AppController::applyTerminalHistoryTaskResult(const QString &tabId, const q
         target->historyError.clear();
     }
     emit terminalHistoryChanged();
-}
-
-void AppController::applyNoteSearchTaskResult(const quint64 requestId, const NoteSearchResults &results,
-                                              const QString &error)
-{
-    if (requestId != m_noteSearchRequestId)
-    {
-        return;
-    }
-    m_noteSearchResults.clear();
-    if (!error.isEmpty())
-    {
-        m_noteSearchState = QStringLiteral("error");
-        m_noteOperationError = error;
-    }
-    else
-    {
-        m_noteSearchState = QStringLiteral("ready");
-        m_noteOperationError.clear();
-        m_noteSearchResults.reserve(static_cast<qsizetype>(results.size()));
-        for (const workbench::NoteSearchResult &result : results)
-        {
-            m_noteSearchResults.append(QVariantMap{{QStringLiteral("path"), result.path},
-                                                   {QStringLiteral("title"), result.title},
-                                                   {QStringLiteral("snippet"), result.snippet}});
-        }
-    }
-    emit notesChanged();
-}
-
-void AppController::applyAiNoteReadTaskResult(const QString &tabId, const quint64 requestId, const quint64 generation,
-                                              const QString &relativePath, const QByteArray &outputJson)
-{
-    TerminalTab *tab = findTab(tabId);
-    if (tab == nullptr || !tab->pendingAiNoteRead.has_value() || !aiTurnActive(*tab)
-        || tab->pendingAiNoteRead->requestId != requestId
-        || tab->pendingAiNoteRead->request.target.sessionGeneration != generation
-        || tab->pendingAiNoteRead->request.relativePath != relativePath)
-    {
-        return;
-    }
-    const auto pending = std::move(*tab->pendingAiNoteRead);
-    tab->pendingAiNoteRead.reset();
-    std::string output = outputJson.toStdString();
-    if (tab->reconnectGeneration != generation)
-    {
-        output = ai::AiNoteReadTool::failure("scope_changed",
-                                             "The requested terminal session or generation is no longer active.");
-    }
-    const QString resultCode = aiActivityResultCode(output);
-    recordAiActivity(*tab, pending.call,
-                     resultCode == QStringLiteral("ok") ? QStringLiteral("succeeded") : QStringLiteral("failed"),
-                     resultCode, false);
-    static_cast<void>(completePendingAiTool(
-        *tab, ai::AiToolOutput{.callId = pending.call.id, .name = pending.call.name, .outputJson = std::move(output)}));
 }
 
 bool AppController::connectPrivateKey(const QString &host, const int port, const QString &username,
@@ -11966,17 +11626,6 @@ ai::AiTerminalReadSnapshot AppController::aiReadSnapshot(const TerminalTab &tab)
         }
         operations.scripts.push_back(std::move(snapshot));
     }
-    operations.notes.reserve(static_cast<std::size_t>(m_notes.size()));
-    for (const QVariant &noteValue : m_notes)
-    {
-        const QVariantMap note = noteValue.toMap();
-        operations.notes.push_back(
-            ai::AiNoteSnapshot{.path = utf8String(note.value(QStringLiteral("path")).toString()),
-                               .name = utf8String(note.value(QStringLiteral("name")).toString()),
-                               .size = note.value(QStringLiteral("size")).toULongLong(),
-                               .modifiedUtcMs = note.value(QStringLiteral("modifiedUtcMs")).toLongLong(),
-                               .folder = note.value(QStringLiteral("folder")).toBool()});
-    }
     operations.portForwarding.reserve(m_portForwardingRules.size());
     for (const auto &rule : m_portForwardingRules)
     {
@@ -12934,109 +12583,6 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                     catch (...)
                     {
                         qCCritical(appControllerLog) << "AI SFTP read cancellation suppressed an exception";
-                    }
-                }};
-            }
-            if (call.name == "read_note")
-            {
-                if (target != nullptr)
-                {
-                    recordAiActivity(*target, call, QStringLiteral("queued"), QStringLiteral("pending"), false);
-                }
-                if (target == nullptr || !aiTurnActive(*target) || !target->aiTurnBudget)
-                {
-                    return ai::AiTurnRunner::ToolHandlingResult{
-                        .output = ai::AiToolOutput{
-                            .callId = call.id,
-                            .name = call.name,
-                            .outputJson = ai::AiNoteReadTool::failure("session_unavailable",
-                                                                      "The target terminal session is unavailable.")}};
-                }
-                const auto signature = call.name + ':' + call.argumentsJson;
-                const auto budgetDecision =
-                    target->aiTurnBudget->authorize(false, signature, target->reconnectGeneration);
-                if (budgetDecision != ai::AiAgentBudgetDecision::allow)
-                {
-                    recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("budget_denied"), false);
-                    return ai::AiTurnRunner::ToolHandlingResult{
-                        .output = ai::AiToolOutput{.callId = call.id,
-                                                   .name = call.name,
-                                                   .outputJson = aiBudgetFailureJson(budgetDecision)}};
-                }
-                auto request = ai::AiNoteReadTool::parse(call.argumentsJson, *turnTarget);
-                if (!request.has_value())
-                {
-                    recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("invalid_arguments"),
-                                     false);
-                    return ai::AiTurnRunner::ToolHandlingResult{
-                        .output = ai::AiToolOutput{.callId = call.id,
-                                                   .name = call.name,
-                                                   .outputJson = std::move(request.error())}};
-                }
-                const ai::AiSessionTarget actualTarget{.sessionId = utf8String(target->id),
-                                                       .sessionGeneration = target->reconnectGeneration};
-                if (request->target != actualTarget)
-                {
-                    const auto output = ai::AiNoteReadTool::failure(
-                        "scope_changed", "The requested terminal session or generation is no longer active.");
-                    recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("scope_changed"), false);
-                    return ai::AiTurnRunner::ToolHandlingResult{
-                        .output = ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = output}};
-                }
-                if (target->pendingAiNoteRead.has_value())
-                {
-                    const auto output = ai::AiNoteReadTool::failure(
-                        "busy", "Another note read is already active for this terminal assistant.");
-                    recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("busy"), false);
-                    return ai::AiTurnRunner::ToolHandlingResult{
-                        .output = ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = output}};
-                }
-                const quint64 requestId = ++target->aiNoteReadRequestId;
-                target->pendingAiNoteRead = TerminalTab::PendingAiNoteRead{.requestId = requestId,
-                                                                           .call = call,
-                                                                           .request = std::move(*request)};
-                const QString rootPath = m_noteStore.rootPath();
-                const QString relativePath = target->pendingAiNoteRead->request.relativePath;
-                const auto noteRequest =
-                    std::make_shared<const ai::AiNoteReadRequest>(target->pendingAiNoteRead->request);
-                const quint64 generation = target->reconnectGeneration;
-                const QPointer<AppController> self(this);
-                QThreadPool::globalInstance()->start(
-                    [self, rootPath, relativePath, noteRequest, tabId, requestId, generation] {
-                        std::string output;
-                        try
-                        {
-                            auto read = workbench::NoteStore(rootPath).read(relativePath);
-                            output = read.has_value() ? ai::AiNoteReadTool::result(*noteRequest, *read)
-                                                      : ai::AiNoteReadTool::failure(read.error());
-                        }
-                        catch (const std::bad_alloc &)
-                        {
-                            output = ai::AiNoteReadTool::failure(workbench::NoteStoreError::io);
-                        }
-                        if (self)
-                        {
-                            emit self->aiNoteReadTaskCompleted(tabId, requestId, generation, relativePath,
-                                                               QByteArray::fromStdString(output));
-                        }
-                    });
-                return ai::AiTurnRunner::ToolHandlingResult{.cancel = [this, tabId, requestId] noexcept {
-                    try
-                    {
-                        TerminalTab *cancelledTarget = findTab(tabId);
-                        if (cancelledTarget == nullptr || !cancelledTarget->pendingAiNoteRead.has_value()
-                            || cancelledTarget->pendingAiNoteRead->requestId != requestId)
-                        {
-                            return;
-                        }
-                        const auto cancelledCall = cancelledTarget->pendingAiNoteRead->call;
-                        cancelledTarget->pendingAiNoteRead.reset();
-                        recordAiActivity(*cancelledTarget, cancelledCall, QStringLiteral("cancelled"),
-                                         QStringLiteral("cancelled"), false);
-                    }
-                    catch (...)
-                    {
-                        qCCritical(appControllerLog) << "AI note read cancellation suppressed an exception";
                     }
                 }};
             }
@@ -17171,7 +16717,9 @@ void AppController::applyWorkspaceState(TerminalTab &tab) const
     }
     tab.sftpPath = utf8QString(state->lastRemotePath);
     tab.sftpRequestedPath = tab.sftpPath;
-    tab.workbenchPage = utf8QString(state->workbenchPage);
+    // Retired page remains readable in old workspace documents; never touch
+    // the user's Markdown files when restoring a layout.
+    tab.workbenchPage = state->workbenchPage == "notes" ? QStringLiteral("history") : utf8QString(state->workbenchPage);
     tab.workbenchSide = utf8QString(state->workbenchSide);
     tab.sftpViewMode = utf8QString(state->sftpViewMode);
     tab.sftpSortColumn = utf8QString(state->sftpSortColumn);
@@ -17332,16 +16880,6 @@ QString AppController::aiUserSkillWarningText(const ai::AiUserSkillWarning warni
             return tr("Only the first 200 skill directories are loaded.");
     }
     return tr("The skill could not be loaded.");
-}
-
-void AppController::setNoteOperationError(QString message)
-{
-    if (m_noteOperationError == message)
-    {
-        return;
-    }
-    m_noteOperationError = std::move(message);
-    emit notesChanged();
 }
 
 } // namespace ztermy

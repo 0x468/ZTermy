@@ -2,7 +2,6 @@
 
 #include "application/ai/AiActionToolDispatcher.h"
 #include "application/ai/AiConversationModel.h"
-#include "application/ai/AiNoteReadTool.h"
 #include "application/ai/AiSftpListTool.h"
 #include "application/ai/AiSftpReadTool.h"
 #include "application/ai/AiTurnRunner.h"
@@ -89,13 +88,6 @@ struct TerminalSessionState final
         ai::AiSftpListRequest request;
     };
 
-    struct PendingAiNoteRead final
-    {
-        quint64 requestId = 0;
-        ai::AiToolCall call;
-        ai::AiNoteReadRequest request;
-    };
-
     struct PendingAiMcpCall final
     {
         ai::AiToolCall call;
@@ -114,7 +106,6 @@ struct TerminalSessionState final
     std::optional<ai::AiTerminalAction> pendingAiAction;
     std::optional<PendingAiSftpRead> pendingAiSftpRead;
     std::optional<PendingAiSftpList> pendingAiSftpList;
-    std::optional<PendingAiNoteRead> pendingAiNoteRead;
     std::optional<PendingAiMcpCall> pendingAiMcpCall;
     qint64 connectedUtcMs = 0;
     qreal sessionBackgroundOpacity = -1.0;
@@ -125,7 +116,6 @@ struct TerminalSessionState final
     std::uint64_t sftpRequestId = 0;
     std::uint64_t aiSftpReadRequestId = 0;
     std::uint64_t aiSftpListRequestId = 0;
-    std::uint64_t aiNoteReadRequestId = 0;
     std::uint64_t sftpGeneration = 0;
     std::uint64_t sftpTreeRequestId = 0;
     qreal workbenchWidth = 520.0;

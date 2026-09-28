@@ -388,8 +388,6 @@ add_library(ztermy_workbench_persistence STATIC
     src/infrastructure/workbench/PowerShellHistoryReader.h
     src/infrastructure/workbench/QuickCommandStore.cpp
     src/infrastructure/workbench/QuickCommandStore.h
-    src/infrastructure/workbench/NoteStore.cpp
-    src/infrastructure/workbench/NoteStore.h
     src/infrastructure/workbench/ScriptStore.cpp
     src/infrastructure/workbench/ScriptStore.h
     src/infrastructure/workbench/WorkspaceStateStore.cpp
@@ -718,8 +716,6 @@ add_library(ztermy_ai_application STATIC
     src/application/ai/AiConversationHistoryModel.h
     src/application/ai/AiNativeToolCatalog.cpp
     src/application/ai/AiNativeToolCatalog.h
-    src/application/ai/AiNoteReadTool.cpp
-    src/application/ai/AiNoteReadTool.h
     src/application/ai/AiPrivacyDiagnostics.cpp
     src/application/ai/AiPrivacyDiagnostics.h
     src/application/ai/McpRuntimeManager.cpp
@@ -1204,6 +1200,7 @@ set_source_files_properties(
 )
 set_source_files_properties(src/ui/qml/AppIconButton.qml PROPERTIES QT_RESOURCE_ALIAS AppIconButton.qml)
 set_source_files_properties(src/ui/qml/SidePanelSurface.qml PROPERTIES QT_RESOURCE_ALIAS SidePanelSurface.qml)
+set_source_files_properties(src/ui/qml/SidePanelPage.qml PROPERTIES QT_RESOURCE_ALIAS SidePanelPage.qml)
 set_source_files_properties(src/ui/qml/AppSideDrawer.qml PROPERTIES QT_RESOURCE_ALIAS AppSideDrawer.qml)
 set_source_files_properties(src/ui/qml/ResizeSnap.qml PROPERTIES QT_RESOURCE_ALIAS ResizeSnap.qml)
 set_source_files_properties(src/ui/qml/PaneDragSurface.qml PROPERTIES QT_RESOURCE_ALIAS PaneDragSurface.qml)
@@ -1378,10 +1375,6 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS MarkdownMessage.qml
 )
 set_source_files_properties(
-    src/ui/qml/NotesPane.qml
-    PROPERTIES QT_RESOURCE_ALIAS NotesPane.qml
-)
-set_source_files_properties(
     src/ui/qml/ScriptEditor.qml
     PROPERTIES QT_RESOURCE_ALIAS ScriptEditor.qml
 )
@@ -1451,6 +1444,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/AppIcon.qml
         src/ui/qml/AppIconButton.qml
         src/ui/qml/SidePanelSurface.qml
+        src/ui/qml/SidePanelPage.qml
         src/ui/qml/AppSideDrawer.qml
         src/ui/qml/ResizeSnap.qml
         src/ui/qml/PaneDragSurface.qml
@@ -1478,7 +1472,6 @@ qt_add_qml_module(ztermy
         src/ui/qml/KeyboardAction.qml
         src/ui/qml/LocalFilesPane.qml
         src/ui/qml/Main.qml
-        src/ui/qml/NotesPane.qml
         src/ui/qml/ReleaseIdentityCard.qml
         src/ui/qml/RemoteTelemetryStrip.qml
         src/ui/qml/ScriptEditor.qml
@@ -2777,26 +2770,6 @@ if(BUILD_TESTING)
 
     add_test(NAME script-store COMMAND ztermy_script_store_tests)
 
-    qt_add_executable(ztermy_note_store_tests
-        tests/note_store_tests.cpp
-    )
-
-    target_compile_features(ztermy_note_store_tests PRIVATE cxx_std_23)
-    target_link_libraries(ztermy_note_store_tests PRIVATE
-        ztermy_workbench_persistence
-        Qt6::Test
-    )
-
-    if(MSVC)
-        target_compile_options(ztermy_note_store_tests PRIVATE
-            /permissive-
-            /utf-8
-            /W4
-            /WX
-        )
-    endif()
-
-    add_test(NAME note-store COMMAND ztermy_note_store_tests)
 
     qt_add_executable(ztermy_script_execution_tests
         tests/script_execution_tests.cpp
@@ -4326,21 +4299,6 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME ai-sftp-list-tool COMMAND ztermy_ai_sftp_list_tool_tests)
 
-    qt_add_executable(ztermy_ai_note_read_tool_tests
-        tests/ai_note_read_tool_tests.cpp
-    )
-
-    target_compile_features(ztermy_ai_note_read_tool_tests PRIVATE cxx_std_23)
-    target_link_libraries(ztermy_ai_note_read_tool_tests PRIVATE
-        ztermy_ai_application
-        Qt6::Test
-    )
-    if(MSVC)
-        target_compile_options(ztermy_ai_note_read_tool_tests PRIVATE
-            /W4 /WX /permissive- /utf-8 /Zc:__cplusplus
-        )
-    endif()
-    add_test(NAME ai-note-read-tool COMMAND ztermy_ai_note_read_tool_tests)
 
     qt_add_executable(ztermy_ai_terminal_output_tool_tests
         tests/ai_terminal_output_tool_tests.cpp
@@ -5060,7 +5018,6 @@ if(BUILD_TESTING)
             ztermy_ai_wait_command_tool_tests
             ztermy_ai_sftp_read_tool_tests
             ztermy_ai_sftp_list_tool_tests
-            ztermy_ai_note_read_tool_tests
             ztermy_ai_terminal_output_tool_tests
             ztermy_ai_turn_runner_tests
             ztermy_ai_provider_replay_codec_tests

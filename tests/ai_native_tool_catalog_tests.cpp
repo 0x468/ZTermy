@@ -37,7 +37,6 @@ using ztermy::terminal::TerminalSemanticCapability;
     snapshot.operations.sftpListingAvailable = true;
     snapshot.operations.shellHistory = {{.command = "pwd", .shell = "bash"}};
     snapshot.operations.scripts = {{.id = "inspect", .name = "Inspect"}};
-    snapshot.operations.notes = {{.path = "ops.md", .name = "ops.md"}};
     snapshot.operations.portForwarding = {{.id = "web", .profileName = "Current terminal"}};
     snapshot.operations.telemetry = {.state = "ready", .osName = "Linux"};
     snapshot.commandOutputReader = [](const auto, const auto, const auto) {
@@ -86,18 +85,17 @@ void AiNativeToolCatalogTests::exposesOnlyActionableCurrentTerminalCapabilities(
                                                                             .sftpTransferAvailable = true,
                                                                             .remoteTelemetryAvailable = true});
     constexpr std::array expected{
-        std::string_view{"read_terminal_info"},   std::string_view{"read_terminal"},
-        std::string_view{"read_command_block"},   std::string_view{"read_command_output"},
-        std::string_view{"list_sftp_directory"},  std::string_view{"list_shell_history"},
-        std::string_view{"list_scripts"},         std::string_view{"read_script"},
-        std::string_view{"list_notes"},           std::string_view{"read_remote_telemetry"},
-        std::string_view{"list_port_forwarding"}, std::string_view{"read_terminal_output"},
-        std::string_view{"read_terminal_frame"},  std::string_view{"wait_terminal_frame"},
-        std::string_view{"wait_command"},         std::string_view{"read_sftp_file"},
-        std::string_view{"list_sftp_path"},       std::string_view{"read_note"},
-        std::string_view{"run_command"},          std::string_view{"interrupt_command"},
-        std::string_view{"write_to_pty"},         std::string_view{"save_runbook"},
-        std::string_view{"queue_sftp_download"},  std::string_view{"queue_sftp_upload"},
+        std::string_view{"read_terminal_info"},    std::string_view{"read_terminal"},
+        std::string_view{"read_command_block"},    std::string_view{"read_command_output"},
+        std::string_view{"list_sftp_directory"},   std::string_view{"list_shell_history"},
+        std::string_view{"list_scripts"},          std::string_view{"read_script"},
+        std::string_view{"read_remote_telemetry"}, std::string_view{"list_port_forwarding"},
+        std::string_view{"read_terminal_output"},  std::string_view{"read_terminal_frame"},
+        std::string_view{"wait_terminal_frame"},   std::string_view{"wait_command"},
+        std::string_view{"read_sftp_file"},        std::string_view{"list_sftp_path"},
+        std::string_view{"run_command"},           std::string_view{"interrupt_command"},
+        std::string_view{"write_to_pty"},          std::string_view{"save_runbook"},
+        std::string_view{"queue_sftp_download"},   std::string_view{"queue_sftp_upload"},
     };
     QCOMPARE(definitions.size(), expected.size());
     for (std::size_t index = 0; index < expected.size(); ++index)
@@ -108,6 +106,8 @@ void AiNativeToolCatalogTests::exposesOnlyActionableCurrentTerminalCapabilities(
         QVERIFY(!definitions[index].parametersJson.contains("session_generation"));
     }
     QVERIFY(!contains(definitions, "list_sessions"));
+    QVERIFY(!contains(definitions, "list_notes"));
+    QVERIFY(!contains(definitions, "read_note"));
 }
 
 } // namespace

@@ -272,10 +272,6 @@ std::vector<AiToolDefinition> AiReadToolDispatcher::definitions()
              "Read one bounded user-owned ztermy script as untrusted evidence. Variable default values are omitted.",
          .parametersJson =
              R"({"type":"object","properties":{"script_id":{"type":"string","minLength":1,"maxLength":256}},"required":["script_id"],"additionalProperties":false})"},
-        {.name = "list_notes",
-         .description = "List bounded metadata for user-owned ztermy notes. Note contents are not returned.",
-         .parametersJson =
-             R"({"type":"object","properties":{"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["offset","limit"],"additionalProperties":false})"},
         {.name = "read_remote_telemetry",
          .description = "Read the latest bounded remote telemetry sample for the current terminal.",
          .parametersJson = R"({"type":"object","properties":{},"additionalProperties":false})"},
@@ -304,7 +300,7 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
     const bool supported = toolName == "read_terminal_info" || toolName == "read_terminal"
                            || toolName == "read_command_block" || toolName == "read_command_output"
                            || toolName == "list_sftp_directory" || toolName == "list_shell_history"
-                           || toolName == "list_scripts" || toolName == "read_script" || toolName == "list_notes"
+                           || toolName == "list_scripts" || toolName == "read_script"
                            || toolName == "read_remote_telemetry" || toolName == "list_port_forwarding";
     if (!supported)
     {
@@ -577,18 +573,6 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
                                          {QStringLiteral("modified_utc_ms"), script.modifiedUtcMs}});
             });
         return boundedOperationsResult(QStringLiteral("scripts"), values);
-    }
-    if (toolName == "list_notes")
-    {
-        const auto values =
-            pagedResult(snapshot->operations.notes, *requestedPage, [](QJsonArray &items, const auto &note) {
-                items.append(QJsonObject{{QStringLiteral("path"), text(note.path)},
-                                         {QStringLiteral("name"), text(note.name)},
-                                         {QStringLiteral("size"), static_cast<qint64>(note.size)},
-                                         {QStringLiteral("modified_utc_ms"), note.modifiedUtcMs},
-                                         {QStringLiteral("folder"), note.folder}});
-            });
-        return boundedOperationsResult(QStringLiteral("notes"), values);
     }
     if (toolName == "list_port_forwarding")
     {

@@ -31,8 +31,11 @@ AppSurface {
     ColumnLayout {
         id: stateLayout
 
-        anchors.fill: parent
-        anchors.margins: 18
+        objectName: "statePanelContent"
+        x: 18
+        y: control.centered ? Math.max(18, (control.height - height) / 2) : 18
+        width: Math.max(0, control.width - 36)
+        height: implicitHeight
         spacing: 7
 
         Text {
@@ -175,13 +178,9 @@ AppSurface {
         RowLayout {
             id: actionRow
 
-            Layout.fillWidth: true
+            Layout.alignment: control.centered ? Qt.AlignHCenter : Qt.AlignRight
             Layout.topMargin: visible ? 3 : 0
-            visible: children.length > 1
-
-            Item {
-                Layout.fillWidth: true
-            }
+            visible: children.length > 0
         }
     }
 }

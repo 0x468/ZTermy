@@ -16,6 +16,7 @@ class WorkspaceStateStoreTests final : public QObject
 
 private slots:
     void missingFileLoadsEmptyState();
+    void restoresRetiredNotesPageWithoutTouchingMarkdown();
     void savesAndLoadsVersionedNonSecretState();
     void migratesVersionOneWithoutHostCollapseState();
     void migratesVersionTwoWithoutSftpBookmarks();
@@ -43,6 +44,34 @@ void WorkspaceStateStoreTests::missingFileLoadsEmptyState()
     const auto loaded = store.load();
     QVERIFY(loaded.has_value());
     QVERIFY(loaded->profiles.empty());
+}
+
+void WorkspaceStateStoreTests::restoresRetiredNotesPageWithoutTouchingMarkdown()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QByteArray original("# User-owned note\nDo not migrate or delete me.\n");
+    QVERIFY(QDir(directory.path()).mkdir(QStringLiteral("notes")));
+    QFile note(directory.filePath(QStringLiteral("notes/runbook.md")));
+    QVERIFY(note.open(QIODevice::WriteOnly));
+    QCOMPARE(note.write(original), original.size());
+    note.close();
+    const QString path = directory.filePath(QStringLiteral("workspace.json"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    const QByteArray legacy =
+        R"({"schemaVersion":1,"profiles":[{"profileId":"host","lastRemotePath":"/srv","recentRemotePaths":["/srv"],"workbenchPage":"notes","workbenchSide":"left","workbenchWidth":520,"composerHeight":132}]})";
+    QCOMPARE(file.write(legacy), legacy.size());
+    file.close();
+    const ztermy::workbench::WorkspaceStateStore store(path);
+    const auto state = store.load();
+    QVERIFY(state.has_value());
+    QCOMPARE(state->profiles.size(), 1U);
+    QCOMPARE(state->profiles.front().workbenchPage, std::string("history"));
+    QCOMPARE(state->profiles.front().lastRemotePath, std::string("/srv"));
+    QVERIFY(store.save(*state).has_value());
+    QVERIFY(note.open(QIODevice::ReadOnly));
+    QCOMPARE(note.readAll(), original);
 }
 
 void WorkspaceStateStoreTests::savesAndLoadsVersionedNonSecretState()
