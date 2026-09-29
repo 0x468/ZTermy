@@ -388,7 +388,10 @@ struct ResizeHitRuntimeCase
         queryDwmIntAttribute(windowHandle, windowCornerPreferenceAttribute, &appliedCornerPreference);
     const bool backdropRead = queryDwmIntAttribute(windowHandle, kSystemBackdropTypeAttribute, &appliedBackdrop);
     const bool windowRemainsOpaque = qAbs(window.opacity() - 1.0) < 0.001;
-    const bool darkModeMatches = darkModeRead && appliedDarkMode == static_cast<int>(darkMode);
+    const bool neutralAlphaFrame = backdropPreference == QStringLiteral("transparent")
+                                   || backdropPreference == QStringLiteral("aero")
+                                   || backdropPreference == QStringLiteral("acrylic");
+    const bool darkModeMatches = darkModeRead && appliedDarkMode == static_cast<int>(darkMode || neutralAlphaFrame);
     constexpr int roundCornerPreference = 2;
     const bool cornerPreferenceMatches = cornerPreferenceRead && appliedCornerPreference == roundCornerPreference;
     const bool backdropMatches = backdropRead && appliedBackdrop == expectedBackdrop;

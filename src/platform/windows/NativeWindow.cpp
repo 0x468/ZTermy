@@ -976,7 +976,6 @@ bool NativeWindow::applyBackdrop(QQuickWindow *target)
 {
     if (!target)
         target = this;
-    const BOOL darkMode = m_darkMode ? TRUE : FALSE;
     const int cornerPreference = kDwmWindowCornerRound;
     const bool solidSurface = m_opaqueSurface || m_backdropPreference == QStringLiteral("solid");
     target->setColor(solidSurface ? (m_darkMode ? QColor(QStringLiteral("#0B0F14")) : QColor(QStringLiteral("#F8FAFC")))
@@ -1005,6 +1004,12 @@ bool NativeWindow::applyBackdrop(QQuickWindow *target)
 
     const bool systemBackdrop =
         backdropType == kDwmSystemBackdropMainWindow || backdropType == kDwmSystemBackdropTabbedWindow;
+    // The light native frame contributes an opaque white underlay beneath our
+    // alpha swapchain for accent/transparent materials. Our caption is QML-drawn:
+    // keep this composition substrate dark without changing the UI palette.
+    // Mica and solid/high-contrast surfaces still use their native theme.
+    const bool transparentFrame = !solidSurface && !m_highContrastState.enabled && !systemBackdrop;
+    const BOOL darkMode = m_darkMode || transparentFrame ? TRUE : FALSE;
     const AccentPolicy disabledAccent{.state = kAccentDisabled, .flags = 2};
     const bool accentCleared = !systemBackdrop || applyAccentPolicy(windowHandle, disabledAccent);
 

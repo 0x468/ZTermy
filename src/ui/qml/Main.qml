@@ -1558,7 +1558,7 @@ Rectangle {
                 SideNavigationItem {
                     actionObjectName: "sideImportWorkspaceAction"
                     Layout.fillWidth: true
-                    iconName: "upload"
+                    iconName: "download"
                     text: qsTr("Import workspace")
                     compact: root.workspaceNavigationCompact
                     onActivated: workspaceImportDialog.open()
@@ -1567,7 +1567,7 @@ Rectangle {
                 SideNavigationItem {
                     actionObjectName: "sideExportWorkspaceAction"
                     Layout.fillWidth: true
-                    iconName: "download"
+                    iconName: "upload"
                     text: qsTr("Export workspace")
                     compact: root.workspaceNavigationCompact
                     onActivated: workspaceExportDialog.open()

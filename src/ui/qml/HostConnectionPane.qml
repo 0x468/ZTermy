@@ -736,7 +736,7 @@ Rectangle {
                     objectName: "hostImportOpenSsh"
                     visible: !pane.compactLayout
                     text: qsTr("Import SSH")
-                    iconName: "upload"
+                    iconName: "download"
                     accessibleName: qsTr("Import or synchronize OpenSSH configuration")
                     onClicked: pane.openSshImportRequested()
                 }

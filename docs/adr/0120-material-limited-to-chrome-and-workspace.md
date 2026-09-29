@@ -42,6 +42,32 @@ and still look inconsistent.
 
 ## Consequences
 
+### Native composition correction (2026-09-29)
+
+Transparent, Glass and Acrylic use a dark native frame substrate independently
+of the QML palette. On the tested Windows 11/D3D11 configuration, requesting a
+light native frame left an opaque white underlay even when the captured Qt scene
+was fully transparent. Keeping the scene light and changing only the native frame
+removed that underlay. The custom caption, text and controls remain light; Mica,
+Mica Alt, solid and high-contrast paths retain their native-theme behavior.
+
+The opt-in `--material-theme-capture --data-dir <isolated-directory>` check opens
+a local test terminal and saves both scene and desktop captures for all six
+materials in both palettes. Run with a visible interactive desktop (not hidden
+startup). It rejects occluded captures by checking an opaque icon, checks that
+transparent output responds to two backing colors, that solid output does not,
+and that 100% tint remains opaque. It exits and stops its local child afterward.
+This desktop comparison caught what the earlier DWM-attribute-only check missed.
+Generated captures stay under the isolated directory, not in source control.
+
+Validation: the original light transparent capture was white against both
+backing colors, while its Qt scene had alpha zero. After correction both palettes
+respond to backing color changes. The six-material/two-palette captures, 0%/100%
+checks, native appearance/state smokes, QML quality and four focused CTest checks
+passed. Full static-Release clang-tidy completed with only the already reviewed
+Qt `qobjectdefs.h:624` callback findings (three production paths and the dedicated
+lifetime probe; see `docs/testing/MEMORY_LEAK_CHECKS.md`), not a zero-warning gate.
+
 - Backdrop opacity affects one shared terminal/title tint, so lowering it can
   no longer make settings text unreadable.
 - Controls no longer need special-case tints to stand out from a translucent
