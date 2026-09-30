@@ -12,6 +12,7 @@ private slots:
     void createsLaunchSpec();
     void resolvesNushellAndWslProfiles();
     void detectsStableCatalogEntriesWithoutDuplicateIds();
+    void shellIconsDoNotDependOnTitlesOrInstallation();
 };
 
 void WindowsLocalShellCatalogTests::resolvesAutomaticInStableOrder()
@@ -111,6 +112,19 @@ void WindowsLocalShellCatalogTests::detectsStableCatalogEntriesWithoutDuplicateI
     }
     QVERIFY(ids.contains(QStringLiteral("nushell")));
     QVERIFY(ids.contains(QStringLiteral("wsl")));
+}
+
+void WindowsLocalShellCatalogTests::shellIconsDoNotDependOnTitlesOrInstallation()
+{
+    using ztermy::terminal::WindowsLocalShellCatalog;
+    QCOMPARE(WindowsLocalShellCatalog::iconName(QStringLiteral("powerShellCore")), QStringLiteral("brand-powershell"));
+    QCOMPARE(WindowsLocalShellCatalog::iconName(QStringLiteral("windowsPowerShell")),
+             QStringLiteral("brand-powershell"));
+    QCOMPARE(WindowsLocalShellCatalog::iconName(QStringLiteral("commandPrompt")), QStringLiteral("shell-cmd"));
+    QCOMPARE(WindowsLocalShellCatalog::iconName(QStringLiteral("gitBash")), QStringLiteral("brand-git"));
+    QCOMPARE(WindowsLocalShellCatalog::iconName(QStringLiteral("nushell")), QStringLiteral("shell-nushell"));
+    QCOMPARE(WindowsLocalShellCatalog::iconName(QStringLiteral("wsl")), QStringLiteral("brand-linux"));
+    QCOMPARE(WindowsLocalShellCatalog::iconName(QStringLiteral("unknown")), QStringLiteral("terminal"));
 }
 
 QTEST_GUILESS_MAIN(WindowsLocalShellCatalogTests)

@@ -1,6 +1,7 @@
 Tabler Icons v3.35.0
 Source: https://github.com/tabler/tabler-icons/tree/v3.35.0
 Stable-ID mapping: resources/icons/sources.json
+Additional upstream files (2026-10-01): icons/outline/{brand-powershell,brand-git}.svg
 Upstream files: icons/outline/{activity,alert-triangle,arrows-left-right,arrows-transfer-up-down,bookmark,brand-apple,brand-debian,brand-docker,brand-github,brand-redhat,brand-ubuntu,brand-windows,check,chevron-down,chevron-left,chevron-right,chevron-up,clipboard,cloud,copy,cpu,database,device-desktop,device-desktop-pin,device-floppy,dots,download,external-link,eye,eye-off,file,file-plus,focus-2,folder,folder-plus,highlight,history,home,info-circle,key,keyboard,layout-columns,layout-rows,link,list,lock,minus,network,palette,pencil,pencil-plus,pin,pinned,player-pause,player-play,plus,refresh,router,search,select-all,server,settings,shield-lock,sitemap,sparkles,square,terminal,terminal-2,trash,upload,user,world,x}.svg
 Modifications: 24-to-20 uniform grid transform; effective 1.5 stroke; metadata removed.
 Exceptions: memory.svg and disk.svg are ztermy-drawn, not Tabler assets.

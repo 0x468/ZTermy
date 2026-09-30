@@ -59,6 +59,26 @@ AppTextField {
     ]
     readonly property var systemIcons: [
         {
+            name: "brand-archlinux",
+            label: "Arch"
+        },
+        {
+            name: "brand-fedora",
+            label: "Fedora"
+        },
+        {
+            name: "brand-opensuse",
+            label: "openSUSE"
+        },
+        {
+            name: "brand-alpine",
+            label: "Alpine"
+        },
+        {
+            name: "brand-linux",
+            label: "Linux"
+        },
+        {
             name: "brand-ubuntu",
             label: "Ubuntu"
         },
@@ -85,6 +105,30 @@ AppTextField {
         {
             name: "brand-github",
             label: "GitHub"
+        },
+        {
+            name: "brand-powershell",
+            label: "PowerShell"
+        },
+        {
+            name: "shell-cmd",
+            label: "CMD"
+        },
+        {
+            name: "brand-git",
+            label: "Git Bash"
+        },
+        {
+            name: "shell-nushell",
+            label: "Nushell"
+        },
+        {
+            name: "shell-bash",
+            label: "Bash"
+        },
+        {
+            name: "shell-zsh",
+            label: "Zsh"
         }
     ]
     rightPadding: 42

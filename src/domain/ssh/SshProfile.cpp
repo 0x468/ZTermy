@@ -198,7 +198,11 @@ bool validSshProfile(const SshProfile &profile) noexcept
         || profile.iconName == "brand-github" || profile.iconName == "brand-redhat"
         || profile.iconName == "brand-ubuntu" || profile.iconName == "brand-windows" || profile.iconName == "cloud"
         || profile.iconName == "database" || profile.iconName == "device-desktop" || profile.iconName == "router"
-        || profile.iconName == "server" || profile.iconName == "world";
+        || profile.iconName == "server" || profile.iconName == "world" || profile.iconName == "brand-archlinux"
+        || profile.iconName == "brand-fedora" || profile.iconName == "brand-opensuse"
+        || profile.iconName == "brand-alpine" || profile.iconName == "brand-linux"
+        || profile.iconName == "shell-nushell" || profile.iconName == "shell-bash" || profile.iconName == "shell-zsh"
+        || profile.iconName == "brand-powershell" || profile.iconName == "brand-git" || profile.iconName == "shell-cmd";
     if (!nonEmptyWithin(profile.id, maximumIdLength) || !nonEmptyWithin(profile.name, maximumNameLength)
         || profile.group.size() > maximumGroupLength || !nonEmptyWithin(profile.host, maximumHostLength)
         || !nonEmptyWithin(profile.username, maximumUsernameLength) || profile.port == 0

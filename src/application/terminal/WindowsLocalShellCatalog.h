@@ -24,6 +24,7 @@ class WindowsLocalShellCatalog final
 {
 public:
     [[nodiscard]] static QList<LocalShellProfile> detect();
+    [[nodiscard]] static QString iconName(const QString &shellId);
     [[nodiscard]] static std::optional<LocalShellProfile> resolve(const QList<LocalShellProfile> &profiles,
                                                                   const QString &preference);
     [[nodiscard]] static LocalTerminalLaunchSpec launchSpec(const LocalShellProfile &profile,

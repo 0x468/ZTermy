@@ -1,0 +1,10 @@
+Simple Icons 16.33.0
+Source: https://github.com/simple-icons/simple-icons/tree/16.33.0
+License: CC0 1.0 Universal (CC0-1.0)
+License text: https://github.com/simple-icons/simple-icons/blob/16.33.0/LICENSE.md
+Legal code: https://creativecommons.org/publicdomain/zero/1.0/legalcode
+Files: icons/{archlinux,fedora,opensuse,alpinelinux,linux,nushell,gnubash,zsh}.svg
+Mapping: resources/icons/sources.json
+Modifications: 24-to-18 uniform grid transform centered in 20x20; theme-colored currentColor.
+Trademark and patent rights are not granted by CC0. Brand marks identify their
+respective systems and Shells only; no affiliation or endorsement is implied.

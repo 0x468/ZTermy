@@ -3017,8 +3017,10 @@ QVariantMap AppController::terminalTabValue(const TerminalTab &tab, const QStrin
     return {
         {QStringLiteral("id"), publicId},
         {QStringLiteral("sessionId"), tab.id},
-        {QStringLiteral("iconName"),
-         profile == m_profiles.end() ? QStringLiteral("terminal") : utf8QString(profile->iconName)},
+        {QStringLiteral("iconName"), tab.kind == TerminalTabKind::Local
+                                         ? terminal::WindowsLocalShellCatalog::iconName(tab.localShellId)
+                                     : profile == m_profiles.end() ? QStringLiteral("terminal")
+                                                                   : utf8QString(profile->iconName)},
         {QStringLiteral("paneId"), tab.paneId},
         {QStringLiteral("title"), tab.displayTitle(m_settings.allowTerminalTitleChanges)},
         {QStringLiteral("progressState"),
@@ -3813,6 +3815,7 @@ QVariantList AppController::availableLocalShells() const
         result.append(
             QVariantMap{{QStringLiteral("id"), profile.id},
                         {QStringLiteral("name"), profile.name},
+                        {QStringLiteral("iconName"), terminal::WindowsLocalShellCatalog::iconName(profile.id)},
                         {QStringLiteral("detail"), profile.available ? profile.executable : tr("Not installed")},
                         {QStringLiteral("available"), profile.available}});
     }

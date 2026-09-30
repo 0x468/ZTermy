@@ -25,6 +25,7 @@ AppMenu {
                 id: shellItem
                 required property var modelData
                 text: modelData.name
+                iconName: modelData.iconName || "terminal"
                 onTriggered: menu.localRequested(modelData.id)
                 AppToolTip {
                     text: shellItem.modelData.detail
@@ -44,6 +45,7 @@ AppMenu {
             delegate: AppMenuItem {
                 required property var modelData
                 text: modelData.name
+                iconName: modelData.iconName || "hosts"
                 onTriggered: menu.hostRequested(modelData)
             }
             onObjectAdded: (index, object) => hosts.insertItem(index, object)

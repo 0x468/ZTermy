@@ -121,13 +121,12 @@ RowLayout {
         }
         Instantiator {
             active: newPaneMenu.populated
-            model: root.controller.availableLocalShells
+            model: root.controller.availableLocalShells.filter(shell => shell.id !== "automatic" && shell.available)
             delegate: AppMenuItem {
                 required property var modelData
                 text: modelData.name
-                iconName: "terminal"
-                enabled: !!modelData.available
-                visible: modelData.id !== "automatic"
+                objectName: "newPaneShell-" + modelData.id
+                iconName: modelData.iconName || "terminal"
                 onTriggered: root.createPane("", modelData.id, false)
             }
             onObjectAdded: (index, object) => newPaneMenu.insertItem(index + 1, object)
@@ -140,7 +139,7 @@ RowLayout {
             delegate: AppMenuItem {
                 required property var modelData
                 text: modelData.name
-                iconName: "hosts"
+                iconName: modelData.iconName || "hosts"
                 onTriggered: root.createPane(modelData.id, "", false)
             }
             onObjectAdded: (index, object) => newPaneMenu.addItem(object)

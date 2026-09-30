@@ -5,10 +5,14 @@
   "license": "MIT",
   "transform": "24 to 20 grid; effective 1.5 stroke; currentColor",
   "exceptions": {
+    "shell-cmd": "ztermy command prompt C:\\ silhouette, 1.5 stroke",
     "memory": "ztermy DIMM silhouette, 1.5 stroke",
     "disk": "ztermy hard-drive silhouette, 1.5 stroke"
   },
   "icons": {
+    "shell-cmd": null,
+    "brand-powershell": "brand-powershell",
+    "brand-git": "brand-git",
     "activity": "activity",
     "ai": "sparkles",
     "appearance": "palette",
@@ -88,5 +92,23 @@
     "router": "router",
     "server": "server",
     "world": "world"
+  },
+  "additionalLibrary": {
+    "library": "Simple Icons",
+    "version": "16.33.0",
+    "url": "https://github.com/simple-icons/simple-icons/tree/16.33.0/icons",
+    "license": "CC0-1.0",
+    "licenseUrl": "https://github.com/simple-icons/simple-icons/blob/16.33.0/LICENSE.md",
+    "transform": "24 to 18 grid, centered in 20; currentColor filled silhouettes; trademarks remain with their owners",
+    "icons": {
+      "brand-archlinux": "archlinux",
+      "brand-fedora": "fedora",
+      "brand-opensuse": "opensuse",
+      "brand-alpine": "alpinelinux",
+      "brand-linux": "linux",
+      "shell-nushell": "nushell",
+      "shell-bash": "gnubash",
+      "shell-zsh": "zsh"
+    }
   }
 }

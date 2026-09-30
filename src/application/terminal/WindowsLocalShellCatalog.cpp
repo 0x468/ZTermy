@@ -116,6 +116,21 @@ namespace
 namespace ztermy::terminal
 {
 
+QString WindowsLocalShellCatalog::iconName(const QString &shellId)
+{
+    if (shellId == QStringLiteral("powerShellCore") || shellId == QStringLiteral("windowsPowerShell"))
+        return QStringLiteral("brand-powershell");
+    if (shellId == QStringLiteral("commandPrompt"))
+        return QStringLiteral("shell-cmd");
+    if (shellId == QStringLiteral("gitBash"))
+        return QStringLiteral("brand-git");
+    if (shellId == QStringLiteral("nushell"))
+        return QStringLiteral("shell-nushell");
+    if (shellId == QStringLiteral("wsl"))
+        return QStringLiteral("brand-linux");
+    return QStringLiteral("terminal");
+}
+
 QList<LocalShellProfile> WindowsLocalShellCatalog::detect()
 {
     const QString programFiles = qEnvironmentVariable("ProgramFiles");

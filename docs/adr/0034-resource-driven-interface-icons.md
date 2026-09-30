@@ -33,6 +33,32 @@ live effect layer per icon would add unstable API or rendering overhead.
 
 ## Consequences
 
+### 2026-10-01: local Shell identity and expanded Profile choices
+
+Quick pane creation now uses only the detected available Shells, like the Tab
+menu; unavailable supported catalog entries remain diagnostic choices in
+settings, not disabled launch actions. Shell icons are derived from stable
+Shell IDs, not mutable terminal titles or the development computer's paths.
+Local Shell icon customization is intentionally not exposed.
+
+Keep Tabler v3.35.0 for PowerShell and Git. Adopt the CC0-1.0 Simple Icons
+16.33.0 static SVG subset for Arch Linux, Fedora, openSUSE, Alpine Linux,
+Linux, Nushell, Bash and Zsh. Preserve their silhouettes as monochrome,
+theme-colored assets; their trademarks remain owned by the respective projects.
+Exact versions, transforms, sources and license links are recorded in
+`resources/icons/sources.json`. CMD is a locally drawn interface silhouette.
+There is no network dependency or new rendering engine at runtime.
+
+Profile schema 11 extends the valid icon vocabulary, reads all earlier schemas
+including 10, and keeps unknown future documents read-only. Schema-10 migration
+checks preserve the entire host document and opaque credential references.
+
+Verification: focused catalog, Profile-store, SVG-renderer, translation,
+interface-asset and QML-native CTest checks passed. The real pane-menu fixture
+verified missing/present/missing Nushell catalogs without editing machine PATH
+or registry. Actual dark/light selector captures were inspected; Arch selection
+and reset passed. All 90 SVGs rasterized at 16/20/30/40 pixels in both ink colors.
+
 ### 2026-09-29: approved Tabler interface rollout
 
 Use the reviewed Tabler v3.35.0 outline mappings for the entire interface set,

@@ -26,7 +26,10 @@ constexpr qint64 jumpHostSchemaVersion = 6;
 constexpr qint64 stageTimeoutSchemaVersion = 7;
 constexpr qint64 identitySchemaVersion = 8;
 constexpr qint64 iconSchemaVersion = 9;
-constexpr qint64 currentSchemaVersion = 10;
+constexpr qint64 platformIconSchemaVersion = 10;
+// New icon IDs are not readable by older validators. Preserve their documents,
+// but prevent an older application from rewriting the expanded catalog.
+constexpr qint64 currentSchemaVersion = 11;
 constexpr qsizetype maximumEnvironmentVariableCount = 32;
 
 [[nodiscard]] std::optional<ztermy::ssh::SshStartupCommandMode> parseStartupCommandMode(const QString &value)
@@ -581,6 +584,7 @@ parseProfilesPayload(const QByteArrayView payload)
             && versionValue.toInteger() != jumpHostSchemaVersion
             && versionValue.toInteger() != stageTimeoutSchemaVersion
             && versionValue.toInteger() != identitySchemaVersion && versionValue.toInteger() != iconSchemaVersion
+            && versionValue.toInteger() != platformIconSchemaVersion
             && versionValue.toInteger() != currentSchemaVersion))
     {
         return std::unexpected(versionValue.isDouble() ? ztermy::ssh::SshProfileStoreError::UnsupportedVersion

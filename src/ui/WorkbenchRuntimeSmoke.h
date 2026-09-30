@@ -20,6 +20,75 @@
 
 namespace ztermy::ui
 {
+// Reproduce a different computer's catalog without touching its registry, PATH,
+// or user settings. Inspect the real menu, not a second copy of its filter.
+inline bool verifyPaneShellMenu(NativeWindow &window)
+{
+    QQmlComponent component(window.engine());
+    component.setData(R"(import QtQuick
+import Ztermy
+Item {
+    id: fixture
+    width: 800; height: 600
+    property var shellCatalog: []
+    property QtObject mock: QtObject {
+        property var availableLocalShells: fixture.shellCatalog
+        property var hostProfiles: []
+    }
+    TerminalPaneToolbar {
+        x: 40; y: 60
+        controller: fixture.mock
+        paneId: "fixture"
+        revealed: true
+    }
+})",
+                      QUrl(QStringLiteral("qrc:/shell-menu-fixture.qml")));
+    std::unique_ptr<QObject> object(component.create());
+    auto *fixture = qobject_cast<QQuickItem *>(object.get());
+    if (!fixture)
+    {
+        qWarning() << component.errors();
+        return false;
+    }
+    fixture->setParentItem(window.contentItem());
+    fixture->setZ(100);
+    auto *menu = fixture->findChild<QObject *>(QStringLiteral("terminalNewPaneMenu-fixture"));
+    if (!menu)
+        return false;
+    bool passed = true;
+    for (const bool nuInstalled : {false, true, false})
+    {
+        fixture->setProperty("shellCatalog",
+                             QVariantList{QVariantMap{{QStringLiteral("id"), QStringLiteral("automatic")},
+                                                      {QStringLiteral("available"), true}},
+                                          QVariantMap{{QStringLiteral("id"), QStringLiteral("powerShellCore")},
+                                                      {QStringLiteral("name"), QStringLiteral("PowerShell 7")},
+                                                      {QStringLiteral("iconName"), QStringLiteral("brand-powershell")},
+                                                      {QStringLiteral("available"), true}},
+                                          QVariantMap{{QStringLiteral("id"), QStringLiteral("nushell")},
+                                                      {QStringLiteral("name"), QStringLiteral("Nushell")},
+                                                      {QStringLiteral("iconName"), QStringLiteral("shell-nushell")},
+                                                      {QStringLiteral("available"), nuInstalled}}});
+        if (!QMetaObject::invokeMethod(menu, "open"))
+            return false;
+        processWindowEventsFor(std::chrono::milliseconds{350});
+        auto *content = qvariant_cast<QQuickItem *>(menu->property("contentItem"));
+        auto *pwsh = findWindowSmokeItem(content, QStringLiteral("newPaneShell-powerShellCore"));
+        auto *nu = findWindowSmokeItem(content, QStringLiteral("newPaneShell-nushell"));
+        const bool valid = pwsh && pwsh->isVisible()
+                           && pwsh->property("iconName").toString() == QStringLiteral("brand-powershell")
+                           && (nuInstalled ? nu && nu->isVisible() : nu == nullptr)
+                           && menu->property("count").toInt() == (nuInstalled ? 4 : 3);
+        qInfo() << "Pane menu catalog: Nu installed=" << nuInstalled << "passed=" << valid;
+        passed = valid && passed;
+        if (!nuInstalled)
+            passed = captureWindowSmokeItem(window.contentItem(), QStringLiteral("pane-shell-menu.png")) && passed;
+        QMetaObject::invokeMethod(menu, "close");
+        processWindowEventsFor(std::chrono::milliseconds{150});
+    }
+    return passed;
+}
+
 // Isolated presentation check: creates no sessions and never executes script text.
 inline bool verifyScriptFormLayout(NativeWindow &window, AppController &controller)
 {
@@ -567,7 +636,7 @@ inline std::optional<bool> runWorkbenchRuntimeCheck(NativeWindow &window, AppCon
             return false;
         window.resize(1000, 760);
         window.show();
-        bool passed = true;
+        bool passed = verifyPaneShellMenu(window);
         int repeats = arguments.contains(QStringLiteral("--repeat-profile-icons")) ? 10 : 1;
         for (const auto &argument : arguments)
             if (argument.startsWith(QStringLiteral("--profile-icon-cycles=")))

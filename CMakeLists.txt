@@ -1124,6 +1124,17 @@ set(ZTERMY_INTERFACE_ICON_FILES
     resources/icons/brand-redhat.svg
     resources/icons/brand-ubuntu.svg
     resources/icons/brand-windows.svg
+    resources/icons/brand-archlinux.svg
+    resources/icons/brand-fedora.svg
+    resources/icons/brand-opensuse.svg
+    resources/icons/brand-alpine.svg
+    resources/icons/brand-linux.svg
+    resources/icons/shell-nushell.svg
+    resources/icons/shell-bash.svg
+    resources/icons/shell-zsh.svg
+    resources/icons/brand-powershell.svg
+    resources/icons/brand-git.svg
+    resources/icons/shell-cmd.svg
     resources/icons/cloud.svg
     resources/icons/database.svg
     resources/icons/device-desktop.svg
@@ -1157,7 +1168,7 @@ qt_add_resources(ztermy ztermy_interface_icons
 
 qt_add_resources(ztermy ztermy_icon_notices
     PREFIX "/ztermy/licenses"
-    FILES resources/third-party/Tabler-Icons-NOTICE.txt
+    FILES resources/third-party/Tabler-Icons-NOTICE.txt resources/third-party/Simple-Icons-NOTICE.txt
 )
 
 set_source_files_properties(
