@@ -151,11 +151,11 @@ verifyHostProfileIconPicker(NativeWindow &window, const QString &captureName = Q
         return false;
     processWindowEventsFor(300ms);
     auto *content = qvariant_cast<QQuickItem *>(menu->property("contentItem"));
-    auto *choice = findWindowSmokeItem(content, QStringLiteral("hostProfileIcon-brand-ubuntu"));
+    auto *choice = findWindowSmokeItem(content, QStringLiteral("hostProfileIcon-brand-archlinux"));
     const bool visible = menu->property("visible").toBool() && choice && choice->isVisible();
     const bool captured = captureWindowSmokeItem(content ? content->parentItem() : nullptr, captureName);
     const bool selected = choice && QMetaObject::invokeMethod(choice, "click")
-                          && field->property("profileIcon").toString() == QStringLiteral("brand-ubuntu");
+                          && field->property("profileIcon").toString() == QStringLiteral("brand-archlinux");
     QMetaObject::invokeMethod(menu, "close");
     const bool reset = QMetaObject::invokeMethod(pane, "clearEditor")
                        && field->property("profileIcon").toString() == QStringLiteral("terminal");
@@ -271,6 +271,8 @@ verifyHostProfileIconPicker(NativeWindow &window, const QString &captureName = Q
     }
     const auto handle = reinterpret_cast<HWND>(window.winId()); // NOLINT(performance-no-int-to-ptr)
 
+    auto *caption = window.rootObject()->findChild<QQuickItem *>(QStringLiteral("titleControls"));
+    const bool normalCaptionCaptured = captureWindowSmokeItem(caption, QStringLiteral("caption-normal.png"));
     window.showMaximized();
     const bool maximized = settleWindowUntil(
         [&window] {
@@ -279,6 +281,7 @@ verifyHostProfileIconPicker(NativeWindow &window, const QString &captureName = Q
         3s);
     qInfo() << "Window state smoke: maximized client matches work area:" << maximized
             << "maximized=" << window.maximized() << "workAreaMatches=" << window.maximizedClientMatchesWorkArea();
+    const bool maximizedCaptionCaptured = captureWindowSmokeItem(caption, QStringLiteral("caption-maximized.png"));
 
     windowing::minimize(window);
     const bool minimizedKeepsMaximize = settleWindowUntil(
@@ -308,7 +311,8 @@ verifyHostProfileIconPicker(NativeWindow &window, const QString &captureName = Q
         2s);
     qInfo() << "Window state smoke: toggle restores normal geometry:" << restored;
 
-    return maximized && minimizedKeepsMaximize && presentedMaximized && restored;
+    return normalCaptionCaptured && maximizedCaptionCaptured && maximized && minimizedKeepsMaximize
+           && presentedMaximized && restored;
 }
 
 // ADR 0120: the native material shows through the chrome and the terminal

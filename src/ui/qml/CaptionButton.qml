@@ -56,9 +56,12 @@ Control {
     }
 
     AppIcon {
+        objectName: "captionGlyph"
         anchors.centerIn: parent
-        width: 20
-        height: 20
+        // The square/copy masters fill more of their grid than the minus/X.
+        // Match the native caption's optical weight without shrinking its hit area.
+        width: control.kind === "maximize" ? 14 : 20
+        height: width
         name: control.glyphName
         color: control.closeHighlighted ? Theme.dangerSurfaceText : Theme.text
     }
