@@ -31,6 +31,24 @@ Rectangle {
     property bool quickConnectMessageIsError: false
     property bool statusIsError: false
     property bool editorExpanded: false
+    property var editorBaseline: []
+    property var pendingEditorAction: null
+
+    // Raw values preserve invalid/incomplete input as an unsaved change too.
+    function editorValues() {
+        return [nameField.text, nameField.profileIcon, groupField.text, hostField.text, portField.text, usernameField.text, authenticationBox.currentIndex, keyPathField.text, passphraseRequiredBox.checked, credentialField.text, rememberCredentialSwitch.checked, proxyTypeBox.currentIndex, proxyHostField.text, proxyPortField.text, proxyUsernameField.text, proxyCredentialField.text, rememberProxyCredentialSwitch.checked, selectedIdentityId, jumpProfileIds.slice(), terminalTypeField.text, connectionTimeoutField.text, authenticationTimeoutField.text, terminalOpenTimeoutField.text, keepaliveIntervalField.text, keepaliveThresholdField.text, startupCommandField.text, startupModeBox.currentIndex, startupDelayField.text, environmentField.text, reconnectPolicyBox.currentIndex, reconnectAttemptsField.text, reconnectBackoffField.text];
+    }
+
+    function guardEditorAction(action) {
+        if (editorExpanded && JSON.stringify(editorValues()) !== JSON.stringify(editorBaseline)) {
+            if (!discardEditorDialog.visible) {
+                pendingEditorAction = action;
+                discardEditorDialog.openFrom(nameField);
+            }
+            return;
+        }
+        action();
+    }
     property bool advancedExpanded: false
     property bool showPortForwarding: true
     readonly property bool compactLayout: width < Theme.narrowWindowWidth
@@ -429,6 +447,7 @@ Rectangle {
     }
 
     function clearEditor() {
+        editorBaseline = [];
         editingProfileId = "";
         nameField.text = "";
         nameField.profileIcon = "terminal";
@@ -472,7 +491,12 @@ Rectangle {
     }
 
     function dismissEditor(announce) {
+        guardEditorAction(() => finishDismissEditor(announce));
+    }
+
+    function finishDismissEditor(announce) {
         clearEditor();
+        editorBaseline = [];
         editorExpanded = false;
         if (announce) {
             showStatus(qsTr("Profile editor closed."), false);
@@ -493,6 +517,7 @@ Rectangle {
             const secret = controller.readHostCredential(editingProfileId);
             if (secret.length > 0) {
                 credentialField.text = secret;
+                editorBaseline[9] = secret;
             } else if (controller.credentialOperationError.length > 0) {
                 showStatus(controller.credentialOperationError, true);
                 return;
@@ -502,6 +527,7 @@ Rectangle {
             const proxySecret = controller.readProxyCredential(editingProfileId);
             if (proxySecret.length > 0) {
                 proxyCredentialField.text = proxySecret;
+                editorBaseline[15] = proxySecret;
             } else if (controller.credentialOperationError.length > 0) {
                 showStatus(controller.credentialOperationError, true);
             }
@@ -509,19 +535,29 @@ Rectangle {
     }
 
     function beginNewProfile() {
+        guardEditorAction(() => startNewProfile());
+    }
+
+    function startNewProfile() {
         forwardingPane.closeEditor();
         clearEditor();
+        editorBaseline = editorValues();
         editorExpanded = true;
         showStatus(qsTr("Create a reusable SSH profile or connect now."), false);
         Qt.callLater(nameField.forceActiveFocus);
     }
 
     function beginNewProfileForHost(host, port) {
-        beginNewProfile();
+        guardEditorAction(() => startNewProfileForHost(host, port));
+    }
+
+    function startNewProfileForHost(host, port) {
+        startNewProfile();
         hostField.text = host;
         portField.text = String(port);
         nameField.text = host;
         nameWasAutoFilled = true;
+        editorBaseline = editorValues();
         Qt.callLater(usernameField.forceActiveFocus);
     }
 
@@ -553,6 +589,13 @@ Rectangle {
     }
 
     function editProfile(profile) {
+        if (editorExpanded && editingProfileId === profile.id) {
+            return;
+        }
+        guardEditorAction(() => loadProfile(profile));
+    }
+
+    function loadProfile(profile) {
         forwardingPane.closeEditor();
         editorExpanded = true;
         editingProfileId = profile.id;
@@ -599,6 +642,7 @@ Rectangle {
         reconnectBackoffField.text = String(options.reconnectInitialBackoffMilliseconds === undefined ? 1000 : options.reconnectInitialBackoffMilliseconds);
         advancedExpanded = false;
         showStatus(qsTr("Editing \"%1\".").arg(profile.name), false);
+        editorBaseline = editorValues();
         Qt.callLater(pane.refreshEditingCredential);
         Qt.callLater(nameField.forceActiveFocus);
     }
@@ -644,8 +688,6 @@ Rectangle {
         }
         const secret = credentialField.text;
         const proxySecret = proxyCredentialField.text;
-        credentialField.text = "";
-        proxyCredentialField.text = "";
         const started = controller.saveAndConnectHostProfile(editingProfileId, nameField.text, hostField.text, portNumber(), usernameField.text, authenticationToken(), keyPathField.text, passphraseRequiredBox.checked, groupField.text, secret, rememberCredentialSwitch.checked, sessionOptions, proxyOptions, proxySecret, rememberProxyCredentialSwitch.checked, routeOptionsMap());
         if (started) {
             clearEditor();
@@ -1297,6 +1339,7 @@ Rectangle {
                                 }
 
                                 ActionButton {
+                                    objectName: "hostEditorClose"
                                     text: qsTr("Close")
                                     accessibleName: qsTr("Close host profile editor")
                                     onClicked: pane.dismissEditor(false)
@@ -2214,28 +2257,36 @@ Rectangle {
                         }
                     }
                 }
-
-                Item {
-                    id: editorDismissRegion
-
-                    objectName: "hostDetailDismissRegion"
-                    parent: pane
-                    anchors.top: parent.top
-                    anchors.left: parent.left
-                    anchors.bottom: parent.bottom
-                    width: Math.max(0, pane.width - profileEditor.width)
-                    visible: pane.editorExpanded && width > 0
-                    enabled: visible
-                    z: 19
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.ArrowCursor
-                        onClicked: pane.dismissEditor(false)
-                    }
-                }
             }
         }
+    }
+
+    Keys.priority: Keys.AfterItem
+    Keys.onEscapePressed: event => {
+        if (pane.editorExpanded && !discardEditorDialog.visible) {
+            pane.dismissEditor(false);
+            event.accepted = true;
+        }
+    }
+
+    ConfirmationDialog {
+        id: discardEditorDialog
+        objectName: "hostDiscardChangesDialog"
+        heading: qsTr("Discard unsaved host changes?")
+        description: qsTr("Your changes have not been saved. Discard them or keep editing this host.")
+        acceptText: qsTr("Discard changes")
+        rejectText: qsTr("Keep editing")
+        acceptObjectName: "hostDiscardChanges"
+        rejectObjectName: "hostKeepEditing"
+        destructive: true
+        onAccepted: {
+            const action = pane.pendingEditorAction;
+            pane.pendingEditorAction = null;
+            if (action) {
+                action();
+            }
+        }
+        onRejected: pane.pendingEditorAction = null
     }
 
     Dialog {

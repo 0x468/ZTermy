@@ -11,10 +11,128 @@
 
 namespace ztermy::ui
 {
+// Exercise actual editor controls with isolated, non-networked fixture data.
+inline bool verifyHostEditorDismissal(NativeWindow &window, AppController &controller)
+{
+    window.resize(1120, 800);
+    window.show();
+    window.requestActivate();
+    QQmlComponent component(window.engine());
+    component.loadFromModule(QStringLiteral("Ztermy"), QStringLiteral("HostConnectionPane"));
+    std::unique_ptr<QObject> object(
+        component.createWithInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}}));
+    auto *pane = qobject_cast<QQuickItem *>(object.get());
+    if (!pane)
+        return false;
+    pane->setParentItem(window.contentItem());
+    pane->setSize({1120, 760});
+    pane->setZ(200);
+    const auto pause = [] {
+        processWindowEventsFor(std::chrono::milliseconds{300});
+    };
+    const auto click = [&](const char *name) {
+        auto *item = visualQuickItem(window.contentItem(), name);
+        if (!item)
+            return false;
+        sendMouseClick(window, *item, {item->width() / 2, item->height() / 2});
+        pause();
+        return true;
+    };
+    const auto expanded = [&] {
+        return pane->property("editorExpanded").toBool();
+    };
+    auto *name = quickItem(pane, "hostName");
+    auto *dialog = pane->findChild<QObject *>(QStringLiteral("hostDiscardChangesDialog"));
+    if (!name || !dialog)
+        return false;
+    pause();
+    bool passed = click("hostNew");
+    passed = click("hostEditorClose") && !expanded() && !dialog->property("visible").toBool() && passed;
+    qInfo() << "Pristine host editor close=" << passed;
+    passed = click("hostNew") && passed;
+    name->setProperty("text", QStringLiteral("Unsaved fixture"));
+    sendMouseClick(window, *pane, {10, 400});
+    pause();
+    passed = expanded() && name->property("text").toString() == QStringLiteral("Unsaved fixture") && passed;
+    passed = click("hostEditorClose") && dialog->property("visible").toBool() && expanded() && passed;
+    const auto args = QCoreApplication::arguments();
+    const auto option = args.indexOf(QStringLiteral("--data-dir"));
+    if (option >= 0 && option + 1 < args.size())
+        passed =
+            window.grabWindow().save(QDir(args.at(option + 1)).filePath("host-unsaved-confirmation.png")) && passed;
+    passed = click("hostKeepEditing") && expanded()
+             && name->property("text").toString() == QStringLiteral("Unsaved fixture") && passed;
+    qInfo() << "Host draft outside click and keep=" << passed;
+    // Invalid save must neither close nor clear the draft.
+    QMetaObject::invokeMethod(pane, "saveProfile");
+    passed = expanded() && name->property("text").toString() == QStringLiteral("Unsaved fixture") && passed;
+    name->forceActiveFocus();
+    // Escape in a child picker closes only that picker, not the editor.
+    passed = click("hostAuthentication") && passed;
+    auto *authentication = quickItem(pane, "hostAuthentication");
+    auto *picker = authentication ? authentication->property("popup").value<QObject *>() : nullptr;
+    passed = picker && picker->property("visible").toBool() && passed;
+    sendKey(window, Qt::Key_Escape);
+    pause();
+    passed = picker && !picker->property("visible").toBool() && !dialog->property("visible").toBool() && expanded()
+             && passed;
+    name->forceActiveFocus();
+    sendKey(window, Qt::Key_Escape);
+    pause();
+    qInfo() << "Host Escape confirmation visible=" << dialog->property("visible").toBool()
+            << "window active=" << window.isActive();
+    passed = dialog->property("visible").toBool() && expanded() && passed;
+    passed = click("hostDiscardChanges") && !expanded() && passed;
+    qInfo() << "Host invalid save and Escape discard=" << passed;
+    QMetaObject::invokeMethod(pane, "beginNewProfileForHost", Q_ARG(QVariant, QStringLiteral("first.invalid")),
+                              Q_ARG(QVariant, 22));
+    pause();
+    name->setProperty("text", QStringLiteral("Keep this draft"));
+    QMetaObject::invokeMethod(pane, "beginNewProfileForHost", Q_ARG(QVariant, QStringLiteral("second.invalid")),
+                              Q_ARG(QVariant, 22));
+    pause();
+    passed = dialog->property("visible").toBool()
+             && name->property("text").toString() == QStringLiteral("Keep this draft") && passed;
+    passed = click("hostKeepEditing") && passed;
+    QMetaObject::invokeMethod(pane, "beginNewProfileForHost", Q_ARG(QVariant, QStringLiteral("second.invalid")),
+                              Q_ARG(QVariant, 22));
+    pause();
+    passed = click("hostDiscardChanges") && expanded()
+             && name->property("text").toString() == QStringLiteral("second.invalid") && passed;
+    qInfo() << "Host draft replacement=" << passed;
+    // Successful save closes; re-opening a saved profile must start pristine.
+    QMetaObject::invokeMethod(pane, "saveProfile");
+    pause();
+    passed = !expanded() && passed;
+    const auto profiles = controller.property("hostProfiles").toList();
+    if (profiles.isEmpty())
+        return false;
+    const QVariant profile = profiles.back();
+    QMetaObject::invokeMethod(pane, "editProfile", Q_ARG(QVariant, profile));
+    pause();
+    passed = click("hostEditorClose") && !expanded() && !dialog->property("visible").toBool() && passed;
+    QMetaObject::invokeMethod(pane, "editProfile", Q_ARG(QVariant, profile));
+    pause();
+    auto *port = quickItem(pane, "hostPort");
+    if (!port)
+        return false;
+    port->setProperty("text", QStringLiteral("2200"));
+    passed = click("hostEditorClose") && dialog->property("visible").toBool() && passed;
+    passed = click("hostKeepEditing") && port->property("text").toString() == QStringLiteral("2200") && passed;
+    qInfo() << "Saved host pristine and modified edit=" << passed;
+    if (option >= 0 && option + 1 < args.size())
+        passed = window.grabWindow().save(QDir(args.at(option + 1)).filePath("host-editor.png")) && passed;
+    qInfo() << "Host editor outside click / pristine close / keep / discard / Escape / replacement / invalid save="
+            << passed;
+    return passed;
+}
+
 // Uses synthetic records in the caller's isolated data directory; no terminal is started.
 inline std::optional<bool> runSideDrawerRuntimeCheck(NativeWindow &window, AppController &controller,
                                                      const QStringList &arguments)
 {
+    if (arguments.contains(QStringLiteral("--host-editor-dismiss-smoke")))
+        return verifyHostEditorDismissal(window, controller);
     if (!arguments.contains(QStringLiteral("--side-drawer-smoke")))
         return std::nullopt;
     window.show();
