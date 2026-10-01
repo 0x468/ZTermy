@@ -177,3 +177,27 @@ input shield remains until slide-out completes. Hidden strips have a negligible
 
 These results supersede the previous below-strip/fade design; remaining
 real-machine and cross-monitor/DPI acceptance limits are unchanged.
+
+## Unsaved title-bar Settings preview
+
+The auto-hide switch now previews its draft immediately, without modifying the
+saved interaction settings. Discard and leaving Settings restore the saved
+mode; reopening reloads it, and Apply alone persists the new value. There is
+no schema change or native-material reconfiguration for a title-bar-only edit.
+
+- Debug and static `--theme-settings-smoke`: exit 0. The real switch and
+  Apply/Discard controls exercise both preview directions, page exit/reentry,
+  and persistence. Preview compares the entire settings document byte-for-byte;
+  Apply independently checks the stored JSON boolean. Existing theme-preview,
+  discard, fixed/system palette and backdrop-opacity checks also pass.
+- Debug title-bar runtime: PASS, 47.02 s; pointer-held Tab switching,
+  enter/exit motion, input shielding and geometry checks remain intact.
+- Reviewed static `title-preview-auto.png` and `title-preview-persistent.png`
+  under `build/test-data/title-preview-static-20261001a`: hidden and persistent
+  chrome are visible immediately in Settings. Earlier unsuccessful fixture
+  attempts remain in separate stores: focusing a hidden caption button was
+  invalid; reentry now uses the existing Settings navigation command. None
+  of those attempts is counted as a pass.
+- C++ format, 96-file QML format/lint, 2364-source translation gate, focused
+  static Release clang-tidy (`src/main.cpp`, including the runtime fixture),
+  and `git diff --check` pass. Static EXE updated; no full regression or package.

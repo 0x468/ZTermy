@@ -60,6 +60,12 @@ The application settings schema advances monotonically from 40 to 41 for
 current documents reject malformed values. The workspace document structure
 does not change.
 
+The Settings auto-hide switch previews the draft immediately, independently of
+the saved interaction settings. Apply persists it; Discard or leaving Settings
+restores the saved mode. Reopening Settings reloads the saved value. Appearance
+preview and title-bar preview share the existing dismissal lifecycle, but a
+title-bar-only edit does not reconfigure the native material.
+
 ## Verification
 
 Tests target the actual risks: old-document preservation and malformed settings,

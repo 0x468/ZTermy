@@ -14,7 +14,7 @@ Rectangle {
     required property var fontCatalog
     required property var windowChrome
     readonly property int titleBarHeight: Theme.titleBarHeight
-    readonly property bool autoHideTitleBar: controller.windowInteractionSettings.autoHideTitleBar
+    readonly property bool autoHideTitleBar: windowInteractionPreviewActive ? previewAutoHideTitleBar : controller.windowInteractionSettings.autoHideTitleBar
     readonly property int titleTriggerHeight: 12
     readonly property int reservedTitleHeight: autoHideTitleBar ? titleTriggerHeight : titleBarHeight
     property bool titleBarRevealed: false
@@ -53,6 +53,8 @@ Rectangle {
     property int pendingPasteLineCount: 0
     property var pendingPasteViewport: null
     property bool appearancePreviewActive: false
+    property bool windowInteractionPreviewActive: false
+    property bool previewAutoHideTitleBar: false
     property string previewThemePreference: "dark"
     property string previewBackdropPreference: "acrylic"
     property real previewBackdropOpacity: 1.0
@@ -505,6 +507,7 @@ Rectangle {
     }
 
     function endWindowAppearancePreview() {
+        windowInteractionPreviewActive = false;
         if (!appearancePreviewActive) {
             return;
         }
@@ -2477,6 +2480,10 @@ Rectangle {
                 fontCatalog: root.fontCatalog
                 windowChrome: root.windowChrome
                 onAppearancePreviewEnded: root.endWindowAppearancePreview()
+                onTitleBarPreviewRequested: automatic => {
+                    root.previewAutoHideTitleBar = automatic;
+                    root.windowInteractionPreviewActive = true;
+                }
                 onAppearancePreviewRequested: (theme, opacity, backdrop, accent, customAccent, effects) => {
                     root.previewWindowAppearance(theme, opacity, backdrop, accent, customAccent, effects);
                 }

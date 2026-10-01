@@ -64,6 +64,7 @@ Rectangle {
 
     signal appearancePreviewRequested(string theme, real opacity, string backdrop, string accent, string customAccent, string effects)
     signal appearancePreviewEnded
+    signal titleBarPreviewRequested(bool automatic)
 
     ListModel {
         id: selectionActionDraftModel
@@ -471,6 +472,12 @@ Rectangle {
         }
         const previewAccent = customAccentField.acceptableInput ? customAccentField.text : controller.customAccent;
         appearancePreviewRequested(themeToken(), opacitySlider.value, backdropToken(), accentToken(), previewAccent, effectsBox.model[Math.max(0, effectsBox.currentIndex)]);
+        previewTitleBarDraft();
+    }
+
+    function previewTitleBarDraft() {
+        if (visible && !loadingDraft)
+            titleBarPreviewRequested(windowBehavior.autoHideTitleBar);
     }
 
     function selectCategory(category) {
@@ -824,6 +831,7 @@ Rectangle {
 
             WindowBehaviorSettings {
                 id: windowBehavior
+                onAutoHideTitleBarChanged: pane.previewTitleBarDraft()
                 Layout.fillWidth: true
                 visible: pane.currentCategory === "application"
                 onPerformanceModeEdited: enabled => pane.performanceModeDraft = enabled
