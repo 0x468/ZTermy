@@ -296,6 +296,13 @@ duration to 0, so transitions become immediate without per-site guards.
   decorative animation outside the `emphasis` role.
 - Terminal rendering and cursor behavior are not driven by decorative QML
   animations.
+- New transient surfaces, including auto-hidden window chrome, must define
+  both enter and exit motion through shared roles. Opacity-only window chrome
+  transitions preserve native hit coordinates and terminal geometry. Keep
+  the input shield alive until the surface has fully disappeared; painted
+  backgrounds alone do not prevent pointer or wheel events passing through.
+- Main and detached terminal windows paint exactly one workspace tint in the
+  QML scene; native clear colours are not a substitute for that shared layer.
 
 ## Layout behavior
 
@@ -319,6 +326,11 @@ duration to 0, so transitions become immediate without per-site guards.
   overlay, never resizing the terminal. Pointer-held Tab switching keeps it
   open. Detached windows contain one workspace with multiple Panes, no Tab
   strip, and optional overlay window controls (ADR 0135).
+- Only unused space in the terminal information strip is a secondary window
+  drag target. Status/identity/telemetry text and action buttons keep their
+  own hit regions. Dragging waits for the platform drag threshold; double-click
+  maximizes/restores. Neither operation reveals auto-hidden chrome or starts
+  Pane rearrangement.
 
 ## Performance boundary
 

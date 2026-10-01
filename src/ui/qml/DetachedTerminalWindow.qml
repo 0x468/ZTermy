@@ -137,7 +137,9 @@ Window {
             hostRoot.controller.activateTerminalTab(workspaceId);
     }
     title: qsTr("%1 — Detached pane").arg(workspace.title || qsTr("Terminal"))
-    color: Theme.workspaceBackground
+    // NativeWindow owns the clear colour; theme tint belongs in the scene,
+    // exactly as in Main.qml, rather than being overwritten by applyBackdrop.
+    color: "transparent"
     onClosing: close => {
         if (coordinator.applicationExiting) {
             close.accepted = true;
@@ -151,6 +153,12 @@ Window {
             for (const id of ids)
                 controller.closeTerminalTab(id, hostRoot.requestedMainWorkspaceId);
         });
+    }
+
+    Rectangle {
+        objectName: "detachedWorkspaceBackground"
+        anchors.fill: parent
+        color: Theme.workspaceBackground
     }
 
     Item {
@@ -236,7 +244,7 @@ Window {
         middleClickBehavior: detachedTerminalWindow.hostRoot.controller.terminalMiddleClickBehavior
         wordDelimiters: detachedTerminalWindow.hostRoot.controller.terminalWordDelimiters
         scrollRowsPerWheel: detachedTerminalWindow.hostRoot.controller.terminalScrollRows
-        onDetachPaneRequested: paneId => detachedTerminalWindow.hostRoot.detachTerminalPane(paneId)
+        onDetachPaneRequested: paneId => detachedTerminalWindow.coordinator.reattachAll(detachedTerminalWindow)
         onZoomPaneRequested: paneId => detachedTerminalWindow.hostRoot.toggleTerminalPaneZoom(paneId, detachedTerminalWindow.workspaceId)
         onToggleWindowControlsRequested: detachedTerminalWindow.toggleWindowControls()
         onMultilinePasteConfirmationRequested: (viewport, lineCount) => {

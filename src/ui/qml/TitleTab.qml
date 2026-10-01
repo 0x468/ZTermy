@@ -79,14 +79,17 @@ Item {
     }
 
     Rectangle {
+        objectName: "tabActiveIndicator"
         anchors.bottom: parent.bottom
         anchors.horizontalCenter: parent.horizontalCenter
-        width: Math.min(24, parent.width - 12)
+        width: Math.max(0, control.width - 16)
         height: 2
         radius: 1
         color: Theme.accent
-        visible: control.selected
-        opacity: 0.75
+        opacity: control.selected ? 0.75 : 0
+        Behavior on opacity {
+            MotionFeedback {}
+        }
     }
 
     Rectangle {

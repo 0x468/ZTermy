@@ -20,6 +20,10 @@ focus keeps it open. Hidden controls have no native maximize/Snap hit target.
 The overlay uses an opaque themed floating surface so terminal text cannot
 bleed through at zero material opacity. Persistent terminal chrome and selected
 Tabs do not stack another opaque background over the workspace material.
+Reveal/dismiss use shared Motion enter/exit fades without shifting native hit
+coordinates. The entire painted bar accepts pointer and wheel input, including
+gaps between controls and the fade-out interval; background gaps drag the
+window rather than activating the covered terminal or form.
 
 Tab widths support equal-width titles that shrink together (default) and the
 previous active-title/other-icons policy. Equal widths range from 184 to 38
@@ -33,6 +37,10 @@ layouts merge into a target Pane. Window controls are an optional overlay;
 their handle always moves the whole window, without implicit reattachment.
 Multi-Pane detached windows have a separate layout-drag handle. Explicit
 reattach preserves the entire Pane layout as one main-window Tab.
+The Pane toolbar's transfer action is context-sensitive: detach in Main,
+return the entire workspace in a detached window. Both window types paint one
+identical theme tint in the QML scene above the native material, not a tint in
+the native window clear colour that appearance configuration can overwrite.
 
 Legacy multi-Tab window records split into separate windows without dropping
 layouts, session identities or manual titles. The previously selected workspace

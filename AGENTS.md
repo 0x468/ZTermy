@@ -34,6 +34,9 @@
 
 - Keep domain logic independent from Qt UI types where practical.
 - QML owns presentation and lightweight interaction glue.
+- Transient UI surfaces must use shared `Motion` enter/exit roles, honor
+  reduced/off effects, and retain input shielding until dismissal finishes.
+  Verify their motion and hit regions at runtime, not just their final state.
 - C++ owns application state, platform integration, I/O, security boundaries,
   persistence, and terminal state.
 - External I/O must not block the GUI or Qt Quick render thread.

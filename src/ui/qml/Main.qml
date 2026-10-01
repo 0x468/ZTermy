@@ -141,6 +141,28 @@ Rectangle {
         Layout.preferredWidth: 28
         Layout.preferredHeight: 22
     }
+    // Only unused strip space moves the window. Wait for a real drag so a
+    // normal click/double-click never enters the native modal move loop.
+    component SessionStripWindowDragArea: MouseArea {
+        acceptedButtons: Qt.LeftButton
+        preventStealing: true
+        property point pressPosition
+        property bool movingWindow: false
+        onPressed: mouse => {
+            pressPosition = Qt.point(mouse.x, mouse.y);
+            movingWindow = false;
+        }
+        onPositionChanged: mouse => {
+            if (!pressed || movingWindow)
+                return;
+            const distance = Math.abs(mouse.x - pressPosition.x) + Math.abs(mouse.y - pressPosition.y);
+            if (distance >= drag.threshold) {
+                movingWindow = true;
+                root.windowChrome.beginSystemMove();
+            }
+        }
+        onDoubleClicked: WindowControl.toggleMaximize(root.windowChrome)
+    }
     readonly property var terminalLayoutRoot: mainWorkspace.root || ({})
     readonly property var visibleTerminalLayoutRoot: {
         if (zoomedTerminalPaneId.length > 0)
@@ -478,7 +500,7 @@ Rectangle {
         previewCustomAccent = customAccent;
         previewEffectsTier = effects;
         appearancePreviewActive = true;
-        Qt.callLater(() => root.windowChrome.applyAppearance(Theme.effectiveBackdrop, Theme.dark));
+        Qt.callLater(root.applyWindowAppearance);
     }
 
     function endWindowAppearancePreview() {
@@ -979,9 +1001,36 @@ Rectangle {
         height: root.titleBarHeight
         // A revealed overlay must mask terminal text even at zero material opacity.
         color: root.autoHideTitleBar ? Theme.floatingBackground : root.chromeColor
-        visible: root.titleBarShown
+        opacity: root.titleBarShown ? 1 : 0
+        visible: opacity > 0
         enabled: visible
         z: 90
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: root.titleBarShown ? Motion.enter : Motion.exit
+                easing.type: root.titleBarShown ? Motion.enterEasing : Motion.exitEasing
+            }
+        }
+
+        // A painted Rectangle does not accept input. Keep this shield under
+        // the controls, including during dismissal, so clicks and wheels
+        // cannot reach the covered host form or terminal telemetry.
+        MouseArea {
+            objectName: "titleBarInputShield"
+            anchors.fill: parent
+            hoverEnabled: true
+            acceptedButtons: Qt.AllButtons
+            onPressed: mouse => {
+                if (mouse.button === Qt.LeftButton)
+                    root.windowChrome.beginSystemMove();
+            }
+            onDoubleClicked: mouse => {
+                if (mouse.button === Qt.LeftButton)
+                    WindowControl.toggleMaximize(root.windowChrome);
+            }
+            onWheel: wheel => wheel.accepted = true
+        }
 
         Row {
             id: titleNavigation
@@ -1274,15 +1323,6 @@ Rectangle {
             anchors.right: titleControls.left
             anchors.top: parent.top
             anchors.bottom: parent.bottom
-
-            DragHandler {
-                target: null
-                acceptedButtons: Qt.LeftButton
-                onActiveChanged: {
-                    if (active)
-                        root.windowChrome.beginSystemMove();
-                }
-            }
         }
 
         TitleWindowActions {
@@ -1765,18 +1805,29 @@ Rectangle {
                                 availableWidth: root.width
                             }
 
-                            Text {
+                            RowLayout {
                                 id: terminalSessionStatus
 
                                 Layout.alignment: Qt.AlignVCenter
                                 Layout.fillWidth: true
                                 Layout.minimumWidth: 0
+                                Layout.fillHeight: true
+                                spacing: 0
                                 visible: root.width >= 1080 || (root.activeTerminalTab !== null && root.activeTerminalTab.kind !== "ssh")
-                                text: terminalViewport.statusText
-                                color: Theme.workspaceTextMuted
-                                elide: Text.ElideRight
-                                font.family: Theme.uiFont
-                                font.pixelSize: Theme.textCompact
+                                Text {
+                                    objectName: "terminalSessionStatusText"
+                                    Layout.maximumWidth: terminalSessionStatus.width
+                                    text: terminalViewport.statusText
+                                    color: Theme.workspaceTextMuted
+                                    elide: Text.ElideRight
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.textCompact
+                                }
+                                SessionStripWindowDragArea {
+                                    objectName: "terminalSessionStatusDragArea"
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                }
                             }
 
                             Text {
@@ -1789,8 +1840,10 @@ Rectangle {
                                 Accessible.name: text
                             }
 
-                            Item {
+                            SessionStripWindowDragArea {
+                                objectName: "terminalSessionSpacerDragArea"
                                 Layout.fillWidth: !terminalSessionStatus.visible
+                                Layout.fillHeight: true
                                 visible: !terminalSessionStatus.visible
                             }
 

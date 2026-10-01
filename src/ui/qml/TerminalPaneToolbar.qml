@@ -72,7 +72,7 @@ RowLayout {
                 case "zoom":
                     return root.zoomed ? qsTr("Restore pane layout") : qsTr("Zoom this pane within its tab");
                 case "detach":
-                    return qsTr("Detach terminal pane");
+                    return root.detachedWindow ? qsTranslate("DetachedTerminalWindow", "Reattach window to main window") : qsTr("Detach terminal pane");
                 case "copy":
                     return qsTr("Copy pane — new session, same profile or Shell");
                 case "new":

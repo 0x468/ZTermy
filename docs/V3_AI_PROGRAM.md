@@ -390,6 +390,16 @@ Delivery status:
   remain owner/environment acceptance work rather than hidden implementation
   gaps.
 
+## Owner-reported follow-up (2026-10-01)
+
+- [ ] Reproduce long/multiline command failures in the terminal assistant
+  sidebar. The owner screenshot shows tool-call cards and the final reply
+  overlapping when a large Python heredoc is expanded. Check responsive card
+  height, wrapping/clipping, streaming updates and scroll anchoring. Separately
+  verify command delivery and completion detection (including interrupted
+  `wait_terminal_frame`); the screenshot alone does not establish an execution
+  failure. Use an isolated local fixture before any real-host reproduction.
+
 ## Explicit exclusions
 
 - copying Warp, NetCatty, VS Code, Wave, or Tabby implementation or assets;
