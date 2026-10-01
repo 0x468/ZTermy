@@ -262,6 +262,7 @@ private slots:
     void routesAiModelDiscoveryThroughCustomProxy();
     void managesMcpServerConfiguration();
     void managesActionShortcutsAndDispatchContext();
+    void preservesShortcutsWhenGlobalRegistrationFails();
     void retranslatesPreviouslyReadActions();
     void restoresCompleteAgentPresentationFromHistory();
     void exposesProviderFailureRecoveryActions();
@@ -1354,6 +1355,77 @@ void AppControllerTests::managesActionShortcutsAndDispatchContext()
             QCOMPARE(action.value(QStringLiteral("shortcut")).toString(), QStringLiteral("Ctrl+Shift+F"));
         }
     }
+}
+
+void AppControllerTests::preservesShortcutsWhenGlobalRegistrationFails()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString profiles = directory.filePath(QStringLiteral("profiles.json"));
+    const QString hosts = directory.filePath(QStringLiteral("known_hosts.json"));
+    const QString settings = directory.filePath(QStringLiteral("settings.json"));
+    ztermy::AppController controller(profiles, hosts, settings);
+    bool acceptsRegistration = true;
+    QString registered;
+    controller.setGlobalShortcutHandler([&](const QString &shortcut, bool) {
+        if (!acceptsRegistration)
+            return false;
+        registered = shortcut;
+        return true;
+    });
+    const auto effective = [&] {
+        return controller.windowInteractionSettings().value(QStringLiteral("globalShortcut")).toString();
+    };
+    QVERIFY(controller.setGlobalShortcutFromKey(Qt::Key_F23, Qt::ControlModifier | Qt::AltModifier));
+    QCOMPARE(effective(), QStringLiteral("Ctrl+Alt+F23"));
+    QCOMPARE(registered, effective());
+    QVERIFY(controller.setActionShortcut(QStringLiteral("terminal.find"), QStringLiteral("Ctrl+Alt+F"))
+                .value(QStringLiteral("valid"))
+                .toBool());
+    acceptsRegistration = false;
+    QVERIFY(!controller.setGlobalShortcutFromKey(Qt::Key_F23, Qt::ControlModifier | Qt::AltModifier));
+    QVERIFY(!controller.setGlobalShortcutFromKey(Qt::Key_F22, Qt::ControlModifier | Qt::AltModifier));
+    QVERIFY(!controller.resetAllActionShortcuts());
+    QCOMPARE(effective(), QStringLiteral("Ctrl+Alt+F23"));
+    QCOMPARE(registered, effective());
+    for (const auto &entry : controller.actions())
+    {
+        const auto action = entry.toMap();
+        if (action.value(QStringLiteral("id")).toString() == QStringLiteral("terminal.find"))
+            QCOMPARE(action.value(QStringLiteral("shortcut")).toString(), QStringLiteral("Ctrl+Alt+F"));
+    }
+    acceptsRegistration = true;
+    // Applying an unrelated window draft must not overwrite a shortcut saved in its own panel.
+    QVERIFY(controller.saveWindowInteractionSettings({{QStringLiteral("tabWidthMode"), QStringLiteral("active")}}));
+    QCOMPARE(effective(), QStringLiteral("Ctrl+Alt+F23"));
+    ztermy::AppController reloaded(profiles, hosts, settings);
+    QCOMPARE(reloaded.windowInteractionSettings().value(QStringLiteral("globalShortcut")).toString(), effective());
+    QVERIFY(controller.resetAllActionShortcuts());
+    QVERIFY(effective().isEmpty());
+    QVERIFY(registered.isEmpty());
+    ztermy::AppController resetReloaded(profiles, hosts, settings);
+    QVERIFY(resetReloaded.windowInteractionSettings().value(QStringLiteral("globalShortcut")).toString().isEmpty());
+    for (const auto &entry : resetReloaded.actions())
+    {
+        const auto action = entry.toMap();
+        if (action.value(QStringLiteral("id")).toString() == QStringLiteral("terminal.find"))
+            QCOMPARE(action.value(QStringLiteral("shortcut")).toString(), QStringLiteral("Ctrl+Shift+F"));
+    }
+    QVERIFY(controller.setGlobalShortcutFromKey(Qt::Key_F22, Qt::ControlModifier | Qt::AltModifier));
+    acceptsRegistration = false;
+    QVERIFY(!controller.resetApplicationSettings());
+    QCOMPARE(effective(), QStringLiteral("Ctrl+Alt+F22"));
+    acceptsRegistration = true;
+    // An actual persistence failure must restore the native registration, not only the settings value.
+    QVERIFY(QFile::remove(settings));
+    QVERIFY(QDir().mkpath(settings));
+    QVERIFY(!controller.resetApplicationSettings());
+    QCOMPARE(effective(), QStringLiteral("Ctrl+Alt+F22"));
+    QCOMPARE(registered, effective());
+    QVERIFY(QDir().rmdir(settings));
+    QVERIFY(controller.resetApplicationSettings());
+    QVERIFY(effective().isEmpty());
+    QVERIFY(registered.isEmpty());
 }
 
 void AppControllerTests::refreshesConfiguredAiModelsAtStartup()
@@ -3033,6 +3105,7 @@ void AppControllerTests::instanceOwnershipIsScopedToDataDirectory()
     QSignalSpy activated(&first, &ztermy::ApplicationInstance::activationRequested);
     using Result = ztermy::ApplicationInstance::Result;
     QCOMPARE(first.claim(installed.path()), Result::Primary);
+    first.setReady();
     auto launch = std::async(std::launch::async, [path = installed.path()] {
         ztermy::ApplicationInstance nextLaunch;
         return nextLaunch.claim(path);

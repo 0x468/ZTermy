@@ -137,6 +137,48 @@ NativeWindow::NativeWindow(const bool performanceMode, const bool opaqueSurface,
     QObject::connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, this, [this] {
         emit systemDarkModeChanged();
     });
+    m_globalShortcut = std::make_unique<windowing::WindowsGlobalShortcut>(this);
+    connect(m_globalShortcut.get(), &windowing::WindowsGlobalShortcut::activated, this,
+            &NativeWindow::toggleMainWindowFromShortcut);
+}
+
+bool NativeWindow::configureGlobalShortcut(const QString &shortcut, const bool moveToCursorScreen)
+{
+    const QString error = m_globalShortcut->configure(shortcut);
+    if (m_globalShortcutError != error)
+    {
+        m_globalShortcutError = error;
+        emit globalShortcutErrorChanged();
+    }
+    if (error.isEmpty())
+        m_summonToCursorScreen = moveToCursorScreen;
+    return error.isEmpty();
+}
+
+void NativeWindow::toggleMainWindowFromShortcut()
+{
+    if (isVisible() && !windowStates().testFlag(Qt::WindowMinimized) && GetForegroundWindow() == m_windowHandle)
+    {
+        hide();
+        return;
+    }
+    if (m_summonToCursorScreen)
+    {
+        QScreen *target = QGuiApplication::screenAt(QCursor::pos());
+        if (target != nullptr && target != screen())
+        {
+            const bool wasMaximized = windowStates().testFlag(Qt::WindowMaximized);
+            const QRect area = target->availableGeometry();
+            QRect desired = geometry();
+            desired.moveCenter(area.center());
+            setScreen(target);
+            windowing::restorePlacement(*this, windowing::boundedRestoreGeometry(desired, area, minimumSize()),
+                                        wasMaximized);
+        }
+    }
+    windowing::present(*this);
+    // WM_HOTKEY grants foreground activation; use it while handling that message.
+    SetForegroundWindow(m_windowHandle);
 }
 
 NativeWindow::~NativeWindow()
@@ -340,7 +382,7 @@ void NativeWindow::setCloseToTrayEnabled(const bool enabled)
         return;
     }
     m_closeToTrayEnabled = enabled;
-    if (enabled)
+    if (enabled || m_backgroundLaunchTray)
     {
         updateTrayIcon();
     }
@@ -348,6 +390,13 @@ void NativeWindow::setCloseToTrayEnabled(const bool enabled)
     {
         removeTrayIcon();
     }
+}
+
+void NativeWindow::prepareBackgroundLaunch()
+{
+    // A login launch needs a way back without changing the user's close policy.
+    m_backgroundLaunchTray = true;
+    updateTrayIcon();
 }
 
 bool NativeWindow::applyAppearance(const QString &backdropPreference, const bool darkMode)
@@ -403,6 +452,12 @@ bool NativeWindow::titleBarPointerInside(const qreal height, QQuickWindow *targe
 
 bool NativeWindow::event(QEvent *event)
 {
+    if (event->type() == QEvent::Show && m_backgroundLaunchTray)
+    {
+        m_backgroundLaunchTray = false;
+        if (!m_closeToTrayEnabled)
+            removeTrayIcon();
+    }
     if (event->type() == QEvent::Close && m_closeToTrayEnabled && !m_exitingFromTray)
     {
         updateTrayIcon();
@@ -867,7 +922,7 @@ void NativeWindow::configureNativeWindow()
 
 void NativeWindow::updateTrayIcon()
 {
-    if (!m_closeToTrayEnabled || m_windowHandle == nullptr)
+    if ((!m_closeToTrayEnabled && !m_backgroundLaunchTray) || m_windowHandle == nullptr)
     {
         return;
     }

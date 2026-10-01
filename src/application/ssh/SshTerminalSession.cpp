@@ -1600,14 +1600,11 @@ void SshTerminalSession::finishWorker(const QString &status, const SshConnection
     {
         // Normal delivery discards pending frames once running becomes false.
         // Transfer the last frame into the same owner-thread event as the exit.
-        (void)QMetaObject::invokeMethod(
-            this,
-            [this, finalSnapshot = std::move(finalSnapshot)] {
-                if (finalSnapshot)
-                    emit snapshotReady(finalSnapshot);
-                emit runningChanged(false);
-            },
-            Qt::QueuedConnection);
+        QTimer::singleShot(0, this, [this, finalSnapshot = std::move(finalSnapshot)] {
+            if (finalSnapshot)
+                emit snapshotReady(finalSnapshot);
+            emit runningChanged(false);
+        });
     }
     postPhase(phase);
     postStatus(status);

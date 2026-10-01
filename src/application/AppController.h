@@ -443,6 +443,8 @@ public:
     [[nodiscard]] QObject *localFiles() const noexcept;
 
     Q_INVOKABLE QString startLocalTerminal();
+    [[nodiscard]] QString openLocalDirectory(const QString &directory);
+    void setGlobalShortcutHandler(std::function<bool(const QString &, bool)> handler);
     Q_INVOKABLE QVariantMap terminalWindowState(const QString &id) const;
     Q_INVOKABLE bool rememberTerminalWindow(const QVariantMap &state);
     Q_INVOKABLE QString startLocalTerminalWithShell(const QString &shellId);
@@ -577,6 +579,7 @@ public:
     Q_INVOKABLE bool triggerAction(const QString &actionId);
     [[nodiscard]] Q_INVOKABLE QVariantMap setActionShortcut(const QString &actionId, const QString &shortcut);
     [[nodiscard]] Q_INVOKABLE QVariantMap setActionShortcutFromKey(const QString &actionId, int key, int modifiers);
+    Q_INVOKABLE bool setGlobalShortcutFromKey(int key, int modifiers);
     Q_INVOKABLE bool resetActionShortcut(const QString &actionId);
     Q_INVOKABLE bool resetAllActionShortcuts();
     Q_INVOKABLE bool connectPrivateKey(const QString &host, int port, const QString &username,
@@ -737,6 +740,7 @@ signals:
     void transferConflictRequested(const QString &taskId, const QVariantMap &conflict);
     void actionRegistryChanged();
     void actionRequested(const QString &actionId);
+    void localDirectoryOpened(const QString &tabId);
     void activeTerminalTabChanged();
     void activeTerminalTabPinnedChanged();
     void terminalWorkspaceChanged();
@@ -996,6 +1000,7 @@ private:
     forwarding::PortForwardingRuleStore m_portForwardingStore;
     config::ApplicationSettingsStore m_settingsStore;
     config::ApplicationSettings m_settings;
+    std::function<bool(const QString &, bool)> m_globalShortcutHandler;
     config::TerminalThemeCatalog m_terminalThemes;
     QString m_previewTerminalThemeId;
     bool m_systemDarkMode = true;

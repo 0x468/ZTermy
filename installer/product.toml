@@ -1,4 +1,4 @@
-schema_version = 2
+schema_version = 4
 
 [product]
 id = "z-series.ztermy"
@@ -29,8 +29,14 @@ required = [
   "vcruntime140_1.dll",
   "plugins/platforms/qwindows.dll",
   ".zinstaller/maintenance.exe",
+  "ztermy-explorer-command.dll",
+  "integration/ztermy-explorer.msix",
+  "integration/publisher.cer",
 ]
 forbidden = [
+  ".signing/**",
+  "**/*.pfx",
+  "**/*.p12",
   "portable.flag",
   "**/*.pdb",
   "**/*.wixpdb",
@@ -89,6 +95,31 @@ label = "启动 Ztermy"
 kind = "launch-executable"
 target = "ztermy.exe"
 selection = "default-on"
+
+[[context_menus]]
+id = "open-here"
+label = "传统右键菜单：在此处打开 Ztermy"
+target = "ztermy.exe"
+contexts = ["directory", "directory-background", "drive"]
+arguments_before_path = ["--open-directory"]
+selection = "default-on"
+
+[[identity_packages]]
+id = "explorer-modern"
+label = "Windows 11 新右键菜单（首次启用可能需要管理员授权）"
+package = "integration/ztermy-explorer.msix"
+name = "ZSeries.Ztermy.Explorer"
+publisher = "CN=ZSeries Development"
+certificate = "integration/publisher.cer"
+certificate_sha256 = "7b59388ebf09ed372c7238b380eda335772aeea9af6745f5de93a30e55cd88fb"
+selection = "default-off"
+
+[[shortcuts]]
+id = "login-startup"
+name = "Ztermy"
+location = "startup"
+arguments = "--background"
+selection = "default-off"
 
 [legacy.windows_msi]
 upgrade_code = "5E502533-5081-4401-9549-C5403DFD123A"

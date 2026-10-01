@@ -78,7 +78,8 @@ constexpr qint64 sessionLifecycleSchemaVersion = 38;
 constexpr qint64 terminalTitleSchemaVersion = 39;
 constexpr qint64 detachedWindowsSchemaVersion = 40;
 constexpr qint64 immersiveTitleBarSchemaVersion = 41;
-constexpr qint64 currentSchemaVersion = immersiveTitleBarSchemaVersion;
+constexpr qint64 globalShortcutSchemaVersion = 42;
+constexpr qint64 currentSchemaVersion = globalShortcutSchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -540,6 +541,11 @@ using ztermy::config::ThemePreference;
         {
             windowDocument.insert(QStringLiteral("autoHideTitleBar"), false);
             windowDocument.insert(QStringLiteral("tabWidthMode"), QStringLiteral("equal"));
+        }
+        if (version < globalShortcutSchemaVersion)
+        {
+            windowDocument.insert(QStringLiteral("globalShortcut"), QString{});
+            windowDocument.insert(QStringLiteral("summonToCursorScreen"), false);
         }
         const auto window = ztermy::config::WindowInteractionSettings::fromJson(windowDocument);
         if (!window)

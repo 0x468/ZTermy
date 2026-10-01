@@ -74,25 +74,22 @@ void SshTerminalSession::buildSnapshot(const bool force)
 
 void SshTerminalSession::scheduleSynchronizedOutputFallback(const std::int64_t startedNanoseconds)
 {
-    (void)QMetaObject::invokeMethod(
-        this,
-        [this, startedNanoseconds] {
-            QTimer::singleShot(1000, Qt::PreciseTimer, this, [this, startedNanoseconds] {
-                if (!m_running.load(std::memory_order_acquire)
-                    || m_synchronizedOutputStartedNanoseconds.load(std::memory_order_acquire) != startedNanoseconds
-                    || !m_engineDirty.load(std::memory_order_acquire))
-                {
-                    return;
-                }
-                std::scoped_lock lock(m_commandMutex);
-                if (m_commands.empty() || !std::holds_alternative<SnapshotRequestCommand>(m_commands.back()))
-                {
-                    m_commands.emplace_back(SnapshotRequestCommand{});
-                    signalCommandWake();
-                }
-            });
-        },
-        Qt::QueuedConnection);
+    // The context-bound timer delivers on the owner thread and is cancelled
+    // when this session dies; a second queued wrapper is unnecessary.
+    QTimer::singleShot(1000, Qt::PreciseTimer, this, [this, startedNanoseconds] {
+        if (!m_running.load(std::memory_order_acquire)
+            || m_synchronizedOutputStartedNanoseconds.load(std::memory_order_acquire) != startedNanoseconds
+            || !m_engineDirty.load(std::memory_order_acquire))
+        {
+            return;
+        }
+        std::scoped_lock lock(m_commandMutex);
+        if (m_commands.empty() || !std::holds_alternative<SnapshotRequestCommand>(m_commands.back()))
+        {
+            m_commands.emplace_back(SnapshotRequestCommand{});
+            signalCommandWake();
+        }
+    });
 }
 
 void SshTerminalSession::scheduleLatestSnapshotDelivery()

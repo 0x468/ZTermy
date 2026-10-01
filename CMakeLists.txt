@@ -177,6 +177,8 @@ set_property(
 )
 
 add_library(ztermy_core_config STATIC
+    src/core/config/ApplicationLaunchRequest.cpp
+    src/core/config/ApplicationLaunchRequest.h
     src/core/config/ApplicationPaths.cpp
     src/core/config/ApplicationPaths.h
     src/core/config/ApplicationSettings.cpp
@@ -1010,6 +1012,19 @@ if(MSVC)
     )
 endif()
 
+add_library(ztermy_explorer_command MODULE src/platform/windows/ExplorerCommand.cpp src/platform/windows/ExplorerCommand.def)
+target_compile_features(ztermy_explorer_command PRIVATE cxx_std_23)
+target_compile_definitions(ztermy_explorer_command PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_link_libraries(ztermy_explorer_command PRIVATE shell32 shlwapi ole32 uuid user32)
+set_target_properties(ztermy_explorer_command PROPERTIES
+    AUTOMOC OFF AUTOUIC OFF AUTORCC OFF
+    OUTPUT_NAME "ztermy-explorer-command"
+    MSVC_RUNTIME_LIBRARY "MultiThreaded"
+)
+if(MSVC)
+    target_compile_options(ztermy_explorer_command PRIVATE /W4 /permissive- /utf-8 /EHsc)
+endif()
+
 qt_add_executable(ztermy WIN32
     src/main.cpp
     src/ui/WindowStatusRuntimeSmoke.cpp
@@ -1026,6 +1041,8 @@ qt_add_executable(ztermy WIN32
     src/platform/windows/DetachedWindowNativeFrame.h
     src/platform/windows/NativeWindow.cpp
     src/platform/windows/NativeWindow.h
+    src/platform/windows/WindowsGlobalShortcut.cpp
+    src/platform/windows/WindowsGlobalShortcut.h
     src/platform/windows/WindowHitTest.cpp
     src/platform/windows/WindowHitTest.h
     src/platform/windows/WindowsUiSettings.cpp
@@ -4721,6 +4738,27 @@ if(BUILD_TESTING)
         )
     endif()
     add_test(NAME application-instance COMMAND ztermy_application_instance_tests)
+
+    qt_add_executable(ztermy_windows_global_shortcut_tests
+        tests/windows_global_shortcut_tests.cpp
+        src/platform/windows/WindowsGlobalShortcut.cpp
+        src/platform/windows/WindowsGlobalShortcut.h
+    )
+    target_compile_features(ztermy_windows_global_shortcut_tests PRIVATE cxx_std_23)
+    target_include_directories(ztermy_windows_global_shortcut_tests PRIVATE src)
+    target_compile_definitions(ztermy_windows_global_shortcut_tests PRIVATE NOMINMAX UNICODE WIN32_LEAN_AND_MEAN _UNICODE)
+    target_link_libraries(ztermy_windows_global_shortcut_tests PRIVATE Qt6::Gui Qt6::Test user32)
+    add_test(NAME windows-global-shortcut COMMAND ztermy_windows_global_shortcut_tests)
+    qt_add_executable(ztermy_explorer_command_tests tests/explorer_command_tests.cpp)
+    target_compile_features(ztermy_explorer_command_tests PRIVATE cxx_std_23)
+    target_compile_definitions(ztermy_explorer_command_tests PRIVATE NOMINMAX UNICODE WIN32_LEAN_AND_MEAN _UNICODE)
+    target_link_libraries(ztermy_explorer_command_tests PRIVATE Qt6::Test shell32 ole32 uuid)
+    add_dependencies(ztermy_explorer_command_tests ztermy_explorer_command)
+    if(MSVC)
+        target_compile_options(ztermy_explorer_command_tests PRIVATE /utf-8 /permissive- /W4)
+    endif()
+    add_test(NAME explorer-command COMMAND ztermy_explorer_command_tests)
+    set_tests_properties(windows-global-shortcut PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
     set_tests_properties(application-instance PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     qt_add_executable(ztermy_window_state_tests
@@ -5084,6 +5122,8 @@ if(BUILD_TESTING)
             ztermy_ai_agent_real_host_tests
             ztermy_app_controller_tests
             ztermy_application_instance_tests
+            ztermy_windows_global_shortcut_tests
+            ztermy_explorer_command_tests
             ztermy_window_state_tests
             ztermy_windows_protected_clipboard_tests
             ztermy_terminal_item_tests

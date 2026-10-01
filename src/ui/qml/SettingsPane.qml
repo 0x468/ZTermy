@@ -606,7 +606,7 @@ Rectangle {
         const selectionSaved = shellSaved && controller.saveTerminalSelectionPopupSettings(selectionPopupSwitch.checked, selectionActionDraftValues());
         const lifecycleSaved = selectionSaved && controller.saveSessionLifecycleSettings(windowBehavior.closePaneOnSessionEnd, windowBehavior.preserveTerminalSessions, windowBehavior.reopenLocalSessions, windowBehavior.reconnectRemoteSessions);
         const saved = lifecycleSaved && controller.saveWindowInteractionSettings(windowBehavior.interactionValues());
-        presentStatus(saved ? restartRequired ? qsTr("Settings saved. Restart ztermy to apply the rendering mode.") : qsTr("Settings saved and applied.") : qsTr("These settings could not be saved. Check the font and numeric ranges."), !saved, saved);
+        presentStatus(saved ? restartRequired ? qsTr("Settings saved. Restart ztermy to apply the rendering mode.") : qsTr("Settings saved and applied.") : windowChrome.globalShortcutError || qsTr("These settings could not be saved. Check the font and numeric ranges."), !saved, saved);
         if (!saved) {
             loadDraft();
         } else if (restartRequired) {
@@ -740,6 +740,7 @@ Rectangle {
                 Layout.fillWidth: true
                 visible: pane.currentCategory === "shortcuts"
                 controller: pane.controller
+                windowChrome: pane.windowChrome
                 onVisibleChanged: {
                     if (!visible) {
                         finishRecording();

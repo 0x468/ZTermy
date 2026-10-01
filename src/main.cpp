@@ -15,6 +15,7 @@
 #include "ui/AiMemoryDiagnostics.h"
 #include "ui/MemoryLifecycleRuntimeSmoke.h"
 #include "ui/RuntimeSmokeItems.h"
+#include "ui/SystemIntegrationRuntimeSmoke.h"
 #include "ui/TerminalLifecycleRuntimeSmoke.h"
 #include "ui/ThemeSettingsRuntimeSmoke.h"
 #include "ui/WindowStateRuntimeSmoke.h"
@@ -4546,7 +4547,13 @@ int main(int argc, char *argv[])
     }
 
     ztermy::ApplicationInstance instance;
-    const auto ownership = instance.claimConfigured(paths->dataDirectory, paths->settingsFile);
+    const auto launchRequest = ztermy::config::ApplicationLaunchRequest::fromArguments(QCoreApplication::arguments());
+    if (!launchRequest)
+    {
+        qCritical().noquote() << launchRequest.error();
+        return EXIT_FAILURE;
+    }
+    const auto ownership = instance.claimConfigured(paths->dataDirectory, paths->settingsFile, *launchRequest);
     if (ownership != ztermy::ApplicationInstance::Result::Primary)
         return ownership == ztermy::ApplicationInstance::Result::Existing ? EXIT_SUCCESS : EXIT_FAILURE;
     ztermy::logging::initialize(paths->logsDirectory);
@@ -4647,6 +4654,12 @@ int main(int argc, char *argv[])
     const qint64 qmlLoadMilliseconds = qmlLoadTimer.elapsed();
     const bool closeToTrayAllowed = !QCoreApplication::arguments().contains(QStringLiteral("--smoke-test"));
     window.setCloseToTrayEnabled(closeToTrayAllowed && appController.closeToTray());
+    appController.setGlobalShortcutHandler([&window](const QString &shortcut, const bool cursorScreen) {
+        return window.configureGlobalShortcut(shortcut, cursorScreen);
+    });
+    const auto shortcutSettings = appController.windowInteractionSettings();
+    (void)window.configureGlobalShortcut(shortcutSettings.value(QStringLiteral("globalShortcut")).toString(),
+                                         shortcutSettings.value(QStringLiteral("summonToCursorScreen")).toBool());
     QObject::connect(&appController, &ztermy::AppController::applicationSettingsChanged, &window,
                      [&appController, &fontCatalog, &localizationManager, &window, closeToTrayAllowed] {
                          window.setCloseToTrayEnabled(closeToTrayAllowed && appController.closeToTray());
@@ -4675,6 +4688,28 @@ int main(int argc, char *argv[])
         }
         qCInfo(applicationLog) << "QML and native-window smoke test completed";
         return EXIT_SUCCESS;
+    }
+    if (QCoreApplication::arguments().contains(QStringLiteral("--shortcut-settings-smoke")))
+    {
+        ztermy::ui::showForRuntimeSmoke(window);
+        ztermy::ui::processWindowEventsFor(std::chrono::milliseconds{250});
+        QWindow peer;
+        QDir captures(QDir(paths->dataDirectory).filePath(QStringLiteral("shortcut-settings-captures")));
+        const bool passed = captures.mkpath(QStringLiteral("."))
+                            && ztermy::ui::verifyGlobalShortcutSettingsRuntime(window, appController, peer, captures);
+        appController.shutdown();
+        window.releaseResources();
+        qCInfo(applicationLog) << "Shortcut settings runtime smoke passed=" << passed;
+        return passed ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+    if (QCoreApplication::arguments().contains(QStringLiteral("--system-integration-smoke")))
+    {
+        const bool passed =
+            ztermy::ui::runSystemIntegrationRuntimeSmoke(window, appController, instance, paths->dataDirectory);
+        appController.shutdown();
+        window.releaseResources();
+        qCInfo(applicationLog) << "System integration runtime smoke passed=" << passed;
+        return passed ? EXIT_SUCCESS : EXIT_FAILURE;
     }
     if (QCoreApplication::arguments().contains(QStringLiteral("--window-runtime-smoke")))
     {
@@ -4839,7 +4874,17 @@ int main(int argc, char *argv[])
     // Startup goes through the window state owner too, so a state restored
     // before the window first appears (for example maximized) survives instead
     // of being reset the way the plain QWindow show helper would.
-    ztermy::windowing::present(window);
+    QObject::connect(&instance, &ztermy::ApplicationInstance::directoryOpenRequested, &appController,
+                     [&appController](const QString &directory) {
+                         (void)appController.openLocalDirectory(directory);
+                     });
+    if (!launchRequest->directory.isEmpty())
+        (void)appController.openLocalDirectory(launchRequest->directory);
+    if (launchRequest->background)
+        window.prepareBackgroundLaunch();
+    if (!launchRequest->background || !window.trayIconVisible())
+        ztermy::windowing::present(window);
+    instance.setReady();
     const int exitCode = application.exec();
 
     qCInfo(applicationLog) << "Application event loop stopped; beginning orderly shutdown";

@@ -1,6 +1,8 @@
 #pragma once
 
+#include "platform/windows/WindowsGlobalShortcut.h"
 #include "platform/windows/WindowsUiSettings.h"
+#include <memory>
 
 #include <QAbstractNativeEventFilter>
 #include <QColor>
@@ -26,6 +28,7 @@ class NativeWindow final : public QQuickView, public QAbstractNativeEventFilter
     Q_PROPERTY(bool performanceModeActive READ performanceModeActive CONSTANT)
     Q_PROPERTY(bool opaqueSurface READ opaqueSurface CONSTANT)
     Q_PROPERTY(bool highContrast READ highContrast NOTIFY highContrastChanged)
+    Q_PROPERTY(QString globalShortcutError READ globalShortcutError NOTIFY globalShortcutErrorChanged)
     Q_PROPERTY(QColor highContrastBackground READ highContrastBackground NOTIFY highContrastChanged)
     Q_PROPERTY(QColor highContrastText READ highContrastText NOTIFY highContrastChanged)
     Q_PROPERTY(QColor highContrastHighlight READ highContrastHighlight NOTIFY highContrastChanged)
@@ -49,6 +52,8 @@ public:
     [[nodiscard]] bool highContrast() const noexcept;
     [[nodiscard]] bool closeToTrayEnabled() const noexcept;
     [[nodiscard]] bool trayIconVisible() const noexcept;
+    [[nodiscard]] QString globalShortcutError() const { return m_globalShortcutError; }
+    [[nodiscard]] bool configureGlobalShortcut(const QString &shortcut, bool moveToCursorScreen);
     [[nodiscard]] QColor highContrastBackground() const noexcept;
     [[nodiscard]] QColor highContrastText() const noexcept;
     [[nodiscard]] QColor highContrastHighlight() const noexcept;
@@ -60,6 +65,7 @@ public:
     Q_INVOKABLE void setAlwaysOnTop(bool enabled);
     Q_INVOKABLE void toggleAlwaysOnTop();
     void setCloseToTrayEnabled(bool enabled);
+    void prepareBackgroundLaunch();
     Q_INVOKABLE bool applyAppearance(const QString &backdropPreference, bool darkMode);
     Q_INVOKABLE bool configureDetachedWindow(QQuickWindow *window);
     Q_INVOKABLE void requestRestart() { emit restartRequested(); }
@@ -79,6 +85,7 @@ signals:
     void systemAccentColorChanged();
     void animationsEnabledChanged();
     void highContrastChanged();
+    void globalShortcutErrorChanged();
 
 protected:
     bool event(QEvent *event) override;
@@ -99,6 +106,7 @@ private:
     void removeTrayIcon() noexcept;
     void showTrayMenu();
     void restoreFromTray();
+    void toggleMainWindowFromShortcut();
     Q_INVOKABLE void exitFromTray();
     void refreshAnimationsEnabled();
     void refreshHighContrast();
@@ -119,6 +127,7 @@ private:
     QString m_backdropPreference = QStringLiteral("acrylic");
     bool m_darkMode = true;
     bool m_closeToTrayEnabled = false;
+    bool m_backgroundLaunchTray = false;
     QHash<WId, QPointer<QQuickWindow>> m_detachedWindows;
     bool m_trayIconVisible = false;
     bool m_exitingFromTray = false;
@@ -129,6 +138,9 @@ private:
     windowing::HighContrastState m_highContrastState;
     HWND m_windowHandle = nullptr;
     WNDPROC m_originalWindowProcedure = nullptr;
+    std::unique_ptr<windowing::WindowsGlobalShortcut> m_globalShortcut;
+    QString m_globalShortcutError;
+    bool m_summonToCursorScreen = false;
 };
 
 } // namespace ztermy

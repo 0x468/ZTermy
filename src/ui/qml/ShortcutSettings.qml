@@ -8,22 +8,42 @@ ColumnLayout {
     id: pane
 
     required property var controller
+    required property var windowChrome
     property string recordingActionId: ""
     property string validationError: ""
     readonly property bool recording: recordingActionId.length > 0
+    readonly property var globalAction: ({
+            id: "system.summon",
+            label: qsTr("Show or hide the main window"),
+            description: qsTr("System-wide, including when another application is focused"),
+            shortcut: controller.windowInteractionSettings.globalShortcut || "",
+            customized: (controller.windowInteractionSettings.globalShortcut || "").length > 0
+        })
+    readonly property bool globalMatches: matches(globalAction)
 
     spacing: Theme.spacingSection
 
-    function filtered(category) {
+    function matches(action) {
         const needle = shortcutSearch.text.trim().toLocaleLowerCase();
+        const haystack = (action.label + " " + action.description + " " + action.shortcut + " " + action.id).toLocaleLowerCase();
+        return needle.length === 0 || haystack.indexOf(needle) >= 0;
+    }
+
+    function globalResult(saved) {
+        return {
+            valid: saved,
+            error: saved ? "" : windowChrome.globalShortcutError || qsTr("The shortcut could not be saved.")
+        };
+    }
+
+    function filtered(category) {
         const result = [];
         for (let index = 0; index < controller.actions.length; ++index) {
             const action = controller.actions[index];
             if (action.category !== category) {
                 continue;
             }
-            const haystack = (action.label + " " + action.description + " " + action.shortcut + " " + action.id).toLocaleLowerCase();
-            if (needle.length === 0 || haystack.indexOf(needle) >= 0) {
+            if (matches(action)) {
                 result.push(action);
             }
         }
@@ -44,6 +64,7 @@ ColumnLayout {
         id: row
 
         required property var actionData
+        property bool systemWide: false
         readonly property bool compact: width < 560
 
         objectName: actionData.id === "application.commandPalette" ? "shortcutCommandPaletteRow" : ""
@@ -114,7 +135,10 @@ ColumnLayout {
                         if (event.key === Qt.Key_Control || event.key === Qt.Key_Shift || event.key === Qt.Key_Alt || event.key === Qt.Key_Meta) {
                             return;
                         }
-                        const result = event.key === Qt.Key_Backspace || event.key === Qt.Key_Delete ? pane.controller.setActionShortcut(row.actionData.id, "") : pane.controller.setActionShortcutFromKey(row.actionData.id, event.key, event.modifiers);
+                        const clear = event.key === Qt.Key_Backspace || event.key === Qt.Key_Delete;
+                        const result = row.systemWide ? pane.globalResult(clear ? pane.controller.saveWindowInteractionSettings({
+                            globalShortcut: ""
+                        }) : pane.controller.setGlobalShortcutFromKey(event.key, event.modifiers)) : clear ? pane.controller.setActionShortcut(row.actionData.id, "") : pane.controller.setActionShortcutFromKey(row.actionData.id, event.key, event.modifiers);
                         if (result.valid) {
                             pane.validationError = "";
                             pane.finishRecording();
@@ -156,7 +180,9 @@ ColumnLayout {
                     hoverEnabled: true
                     Accessible.name: qsTr("Unbind %1").arg(row.actionData.label)
                     onClicked: {
-                        const result = pane.controller.setActionShortcut(row.actionData.id, "");
+                        const result = row.systemWide ? pane.globalResult(pane.controller.saveWindowInteractionSettings({
+                            globalShortcut: ""
+                        })) : pane.controller.setActionShortcut(row.actionData.id, "");
                         pane.validationError = result.valid ? "" : result.error;
                     }
                     contentItem: AppIcon {
@@ -185,11 +211,13 @@ ColumnLayout {
                     hoverEnabled: true
                     Accessible.name: qsTr("Reset %1 to its default shortcut").arg(row.actionData.label)
                     onClicked: {
-                        if (!pane.controller.resetActionShortcut(row.actionData.id)) {
-                            pane.validationError = qsTr("The shortcut could not be reset.");
-                        } else {
-                            pane.validationError = "";
-                        }
+                        const result = row.systemWide ? pane.globalResult(pane.controller.saveWindowInteractionSettings({
+                            globalShortcut: ""
+                        })) : {
+                            valid: pane.controller.resetActionShortcut(row.actionData.id),
+                            error: qsTr("The shortcut could not be reset.")
+                        };
+                        pane.validationError = result.valid ? "" : result.error;
                     }
                     contentItem: AppIcon {
                         name: "refresh"
@@ -270,6 +298,27 @@ ColumnLayout {
         font.pixelSize: Theme.textCompact
     }
 
+    SectionCard {
+        objectName: "systemShortcutSettingsCard"
+        Layout.fillWidth: true
+        visible: pane.globalMatches
+        heading: qsTr("System-wide")
+
+        ShortcutRow {
+            actionData: pane.globalAction
+            systemWide: true
+        }
+
+        Text {
+            Layout.fillWidth: true
+            text: qsTr("Hides only when the main window is in front; otherwise restores and focuses it. Detached windows are unchanged. Clear the shortcut to disable it.")
+            color: Theme.textMuted
+            wrapMode: Text.WordWrap
+            font.family: Theme.uiFont
+            font.pixelSize: Theme.textCompact
+        }
+    }
+
     ShortcutGroup {
         category: "application"
         title: qsTr("Application")
@@ -287,7 +336,7 @@ ColumnLayout {
 
     Text {
         Layout.fillWidth: true
-        visible: pane.filtered("application").length + pane.filtered("tabs").length + pane.filtered("terminal").length === 0
+        visible: !pane.globalMatches && pane.filtered("application").length + pane.filtered("tabs").length + pane.filtered("terminal").length === 0
         text: qsTr("No matching shortcuts")
         color: Theme.textMuted
         horizontalAlignment: Text.AlignHCenter

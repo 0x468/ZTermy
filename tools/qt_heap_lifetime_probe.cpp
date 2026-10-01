@@ -5,6 +5,7 @@
 #include <QEvent>
 #include <QLoggingCategory>
 #include <QTextStream>
+#include <QTimer>
 
 #include <algorithm>
 #include <memory>
@@ -49,13 +50,9 @@ int main(int argc, char **argv)
                 auto receiver = std::make_unique<QObject>();
                 auto payload = std::make_shared<QByteArray>(4096, 'x');
                 const std::weak_ptr<QByteArray> lifetime = payload;
-                if (!QMetaObject::invokeMethod(
-                        receiver.get(),
-                        [payload, &delivered] {
-                            ++delivered;
-                        },
-                        Qt::QueuedConnection))
-                    return 6;
+                QTimer::singleShot(0, receiver.get(), [payload, &delivered] {
+                    ++delivered;
+                });
                 payload.reset();
                 if (cancel)
                     receiver.reset();

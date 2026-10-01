@@ -18,6 +18,7 @@ SectionCard {
     property alias tabCloseButtonIndex: tabCloseButtonBox.currentIndex
     property alias autoHideTitleBar: autoHideTitleBarSwitch.checked
     property alias tabWidthModeIndex: tabWidthModeBox.currentIndex
+    property alias summonToCursorScreen: cursorScreenSwitch.checked
     signal performanceModeEdited(bool enabled)
     objectName: "settingsWindowBehaviorCard"
     Layout.fillWidth: true
@@ -32,6 +33,7 @@ SectionCard {
         tabCloseButtonIndex = ["always", "hover", "hidden"].indexOf(values.tabCloseButton);
         autoHideTitleBar = values.autoHideTitleBar;
         tabWidthModeIndex = ["equal", "active"].indexOf(values.tabWidthMode);
+        summonToCursorScreen = values.summonToCursorScreen;
     }
 
     function interactionValues() {
@@ -42,13 +44,21 @@ SectionCard {
             tabDoubleClick: ["rename", "close", "none"][tabDoubleClickIndex],
             tabCloseButton: ["always", "hover", "hidden"][tabCloseButtonIndex],
             autoHideTitleBar: autoHideTitleBar,
-            tabWidthMode: ["equal", "active"][tabWidthModeIndex]
+            tabWidthMode: ["equal", "active"][tabWidthModeIndex],
+            summonToCursorScreen: summonToCursorScreen
         };
     }
 
     ColumnLayout {
         Layout.fillWidth: true
         spacing: Theme.spacingControl
+
+        AppSwitch {
+            id: cursorScreenSwitch
+            Layout.fillWidth: true
+            text: qsTr("Wake the main window on the screen containing the pointer")
+            accessibleName: text
+        }
 
         AppSwitch {
             id: closeToTraySwitch

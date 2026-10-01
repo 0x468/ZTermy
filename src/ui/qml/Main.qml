@@ -926,6 +926,10 @@ Rectangle {
             root.executeAction(actionId);
         }
 
+        function onLocalDirectoryOpened(tabId) {
+            root.activateMainTerminal(tabId);
+        }
+
         function onTransferNotificationRequested(notification) {
             transferToast.present(notification);
         }

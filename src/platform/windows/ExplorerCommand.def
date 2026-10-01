@@ -1,0 +1,4 @@
+LIBRARY ztermy-explorer-command
+EXPORTS
+    DllGetClassObject PRIVATE
+    DllCanUnloadNow PRIVATE

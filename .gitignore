@@ -28,6 +28,7 @@ qmlcache/
 /.clangd/
 /.claude/
 /.codegraph/
+/.playwright-mcp/
 /.idea/
 /.vs/
 /.vscode/*
@@ -51,6 +52,7 @@ Desktop.ini
 *.exp
 
 # Local secrets and environment overrides
+/.signing/
 .env
 .env.*
 !.env.example

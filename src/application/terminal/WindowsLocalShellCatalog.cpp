@@ -217,10 +217,16 @@ std::optional<LocalShellProfile> WindowsLocalShellCatalog::resolve(const QList<L
 LocalTerminalLaunchSpec WindowsLocalShellCatalog::launchSpec(const LocalShellProfile &profile,
                                                              const QString &workingDirectory)
 {
+    QStringList arguments = profile.arguments;
+    // The normal WSL profile opens HOME; "open here" must instead inherit the
+    // explicit Win32 working directory, which WSL translates to its mount path.
+    if (profile.id == QStringLiteral("wsl") && !workingDirectory.isEmpty()
+        && arguments == QStringList{QStringLiteral("~")})
+        arguments.clear();
     return {.id = profile.id,
             .displayName = profile.name,
             .executable = profile.executable,
-            .arguments = profile.arguments,
+            .arguments = arguments,
             .workingDirectory = workingDirectory,
             .powerShellIntegration = profile.powerShellIntegration};
 }

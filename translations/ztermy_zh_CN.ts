@@ -1970,7 +1970,7 @@
         <translation>请使用 user@host 或 user@host:port。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4615"/>
+        <location filename="../src/application/AppController.cpp" line="4621"/>
         <source>Waiting to reconnect to the SSH host...</source>
         <translation>正在等待重新连接 SSH 主机...</translation>
     </message>
@@ -2068,35 +2068,35 @@
 <context>
     <name>DetachedTerminalWindow</name>
     <message>
-        <location filename="../src/ui/qml/DetachedTerminalWindow.qml" line="176"/>
+        <location filename="../src/ui/qml/DetachedTerminalWindow.qml" line="174"/>
         <source>%1 — Detached pane</source>
         <translation>%1 — 已脱离窗格</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/DetachedTerminalWindow.qml" line="176"/>
-        <location filename="../src/ui/qml/DetachedTerminalWindow.qml" line="246"/>
+        <location filename="../src/ui/qml/DetachedTerminalWindow.qml" line="174"/>
+        <location filename="../src/ui/qml/DetachedTerminalWindow.qml" line="258"/>
         <source>Terminal</source>
         <translation>终端</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/DetachedTerminalWindow.qml" line="258"/>
+        <location filename="../src/ui/qml/DetachedTerminalWindow.qml" line="270"/>
         <source>Reattach window to main window</source>
         <translation>将整个窗口移回主窗口</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/DetachedTerminalWindow.qml" line="364"/>
+        <location filename="../src/ui/qml/DetachedTerminalWindow.qml" line="376"/>
         <source>Paste multiple lines?</source>
         <translation>粘贴多行？</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/qml/DetachedTerminalWindow.qml" line="365"/>
+        <location filename="../src/ui/qml/DetachedTerminalWindow.qml" line="377"/>
         <source>Paste %n line(s) into this detached terminal?</source>
         <translation>
             <numerusform>将 %n 行内容粘贴到此独立终端？</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/DetachedTerminalWindow.qml" line="366"/>
+        <location filename="../src/ui/qml/DetachedTerminalWindow.qml" line="378"/>
         <source>Paste</source>
         <translation>粘贴</translation>
     </message>
@@ -3508,14 +3508,14 @@
 <context>
     <name>Main</name>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1604"/>
+        <location filename="../src/ui/qml/Main.qml" line="1620"/>
         <source>Hosts</source>
         <translation>主机</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="118"/>
-        <location filename="../src/ui/qml/Main.qml" line="1104"/>
-        <location filename="../src/ui/qml/Main.qml" line="1696"/>
+        <location filename="../src/ui/qml/Main.qml" line="121"/>
+        <location filename="../src/ui/qml/Main.qml" line="1120"/>
+        <location filename="../src/ui/qml/Main.qml" line="1712"/>
         <source>Settings</source>
         <translation>设置</translation>
     </message>
@@ -3525,112 +3525,112 @@
         <translation>新建本地终端</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1445"/>
+        <location filename="../src/ui/qml/Main.qml" line="1461"/>
         <source>Save session log</source>
         <translation>保存会话日志</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1447"/>
+        <location filename="../src/ui/qml/Main.qml" line="1463"/>
         <source>Terminal logs (*.log)</source>
         <translation>终端日志 (*.log)</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1447"/>
-        <location filename="../src/ui/qml/Main.qml" line="1457"/>
-        <location filename="../src/ui/qml/Main.qml" line="1466"/>
-        <location filename="../src/ui/qml/Main.qml" line="1476"/>
-        <location filename="../src/ui/qml/Main.qml" line="1491"/>
+        <location filename="../src/ui/qml/Main.qml" line="1463"/>
+        <location filename="../src/ui/qml/Main.qml" line="1473"/>
+        <location filename="../src/ui/qml/Main.qml" line="1482"/>
+        <location filename="../src/ui/qml/Main.qml" line="1492"/>
         <location filename="../src/ui/qml/Main.qml" line="1507"/>
+        <location filename="../src/ui/qml/Main.qml" line="1523"/>
         <source>All files (*)</source>
         <translation>所有文件 (*)</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1457"/>
-        <location filename="../src/ui/qml/Main.qml" line="1466"/>
+        <location filename="../src/ui/qml/Main.qml" line="1473"/>
+        <location filename="../src/ui/qml/Main.qml" line="1482"/>
         <source>ztermy script libraries (*.json)</source>
         <translation>ztermy 脚本库 (*.json)</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="116"/>
-        <location filename="../src/ui/qml/Main.qml" line="1767"/>
+        <location filename="../src/ui/qml/Main.qml" line="119"/>
+        <location filename="../src/ui/qml/Main.qml" line="1783"/>
         <source>Terminal</source>
         <translation>终端</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1783"/>
-        <location filename="../src/ui/qml/Main.qml" line="1787"/>
+        <location filename="../src/ui/qml/Main.qml" line="1799"/>
+        <location filename="../src/ui/qml/Main.qml" line="1803"/>
         <source>Copy host address</source>
         <translation>复制主机地址</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1837"/>
+        <location filename="../src/ui/qml/Main.qml" line="1853"/>
         <source>Connected %1</source>
         <translation>已连接 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2042"/>
+        <location filename="../src/ui/qml/Main.qml" line="2058"/>
         <source>Command history</source>
         <translation>命令历史</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1907"/>
-        <location filename="../src/ui/qml/Main.qml" line="1911"/>
-        <location filename="../src/ui/qml/Main.qml" line="2061"/>
+        <location filename="../src/ui/qml/Main.qml" line="1923"/>
+        <location filename="../src/ui/qml/Main.qml" line="1927"/>
+        <location filename="../src/ui/qml/Main.qml" line="2077"/>
         <source>Command composer</source>
         <translation>命令撰写栏</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1936"/>
-        <location filename="../src/ui/qml/Main.qml" line="1939"/>
-        <location filename="../src/ui/qml/Main.qml" line="2078"/>
+        <location filename="../src/ui/qml/Main.qml" line="1952"/>
+        <location filename="../src/ui/qml/Main.qml" line="1955"/>
+        <location filename="../src/ui/qml/Main.qml" line="2094"/>
         <source>Stop session log</source>
         <translation>停止会话日志</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1936"/>
-        <location filename="../src/ui/qml/Main.qml" line="1939"/>
-        <location filename="../src/ui/qml/Main.qml" line="2078"/>
+        <location filename="../src/ui/qml/Main.qml" line="1952"/>
+        <location filename="../src/ui/qml/Main.qml" line="1955"/>
+        <location filename="../src/ui/qml/Main.qml" line="2094"/>
         <source>Start session log</source>
         <translation>开始会话日志</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1939"/>
+        <location filename="../src/ui/qml/Main.qml" line="1955"/>
         <source>Session log is incomplete: %1 byte(s) were dropped.</source>
         <translation>会话日志不完整：已丢弃 %1 字节。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1921"/>
-        <location filename="../src/ui/qml/Main.qml" line="1924"/>
-        <location filename="../src/ui/qml/Main.qml" line="2072"/>
+        <location filename="../src/ui/qml/Main.qml" line="1937"/>
+        <location filename="../src/ui/qml/Main.qml" line="1940"/>
+        <location filename="../src/ui/qml/Main.qml" line="2088"/>
         <location filename="../src/ui/qml/TerminalSearchBar.qml" line="94"/>
         <source>Find in terminal</source>
         <translation>在终端中查找</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1455"/>
+        <location filename="../src/ui/qml/Main.qml" line="1471"/>
         <source>Import command snippet library</source>
         <translation>导入命令片段库</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1464"/>
+        <location filename="../src/ui/qml/Main.qml" line="1480"/>
         <source>Export command snippet library</source>
         <translation>导出命令片段库</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1576"/>
+        <location filename="../src/ui/qml/Main.qml" line="1592"/>
         <source>ztermy</source>
         <translation>ztermy</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1952"/>
-        <location filename="../src/ui/qml/Main.qml" line="1955"/>
-        <location filename="../src/ui/qml/Main.qml" line="2084"/>
+        <location filename="../src/ui/qml/Main.qml" line="1968"/>
+        <location filename="../src/ui/qml/Main.qml" line="1971"/>
+        <location filename="../src/ui/qml/Main.qml" line="2100"/>
         <source>Command snippets</source>
         <translation>命令片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2026"/>
-        <location filename="../src/ui/qml/Main.qml" line="2030"/>
+        <location filename="../src/ui/qml/Main.qml" line="2042"/>
+        <location filename="../src/ui/qml/Main.qml" line="2046"/>
         <source>More terminal actions</source>
         <translation>更多终端操作</translation>
     </message>
@@ -3660,43 +3660,43 @@
         <translation>关闭终端搜索</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2343"/>
+        <location filename="../src/ui/qml/Main.qml" line="2359"/>
         <source>No terminal sessions</source>
         <translation>没有终端会话</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2344"/>
+        <location filename="../src/ui/qml/Main.qml" line="2360"/>
         <source>Open a local PowerShell session or choose an SSH host from the Hosts workspace.</source>
         <translation>打开本地 PowerShell 会话，或从主机工作区选择 SSH 主机。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1288"/>
-        <location filename="../src/ui/qml/Main.qml" line="2349"/>
+        <location filename="../src/ui/qml/Main.qml" line="1304"/>
+        <location filename="../src/ui/qml/Main.qml" line="2365"/>
         <source>New terminal</source>
         <translation>新建终端</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2350"/>
+        <location filename="../src/ui/qml/Main.qml" line="2366"/>
         <source>Open a new local terminal</source>
         <translation>打开新的本地终端</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2356"/>
+        <location filename="../src/ui/qml/Main.qml" line="2372"/>
         <source>Browse hosts</source>
         <translation>浏览主机</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="931"/>
+        <location filename="../src/ui/qml/Main.qml" line="939"/>
         <source>Keyword highlight added</source>
         <translation>已添加关键字高亮</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="933"/>
+        <location filename="../src/ui/qml/Main.qml" line="941"/>
         <source>Undo</source>
         <translation>撤销</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1287"/>
+        <location filename="../src/ui/qml/Main.qml" line="1303"/>
         <source>Open new terminal menu</source>
         <translation>打开新建终端菜单</translation>
     </message>
@@ -3706,31 +3706,31 @@
         <translation>重新打开已关闭的终端</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="120"/>
-        <location filename="../src/ui/qml/Main.qml" line="1089"/>
+        <location filename="../src/ui/qml/Main.qml" line="123"/>
+        <location filename="../src/ui/qml/Main.qml" line="1105"/>
         <source>SFTP files</source>
         <translation>SFTP 文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="121"/>
-        <location filename="../src/ui/qml/Main.qml" line="1052"/>
-        <location filename="../src/ui/qml/Main.qml" line="1059"/>
-        <location filename="../src/ui/qml/Main.qml" line="1060"/>
+        <location filename="../src/ui/qml/Main.qml" line="124"/>
+        <location filename="../src/ui/qml/Main.qml" line="1068"/>
+        <location filename="../src/ui/qml/Main.qml" line="1075"/>
+        <location filename="../src/ui/qml/Main.qml" line="1076"/>
         <source>Workspace</source>
         <translation>工作台</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="123"/>
+        <location filename="../src/ui/qml/Main.qml" line="126"/>
         <source>%1 — ztermy</source>
         <translation>%1 — ztermy</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1084"/>
+        <location filename="../src/ui/qml/Main.qml" line="1100"/>
         <source>SFTP</source>
         <translation>SFTP</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1090"/>
+        <location filename="../src/ui/qml/Main.qml" line="1106"/>
         <source>Open local and remote files</source>
         <translation>打开本地和远程文件</translation>
     </message>
@@ -3760,61 +3760,61 @@
         <translation>管理主机</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1387"/>
+        <location filename="../src/ui/qml/Main.qml" line="1403"/>
         <source>Dismiss recovery notice</source>
         <translation>关闭恢复提示</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1474"/>
-        <location filename="../src/ui/qml/Main.qml" line="1674"/>
+        <location filename="../src/ui/qml/Main.qml" line="1490"/>
+        <location filename="../src/ui/qml/Main.qml" line="1690"/>
         <source>Import workspace</source>
         <translation>导入工作区</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1476"/>
-        <location filename="../src/ui/qml/Main.qml" line="1491"/>
+        <location filename="../src/ui/qml/Main.qml" line="1492"/>
+        <location filename="../src/ui/qml/Main.qml" line="1507"/>
         <source>ztermy workspaces (*.ztermy-workspace.json)</source>
         <translation>ztermy 工作区 (*.ztermy-workspace.json)</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1476"/>
-        <location filename="../src/ui/qml/Main.qml" line="1491"/>
+        <location filename="../src/ui/qml/Main.qml" line="1492"/>
+        <location filename="../src/ui/qml/Main.qml" line="1507"/>
         <source>JSON files (*.json)</source>
         <translation>JSON 文件 (*.json)</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1480"/>
+        <location filename="../src/ui/qml/Main.qml" line="1496"/>
         <source>Workspace imported</source>
         <translation>工作区已导入</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1480"/>
+        <location filename="../src/ui/qml/Main.qml" line="1496"/>
         <source>Import failed</source>
         <translation>导入失败</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1489"/>
-        <location filename="../src/ui/qml/Main.qml" line="1683"/>
+        <location filename="../src/ui/qml/Main.qml" line="1505"/>
+        <location filename="../src/ui/qml/Main.qml" line="1699"/>
         <source>Export workspace</source>
         <translation>导出工作区</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1496"/>
+        <location filename="../src/ui/qml/Main.qml" line="1512"/>
         <source>Workspace exported</source>
         <translation>工作区已导出</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1496"/>
+        <location filename="../src/ui/qml/Main.qml" line="1512"/>
         <source>Export failed</source>
         <translation>导出失败</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1505"/>
+        <location filename="../src/ui/qml/Main.qml" line="1521"/>
         <source>Import OpenSSH configuration</source>
         <translation>导入 OpenSSH 配置</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1507"/>
+        <location filename="../src/ui/qml/Main.qml" line="1523"/>
         <source>OpenSSH configuration (config)</source>
         <translation>OpenSSH 配置 (config)</translation>
     </message>
@@ -3839,193 +3839,193 @@
         <translation>重命名</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1590"/>
+        <location filename="../src/ui/qml/Main.qml" line="1606"/>
         <source>Expand sidebar</source>
         <translation>展开侧边栏</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1590"/>
+        <location filename="../src/ui/qml/Main.qml" line="1606"/>
         <source>Collapse sidebar</source>
         <translation>折叠侧边栏</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1614"/>
+        <location filename="../src/ui/qml/Main.qml" line="1630"/>
         <source>Keychain</source>
         <translation>钥匙串</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1624"/>
+        <location filename="../src/ui/qml/Main.qml" line="1640"/>
         <source>Proxies</source>
         <translation>代理</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1634"/>
+        <location filename="../src/ui/qml/Main.qml" line="1650"/>
         <source>Port forwarding</source>
         <translation>端口转发</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1644"/>
+        <location filename="../src/ui/qml/Main.qml" line="1660"/>
         <source>Scripts</source>
         <translation>脚本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1654"/>
+        <location filename="../src/ui/qml/Main.qml" line="1670"/>
         <source>Known hosts</source>
         <translation>已知主机</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1664"/>
+        <location filename="../src/ui/qml/Main.qml" line="1680"/>
         <source>Logs</source>
         <translation>日志</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1866"/>
-        <location filename="../src/ui/qml/Main.qml" line="1869"/>
-        <location filename="../src/ui/qml/Main.qml" line="2048"/>
+        <location filename="../src/ui/qml/Main.qml" line="1882"/>
+        <location filename="../src/ui/qml/Main.qml" line="1885"/>
+        <location filename="../src/ui/qml/Main.qml" line="2064"/>
         <source>Host keyword highlighting</source>
         <translation>主机关键字高亮</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1883"/>
-        <location filename="../src/ui/qml/Main.qml" line="1886"/>
-        <location filename="../src/ui/qml/Main.qml" line="2054"/>
+        <location filename="../src/ui/qml/Main.qml" line="1899"/>
+        <location filename="../src/ui/qml/Main.qml" line="1902"/>
+        <location filename="../src/ui/qml/Main.qml" line="2070"/>
         <source>Open remote files</source>
         <translation>打开远程文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1994"/>
-        <location filename="../src/ui/qml/Main.qml" line="2111"/>
+        <location filename="../src/ui/qml/Main.qml" line="2010"/>
+        <location filename="../src/ui/qml/Main.qml" line="2127"/>
         <source>Pause script recording</source>
         <translation>暂停脚本录制</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1994"/>
-        <location filename="../src/ui/qml/Main.qml" line="2111"/>
+        <location filename="../src/ui/qml/Main.qml" line="2010"/>
+        <location filename="../src/ui/qml/Main.qml" line="2127"/>
         <source>Resume script recording</source>
         <translation>继续脚本录制</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1994"/>
-        <location filename="../src/ui/qml/Main.qml" line="2130"/>
+        <location filename="../src/ui/qml/Main.qml" line="2010"/>
+        <location filename="../src/ui/qml/Main.qml" line="2146"/>
         <source>Review recorded commands</source>
         <translation>查看已录制命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2010"/>
-        <location filename="../src/ui/qml/Main.qml" line="2014"/>
+        <location filename="../src/ui/qml/Main.qml" line="2026"/>
+        <location filename="../src/ui/qml/Main.qml" line="2030"/>
         <source>AI assistant</source>
         <translation>AI 助手</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2091"/>
+        <location filename="../src/ui/qml/Main.qml" line="2107"/>
         <source>Follow terminal directory</source>
         <translation>跟随终端目录</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2091"/>
+        <location filename="../src/ui/qml/Main.qml" line="2107"/>
         <source>Stop following terminal directory</source>
         <translation>停止跟随终端目录</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2097"/>
+        <location filename="../src/ui/qml/Main.qml" line="2113"/>
         <source>Session terminal settings</source>
         <translation>会话终端设置</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2104"/>
+        <location filename="../src/ui/qml/Main.qml" line="2120"/>
         <source>Start script recording</source>
         <translation>开始脚本录制</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2121"/>
+        <location filename="../src/ui/qml/Main.qml" line="2137"/>
         <source>Stop script recording</source>
         <translation>停止脚本录制</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2138"/>
+        <location filename="../src/ui/qml/Main.qml" line="2154"/>
         <source>Terminal encoding</source>
         <translation>终端编码</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2141"/>
+        <location filename="../src/ui/qml/Main.qml" line="2157"/>
         <source>UTF-8</source>
         <translation>UTF-8</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2147"/>
+        <location filename="../src/ui/qml/Main.qml" line="2163"/>
         <source>GB18030</source>
         <translation>GB18030</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2357"/>
+        <location filename="../src/ui/qml/Main.qml" line="2373"/>
         <source>Browse saved SSH hosts</source>
         <translation>浏览已保存的 SSH 主机</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2516"/>
-        <location filename="../src/ui/qml/Main.qml" line="2580"/>
+        <location filename="../src/ui/qml/Main.qml" line="2536"/>
+        <location filename="../src/ui/qml/Main.qml" line="2600"/>
         <source>Unlock portable credential vault</source>
         <translation>解锁便携凭据保险库</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2519"/>
+        <location filename="../src/ui/qml/Main.qml" line="2539"/>
         <source>Unlock portable vault</source>
         <translation>解锁便携保险库</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2528"/>
+        <location filename="../src/ui/qml/Main.qml" line="2548"/>
         <source>Unlock saved SSH passwords and private-key passphrases for this ztermy session. The master password is never stored.</source>
         <translation>解锁本次 ztermy 会话中保存的 SSH 密码和私钥口令。主密码永远不会被保存。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2540"/>
+        <location filename="../src/ui/qml/Main.qml" line="2560"/>
         <source>Master password (minimum 8 characters)</source>
         <translation>主密码（至少 8 个字符）</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2542"/>
+        <location filename="../src/ui/qml/Main.qml" line="2562"/>
         <source>Portable vault master password</source>
         <translation>便携保险库主密码</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2558"/>
+        <location filename="../src/ui/qml/Main.qml" line="2578"/>
         <source>Open Security</source>
         <translation>打开安全设置</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2559"/>
+        <location filename="../src/ui/qml/Main.qml" line="2579"/>
         <source>Open credential Security settings</source>
         <translation>打开凭据安全设置</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2571"/>
+        <location filename="../src/ui/qml/Main.qml" line="2591"/>
         <source>Not now</source>
         <translation>暂不</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2572"/>
+        <location filename="../src/ui/qml/Main.qml" line="2592"/>
         <source>Keep portable vault locked</source>
         <translation>保持便携保险库锁定</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2579"/>
+        <location filename="../src/ui/qml/Main.qml" line="2599"/>
         <source>Unlock</source>
         <translation>解锁</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2599"/>
+        <location filename="../src/ui/qml/Main.qml" line="2619"/>
         <source>Paste multiple lines?</source>
         <translation>粘贴多行？</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/qml/Main.qml" line="2600"/>
+        <location filename="../src/ui/qml/Main.qml" line="2620"/>
         <source>The clipboard contains %n line(s). Pasting may execute commands immediately in the active terminal.</source>
         <translation>
             <numerusform>剪贴板包含 %n 行内容。粘贴后可能会立即在当前终端中执行命令。</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2601"/>
+        <location filename="../src/ui/qml/Main.qml" line="2621"/>
         <source>Paste</source>
         <translation>粘贴</translation>
     </message>
@@ -5115,83 +5115,83 @@
 <context>
     <name>SettingsPane</name>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="341"/>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3104"/>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3289"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="342"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3113"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3298"/>
         <source>Portable encrypted vault</source>
         <translation>便携加密保险库</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="341"/>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3104"/>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3289"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="342"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3113"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3298"/>
         <source>Session only</source>
         <translation>仅会话</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="341"/>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3104"/>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3289"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="342"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3113"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3298"/>
         <source>Windows Credential Manager</source>
         <translation>Windows 凭据管理器</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="345"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="346"/>
         <source>The credential operation failed.</source>
         <translation>凭据操作失败。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="360"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="361"/>
         <source>Credentials migrated and verified.</source>
         <translation>凭据已迁移并验证。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="590"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="597"/>
         <source>Custom accent must use the #RRGGBB format.</source>
         <translation>自定义强调色必须使用 #RRGGBB 格式。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="602"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="609"/>
         <source>Settings saved and applied.</source>
         <translation>设置已保存并应用。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="602"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="609"/>
         <source>These settings could not be saved. Check the font and numeric ranges.</source>
         <translation>无法保存这些设置。请检查字体和数值范围。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1143"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1152"/>
         <source>Terminal</source>
         <translation>终端</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="795"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="803"/>
         <source>SSH TERMINAL</source>
         <translation>SSH TERMINAL</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="917"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="926"/>
         <source>Display language</source>
         <translation>显示语言</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="930"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="939"/>
         <source>System</source>
         <translation>系统</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="930"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="939"/>
         <source>English</source>
         <translation>English</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="930"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="939"/>
         <source>Simplified Chinese</source>
         <translation>简体中文</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="929"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="938"/>
         <source>Application display language</source>
         <translation>应用显示语言</translation>
     </message>
@@ -5201,2012 +5201,2012 @@
         <translation>%1（不可用）</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="184"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="185"/>
         <source>weekly</source>
         <translation>每周</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="184"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="185"/>
         <source>%1 h</source>
         <translation>%1 小时</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="184"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="185"/>
         <source>current window</source>
         <translation>当前周期</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="185"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="186"/>
         <source>%1 · %2% left</source>
         <translation>%1 · 剩余 %2%</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="191"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="192"/>
         <source>Checking Codex allowance…</source>
         <translation>正在检查 Codex 用量…</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="193"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="194"/>
         <source>Codex allowance is unavailable.</source>
         <translation>无法获取 Codex 用量。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="196"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="197"/>
         <source>Codex allowance has not been checked yet.</source>
         <translation>尚未检查 Codex 用量。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="197"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="198"/>
         <source>ChatGPT plan</source>
         <translation>ChatGPT 套餐</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="297"/>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="301"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="298"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="302"/>
         <source>MCP arguments must be a JSON string array.</source>
         <translation>MCP 参数必须是 JSON 字符串数组。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="306"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="307"/>
         <source>MCP server saved. Review each discovered tool before enabling it for AI.</source>
         <translation>MCP 服务器已保存。请先审核每个已发现的工具，再允许 AI 使用。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="306"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="307"/>
         <source>The MCP server configuration is invalid.</source>
         <translation>MCP 服务器配置无效。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="424"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="425"/>
         <source>Copy selection</source>
         <translation>复制选区</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="431"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="432"/>
         <source>Attach selection to AI</source>
         <translation>将选区附加到 AI</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="438"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="439"/>
         <source>Search selection</source>
         <translation>搜索选区</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="445"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="446"/>
         <source>Highlight selection</source>
         <translation>高亮选区</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="452"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="453"/>
         <source>Remove selection highlight</source>
         <translation>取消选区高亮</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="752"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="760"/>
         <source>ztermy SSH Terminal</source>
         <translation>ztermy SSH 终端</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="778"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="786"/>
         <source>Z</source>
         <translation>Z</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="786"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="794"/>
         <source>termy</source>
         <translation>termy</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="805"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="813"/>
         <source>Windows 11 · Native Qt 6 · C++23</source>
         <translation>Windows 11 · 原生 Qt 6 · C++23</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="836"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="845"/>
         <source>Diagnostics</source>
         <translation>诊断</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="844"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="853"/>
         <source>Export a privacy-safe environment summary for troubleshooting. Log text, crash dumps, host profiles, credentials, command history, and terminal content are never included.</source>
         <translation>导出不包含隐私信息的环境摘要以帮助排查问题。报告绝不会包含日志正文、崩溃转储、主机配置、凭据、命令历史或终端内容。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="860"/>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3381"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="869"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3390"/>
         <source>Export diagnostic report</source>
         <translation>导出诊断报告</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="870"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="879"/>
         <source>Open logs folder</source>
         <translation>打开日志文件夹</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="875"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="884"/>
         <source>Logs folder opened.</source>
         <translation>已打开日志文件夹。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="882"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="891"/>
         <source>Open crash reports</source>
         <translation>打开崩溃报告</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="887"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="896"/>
         <source>Crash reports folder opened.</source>
         <translation>已打开崩溃报告文件夹。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="894"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="903"/>
         <source>Crash dumps may contain in-memory terminal or credential data. Review them before sharing; ztermy never adds them to the exported report.</source>
         <translation>崩溃转储可能包含内存中的终端或凭据数据。分享前请先检查；ztermy 绝不会将其加入导出的报告。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="907"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="916"/>
         <source>Language and interface</source>
         <translation>语言和界面</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="937"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="946"/>
         <source>System follows the Windows display language. Unsupported system languages use English.</source>
         <translation>“系统”会跟随 Windows 显示语言。不支持的系统语言将使用英语。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="945"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="954"/>
         <source>Interface font</source>
         <translation>界面字体</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="957"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="966"/>
         <source>Application interface font</source>
         <translation>应用界面字体</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="965"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="974"/>
         <source>System default follows the Windows UI font and its script-aware fallback chain.</source>
         <translation>系统默认会跟随 Windows 界面字体及其按文字体系适配的后备字体链。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="965"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="974"/>
         <source>The selected font contains Chinese glyphs.</source>
         <translation>所选字体包含中文字形。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="965"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="974"/>
         <source>The selected font does not contain Chinese glyphs; Windows font fallback will render Chinese text.</source>
         <translation>所选字体不包含中文字形；Windows 后备字体将负责渲染中文。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="978"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="987"/>
         <source>Window appearance</source>
         <translation>窗口外观</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="991"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1000"/>
         <source>Theme</source>
         <translation>主题</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1023"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1032"/>
         <source>Accent color</source>
         <translation>强调色</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1033"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1042"/>
         <source>Follow Windows</source>
         <translation>跟随 Windows</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1033"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1042"/>
         <source>Custom</source>
         <translation>自定义</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1034"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1043"/>
         <source>Application accent color source</source>
         <translation>应用强调色来源</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1040"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1049"/>
         <source>Custom accent</source>
         <translation>自定义强调色</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1056"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1065"/>
         <source>Custom application accent color</source>
         <translation>自定义应用强调色</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1089"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1098"/>
         <source>Windows backdrop</source>
         <translation>Windows 背景材质</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1100"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1109"/>
         <source>Transparent</source>
         <translation>透明</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1101"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1110"/>
         <source>Windows backdrop material</source>
         <translation>Windows 背景材质</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1155"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1164"/>
         <source>Font family</source>
         <translation>字体</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1166"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1175"/>
         <source>Terminal font family</source>
         <translation>终端字体</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1182"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1191"/>
         <source>Show all installed fonts</source>
         <translation>显示所有已安装字体</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1187"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1196"/>
         <source>By default, only monospaced fonts suitable for a terminal grid are shown.</source>
         <translation>默认仅显示适合终端网格的等宽字体。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1195"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1204"/>
         <source>This is not a monospaced font. Terminal columns remain fixed, so some glyphs may overlap or leave extra spacing.</source>
         <translation>这不是等宽字体。终端列宽仍保持固定，因此部分字形可能重叠或留下额外间距。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1203"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1212"/>
         <source>Font size</source>
         <translation>字号</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1215"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1224"/>
         <source>Terminal font size</source>
         <translation>终端字号</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1230"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1239"/>
         <source>Programming ligatures</source>
         <translation>编程连字</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1231"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1240"/>
         <source>Enable terminal programming ligatures</source>
         <translation>启用终端编程连字</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1237"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1246"/>
         <source>The selected font exposes OpenType ligature features. Ligatures are shaped only across compatible single-width terminal cells.</source>
         <translation>所选字体提供 OpenType 连字特性。连字仅会在样式相容的单宽终端单元格之间塑形。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1237"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1246"/>
         <source>The selected font does not expose supported OpenType ligature features.</source>
         <translation>所选字体未提供受支持的 OpenType 连字特性。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1245"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1254"/>
         <source>Default local shell</source>
         <translation>默认本地 Shell</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1263"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1272"/>
         <source>Default local terminal shell</source>
         <translation>默认本地终端 Shell</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1278"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1287"/>
         <source>Detect installed local shells again</source>
         <translation>重新检测已安装的本地 Shell</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1287"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1296"/>
         <source>Cursor</source>
         <translation>光标</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1297"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1306"/>
         <source>Terminal controlled</source>
         <translation>由终端控制</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1297"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1306"/>
         <source>Block</source>
         <translation>方块</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1297"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1306"/>
         <source>Bar</source>
         <translation>竖线</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1297"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1306"/>
         <source>Underline</source>
         <translation>下划线</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1298"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1307"/>
         <source>Terminal cursor style</source>
         <translation>终端光标样式</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1311"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1320"/>
         <source>Blink cursor</source>
         <translation>光标闪烁</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1312"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1321"/>
         <source>Blink terminal cursor</source>
         <translation>启用终端光标闪烁</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1325"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1334"/>
         <source>Copy selected terminal text automatically</source>
         <translation>自动复制选中的终端文本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1326"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1335"/>
         <source>Copy terminal selection automatically</source>
         <translation>自动复制终端选中内容</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1353"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1362"/>
         <source>Confirm before pasting multiple lines</source>
         <translation>粘贴多行前确认</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1354"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1363"/>
         <source>Confirm multiline terminal paste</source>
         <translation>确认终端多行粘贴</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1426"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1435"/>
         <source>Selection action popup</source>
         <translation>选区快捷浮窗</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1439"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1448"/>
         <source>Show actions after selecting terminal text</source>
         <translation>选中终端文本后显示快捷操作</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1445"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1454"/>
         <source>Restore defaults</source>
         <translation>恢复默认</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1447"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1456"/>
         <source>Restore default selection actions</source>
         <translation>恢复默认选区操作</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1454"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1463"/>
         <source>Choose the action order, whether each action appears directly or under More, and whether its result keeps the terminal selection.</source>
         <translation>设置操作顺序、直接显示或收进“更多”，以及执行后是否保留终端选区。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1502"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1511"/>
         <source>Direct</source>
         <translation>直接显示</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1504"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1513"/>
         <source>Show %1 directly</source>
         <translation>直接显示“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1510"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1519"/>
         <source>Keep selection</source>
         <translation>保留选区</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1512"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1521"/>
         <source>Keep selection after %1</source>
         <translation>执行“%1”后保留选区</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1523"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1532"/>
         <source>Move %1 up</source>
         <translation>上移“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1545"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1554"/>
         <source>Move %1 down</source>
         <translation>下移“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1569"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1578"/>
         <source>File browser defaults</source>
         <translation>文件浏览器默认设置</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1579"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1588"/>
         <source>Directory listing</source>
         <translation>目录列表</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1589"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1598"/>
         <source>Show hidden files by default</source>
         <translation>默认显示隐藏文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1594"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1603"/>
         <source>Destructive actions</source>
         <translation>破坏性操作</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1604"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1613"/>
         <source>Confirm before deleting remote files</source>
         <translation>删除远程文件前确认</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1611"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1620"/>
         <source>These global defaults apply to every integrated SFTP browser. The Hidden button can still change the current session without rewriting the default.</source>
         <translation>这些全局默认设置适用于所有集成 SFTP 浏览器。“隐藏”按钮仍可仅更改当前会话，而不会覆盖默认设置。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1632"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1641"/>
         <source>Add portable AI skills as one folder per skill with a SKILL.md file. ztermy advertises only names and descriptions, then loads full instructions when you or the assistant selects a skill.</source>
         <translation>添加便携 AI 技能：每项技能使用一个包含 SKILL.md 的文件夹。ztermy 只公布名称和描述，并在你或助手选择技能时加载完整指令。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1777"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1786"/>
         <source>Model provider</source>
         <translation>模型提供商</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1785"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1794"/>
         <source>Use your ChatGPT subscription for ztermy&apos;s built-in terminal assistant.</source>
         <translation>使用你的 ChatGPT 订阅运行 ztermy 内置终端助手。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1799"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1808"/>
         <source>Provider</source>
         <translation>提供商</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1808"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1817"/>
         <source>Ollama</source>
         <translation>Ollama</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1808"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1817"/>
         <source>OpenAI-compatible</source>
         <translation>兼容 OpenAI</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1809"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1818"/>
         <source>AI model provider</source>
         <translation>AI 模型提供商</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2019"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2028"/>
         <source>AI terminal action permission mode</source>
         <translation>AI 终端操作权限模式</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1825"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1834"/>
         <source>AI provider base URL</source>
         <translation>AI 提供商基础 URL</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1944"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1953"/>
         <source>Model</source>
         <translation>模型</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1961"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1970"/>
         <source>AI model identifier</source>
         <translation>AI 模型标识符</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1840"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1849"/>
         <source>Enter API key</source>
         <translation>输入 API 密钥</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1842"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1851"/>
         <source>AI provider API key</source>
         <translation>AI 提供商 API 密钥</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1785"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1794"/>
         <source>Choose a provider, enter its API key, fetch the available models, and select one for the terminal assistant.</source>
         <translation>选择供应商，输入 API 密钥，获取可用模型，然后为终端助手选择一个模型。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1808"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1817"/>
         <source>Anthropic (Claude)</source>
         <translation>Anthropic（Claude）</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1808"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1817"/>
         <source>DeepSeek</source>
         <translation>DeepSeek</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1808"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1817"/>
         <source>Kimi</source>
         <translation>Kimi</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1808"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1817"/>
         <source>Z.AI (GLM)</source>
         <translation>Z.AI（GLM）</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1814"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1823"/>
         <source>API address</source>
         <translation>API 地址</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1824"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1833"/>
         <source>https://api.example.com</source>
         <translation>https://api.example.com</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1831"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1840"/>
         <source>API key</source>
         <translation>API 密钥</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1840"/>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2217"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1849"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2226"/>
         <source>Saved · enter only to replace</source>
         <translation>已保存 · 仅在替换时输入</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1840"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1849"/>
         <source>Not required for local Ollama</source>
         <translation>本地 Ollama 无需填写</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1960"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1969"/>
         <source>Fetch or enter a model identifier</source>
         <translation>获取或输入模型标识</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1967"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1976"/>
         <source>Fetching…</source>
         <translation>正在获取…</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1967"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1976"/>
         <source>Fetch models</source>
         <translation>获取模型</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1970"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1979"/>
         <source>Fetch models from this provider</source>
         <translation>从此供应商获取模型</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2007"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2016"/>
         <source>Assistant permissions</source>
         <translation>助手权限</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2016"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2025"/>
         <source>Read-only</source>
         <translation>只读</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2016"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2025"/>
         <source>Ask before changes</source>
         <translation>更改前询问</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2016"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2025"/>
         <source>YOLO</source>
         <translation>YOLO</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2044"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2053"/>
         <source>Record full AI request and response trace</source>
         <translation>记录完整 AI 请求与响应追踪</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2066"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2075"/>
         <source>Request: %1</source>
         <translation>请求地址：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2076"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2085"/>
         <source>Debug trace: %1</source>
         <translation>调试追踪：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2076"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2085"/>
         <source>A new JSONL trace file will be created after saving.</source>
         <translation>保存后将创建新的 JSONL 追踪文件。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2108"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2117"/>
         <source>API key saved for this provider.</source>
         <translation>已保存此供应商的 API 密钥。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2108"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2117"/>
         <source>The model field remains editable when a provider does not expose a model list.</source>
         <translation>供应商未提供模型列表时，仍可手动编辑模型字段。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2117"/>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2246"/>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2613"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2126"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2255"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2622"/>
         <source>Save</source>
         <translation>保存</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2118"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2127"/>
         <source>Save AI provider</source>
         <translation>保存 AI 供应商</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2122"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2131"/>
         <source>AI provider saved.</source>
         <translation>AI 供应商已保存。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2122"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2131"/>
         <source>The provider settings or API key could not be saved.</source>
         <translation>无法保存供应商设置或 API 密钥。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2272"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2281"/>
         <source>Create reusable prompts. Type / in the AI composer to search one, then edit or send the inserted text.</source>
         <translation>创建可复用提示词。在 AI 输入框中输入 / 搜索，然后编辑或发送插入的内容。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2433"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2442"/>
         <source>Prompt text inserted into the AI composer</source>
         <translation>插入到 AI 输入框的提示词内容</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2485"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2494"/>
         <source>Assistant permission rules</source>
         <translation>助手权限规则</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2513"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2522"/>
         <source>No remembered assistant rules yet.</source>
         <translation>尚无已记住的助手规则。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2566"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2575"/>
         <source>Enable this assistant rule</source>
         <translation>启用此助手规则</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2608"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2617"/>
         <source>Remove this assistant permission rule</source>
         <translation>移除此助手权限规则</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2616"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2625"/>
         <source>Save this assistant permission rule</source>
         <translation>保存此助手权限规则</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2619"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2628"/>
         <source>Assistant rule saved.</source>
         <translation>助手规则已保存。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2619"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2628"/>
         <source>The assistant rule could not be saved.</source>
         <translation>无法保存助手规则。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2633"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2642"/>
         <source>MCP extensions</source>
         <translation>MCP 扩展</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2344"/>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2709"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2353"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2718"/>
         <source>Edit</source>
         <translation>编辑</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2641"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2650"/>
         <source>MCP servers run as local stdio child processes. Trust and review a server once; calls then follow the current assistant mode and reusable rules.</source>
         <translation>MCP 服务器作为本地 stdio 子进程运行。信任并审核一次服务器后，调用将遵循当前助手模式和可复用规则。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2710"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2719"/>
         <source>Edit MCP server %1</source>
         <translation>编辑 MCP 服务器 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2715"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2724"/>
         <source>Restart</source>
         <translation>重启</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2716"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2725"/>
         <source>Restart MCP server %1</source>
         <translation>重启 MCP 服务器 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2719"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2728"/>
         <source>MCP server restarted.</source>
         <translation>MCP 服务器已重启。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2719"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2728"/>
         <source>The MCP server could not be restarted.</source>
         <translation>无法重启 MCP 服务器。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2222"/>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2351"/>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2606"/>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2724"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2231"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2360"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2615"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2733"/>
         <source>Remove</source>
         <translation>移除</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="209"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="210"/>
         <source>Terminal input</source>
         <translation>终端输入</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="211"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="212"/>
         <source>Terminal interrupt</source>
         <translation>终端中断</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="213"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="214"/>
         <source>Runbook changes</source>
         <translation>Runbook 更改</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="215"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="216"/>
         <source>SFTP download</source>
         <translation>SFTP 下载</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="217"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="218"/>
         <source>SFTP upload</source>
         <translation>SFTP 上传</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="219"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="220"/>
         <source>MCP tool</source>
         <translation>MCP 工具</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="220"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="221"/>
         <source>Terminal command</source>
         <translation>终端命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="225"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="226"/>
         <source>Profile · %1</source>
         <translation>Profile · %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="225"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="226"/>
         <source>Profile</source>
         <translation>Profile</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="227"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="228"/>
         <source>All Profiles</source>
         <translation>所有 Profile</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="228"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="229"/>
         <source>This session</source>
         <translation>本次会话</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="265"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="266"/>
         <source>Quick message saved.</source>
         <translation>快捷消息已保存。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="265"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="266"/>
         <source>The quick message is invalid.</source>
         <translation>快捷消息无效。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="602"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="609"/>
         <source>Settings saved. Restart ztermy to apply the rendering mode.</source>
         <translation>设置已保存。重启 ztermy 以应用渲染模式。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1100"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1109"/>
         <source>No material (solid)</source>
         <translation>无材质（纯色）</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1339"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1348"/>
         <source>Keep selection after copying</source>
         <translation>复制后保留选择内容</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1340"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1349"/>
         <source>Keep terminal selection after copying</source>
         <translation>复制后保留终端选择内容</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1358"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1367"/>
         <source>Right-click</source>
         <translation>右键单击</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1368"/>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1384"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1377"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1393"/>
         <source>Show context menu</source>
         <translation>显示上下文菜单</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1368"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1377"/>
         <source>Copy selection or paste</source>
         <translation>复制选区或粘贴</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1368"/>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1384"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1377"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1393"/>
         <source>Paste</source>
         <translation>粘贴</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1368"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1377"/>
         <source>Select word and show menu</source>
         <translation>选择单词并显示菜单</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1369"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1378"/>
         <source>Terminal right-click behavior</source>
         <translation>终端右键行为</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1370"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1379"/>
         <source>Shift+right-click always opens the context menu.</source>
         <translation>Shift+右键单击始终打开上下文菜单。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1374"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1383"/>
         <source>Middle-click</source>
         <translation>中键点击</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1385"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1394"/>
         <source>Terminal middle-click behavior</source>
         <translation>终端中键点击行为</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1389"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1398"/>
         <source>Word separators</source>
         <translation>单词分隔符</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1399"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1408"/>
         <source>Terminal word separator characters</source>
         <translation>终端单词分隔字符</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1400"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1409"/>
         <source>Double-click selection stops at these characters. Paths and URLs stay intact by default.</source>
         <translation>双击选择会在这些字符处停止。默认保持路径和 URL 完整。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1404"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1413"/>
         <source>Mouse wheel rows</source>
         <translation>鼠标滚轮行数</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1417"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1426"/>
         <source>Rows per mouse wheel notch</source>
         <translation>每格鼠标滚轮滚动的行数</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1624"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1633"/>
         <source>User skills</source>
         <translation>用户技能</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1652"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1661"/>
         <source>Scanning user skills…</source>
         <translation>正在扫描用户技能…</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1652"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1661"/>
         <source>User skills need attention</source>
         <translation>用户技能需要处理</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1652"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1661"/>
         <source>%1 ready · %2 warnings</source>
         <translation>%1 个就绪 · %2 个警告</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1660"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1669"/>
         <source>Reload</source>
         <translation>重新加载</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1662"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1671"/>
         <source>Reload user skills</source>
         <translation>重新加载用户技能</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1668"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1677"/>
         <source>Open folder</source>
         <translation>打开文件夹</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1670"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1679"/>
         <source>Open user skills folder</source>
         <translation>打开用户技能文件夹</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1677"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1686"/>
         <source>Location: %1</source>
         <translation>位置：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1697"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1706"/>
         <source>No skills found yet. Open the folder to add a skill directory.</source>
         <translation>尚未发现技能。请打开文件夹并添加技能目录。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1761"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1770"/>
         <source>Ready</source>
         <translation>就绪</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1761"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1770"/>
         <source>Warning</source>
         <translation>警告</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1808"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1817"/>
         <source>Google Gemini</source>
         <translation>Google Gemini</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1808"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1817"/>
         <source>OpenRouter</source>
         <translation>OpenRouter</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1808"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1817"/>
         <source>Alibaba Qwen</source>
         <translation>阿里通义千问</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1808"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1817"/>
         <source>OpenAI API</source>
         <translation>OpenAI API</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1808"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1817"/>
         <source>OpenAI (ChatGPT subscription)</source>
         <translation>OpenAI（ChatGPT 订阅）</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1847"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1856"/>
         <source>ChatGPT account</source>
         <translation>ChatGPT 账号</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1859"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1868"/>
         <source>Connected · %1</source>
         <translation>已连接 · %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1859"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1868"/>
         <source>Connected</source>
         <translation>已连接</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1859"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1868"/>
         <source>Waiting for browser authorization…</source>
         <translation>正在等待浏览器授权…</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1859"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1868"/>
         <source>Not connected</source>
         <translation>未连接</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1859"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1868"/>
         <source>Waiting for device-code authorization…</source>
         <translation>正在等待设备代码授权…</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1867"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1876"/>
         <source>Cancel</source>
         <translation>取消</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1867"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1876"/>
         <source>Sign in</source>
         <translation>登录</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1873"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1882"/>
         <source>Device code</source>
         <translation>设备代码</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1879"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1888"/>
         <source>Sign out</source>
         <translation>退出登录</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1896"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1905"/>
         <source>Enter code %1 on the ChatGPT device page.</source>
         <translation>在 ChatGPT 设备页面输入代码 %1。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1904"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1913"/>
         <source>Copy code</source>
         <translation>复制代码</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1909"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1918"/>
         <source>Open page</source>
         <translation>打开页面</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1915"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1924"/>
         <source>Codex usage</source>
         <translation>Codex 用量</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1276"/>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1936"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1285"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1945"/>
         <source>Refresh</source>
         <translation>刷新</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1033"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1042"/>
         <source>Follow theme</source>
         <translation>跟随主题</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1976"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1985"/>
         <source>Reasoning</source>
         <translation>推理</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1992"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2001"/>
         <source>Model reasoning effort</source>
         <translation>模型推理强度</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2016"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2025"/>
         <source>Auto except high risk</source>
         <translation>自动（高风险除外）</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2017"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2026"/>
         <source>Read tools only; action and MCP tools are hidden</source>
         <translation>仅使用读取工具；隐藏操作工具和 MCP 工具</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2017"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2026"/>
         <source>Ask in the approval card before every side effect</source>
         <translation>每次产生副作用前都在批准卡片中询问</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2017"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2026"/>
         <source>Run ordinary actions automatically; ask for high-risk commands and MCP tools</source>
         <translation>自动运行常规操作；高风险命令和 MCP 工具需要询问</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2017"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2026"/>
         <source>Run without approval prompts; explicit deny rules and safety boundaries still apply</source>
         <translation>不显示批准提示直接运行；显式拒绝规则和安全边界仍然生效</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2031"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2040"/>
         <source>Automatically attach recent terminal context (not recommended)</source>
         <translation>自动附加最近的终端上下文（不推荐）</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2056"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2065"/>
         <source>The mode supplies the default behavior. Rules created from an approval card override it for a matching action and scope.</source>
         <translation>权限模式提供默认行为；在审批卡中创建的规则会覆盖匹配操作及作用域的默认设置。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2108"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2117"/>
         <source>ChatGPT subscription authorization is saved in the active credential vault.</source>
         <translation>ChatGPT 订阅授权已保存在当前凭据保险库中。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2108"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2117"/>
         <source>Sign in with a ChatGPT Plus, Pro, Business, Edu, or Enterprise account.</source>
         <translation>使用 ChatGPT Plus、Pro、Business、Edu 或 Enterprise 账号登录。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2135"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2144"/>
         <source>AI network</source>
         <translation>AI 网络</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2143"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2152"/>
         <source>Choose how model discovery, sign-in, and assistant requests reach the network. SSH, SFTP, and port forwarding are unaffected.</source>
         <translation>选择模型发现、登录和助手请求的网络访问方式。SSH、SFTP 和端口转发不受影响。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2157"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2166"/>
         <source>Proxy</source>
         <translation>代理</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2166"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2175"/>
         <source>Use system proxy</source>
         <translation>使用系统代理</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2166"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2175"/>
         <source>Direct connection</source>
         <translation>直连</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2166"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2175"/>
         <source>Custom proxy</source>
         <translation>自定义代理</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2167"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2176"/>
         <source>AI network proxy mode</source>
         <translation>AI 网络代理模式</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2172"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2181"/>
         <source>Proxy address</source>
         <translation>代理地址</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2181"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2190"/>
         <source>http://127.0.0.1:7890 or socks5://127.0.0.1:1080</source>
         <translation>http://127.0.0.1:7890 或 socks5://127.0.0.1:1080</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2182"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2191"/>
         <source>AI proxy address</source>
         <translation>AI 代理地址</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2187"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2196"/>
         <source>Username</source>
         <translation>用户名</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2195"/>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2217"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2204"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2226"/>
         <source>Optional</source>
         <translation>可选</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2196"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2205"/>
         <source>AI proxy username</source>
         <translation>AI 代理用户名</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2201"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2210"/>
         <source>Password</source>
         <translation>密码</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2218"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2227"/>
         <source>AI proxy password</source>
         <translation>AI 代理密码</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2226"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2235"/>
         <source>Proxy password removed.</source>
         <translation>已移除代理密码。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2226"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2235"/>
         <source>The proxy password could not be removed.</source>
         <translation>无法移除代理密码。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2237"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2246"/>
         <source>Uses the Windows proxy configuration for AI traffic.</source>
         <translation>AI 流量使用 Windows 代理配置。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2237"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2246"/>
         <source>AI traffic bypasses configured proxies.</source>
         <translation>AI 流量不使用已配置的代理。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2237"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2246"/>
         <source>HTTP and SOCKS5 proxies are supported.</source>
         <translation>支持 HTTP 和 SOCKS5 代理。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2251"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2260"/>
         <source>AI network settings saved.</source>
         <translation>AI 网络设置已保存。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2251"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2260"/>
         <source>The AI network settings could not be saved.</source>
         <translation>无法保存 AI 网络设置。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2264"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2273"/>
         <source>Quick messages</source>
         <translation>快捷消息</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2292"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2301"/>
         <source>No quick messages yet.</source>
         <translation>暂无快捷消息。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2346"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2355"/>
         <source>Edit quick message %1</source>
         <translation>编辑快捷消息 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2353"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2362"/>
         <source>Remove quick message %1</source>
         <translation>删除快捷消息 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2356"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2365"/>
         <source>Quick message removed.</source>
         <translation>快捷消息已删除。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2381"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2390"/>
         <source>Edit quick message</source>
         <translation>编辑快捷消息</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2381"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2390"/>
         <source>New quick message</source>
         <translation>新建快捷消息</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2397"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2406"/>
         <source>Name</source>
         <translation>名称</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2398"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2407"/>
         <source>Quick message name</source>
         <translation>快捷消息名称</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2409"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2418"/>
         <source>Slash command, for example service-status</source>
         <translation>斜杠命令，例如 service-status</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2410"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2419"/>
         <source>Quick message slash command</source>
         <translation>快捷消息斜杠命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2421"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2430"/>
         <source>Short description (optional)</source>
         <translation>简短描述（可选）</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2422"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2431"/>
         <source>Quick message description</source>
         <translation>快捷消息描述</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2441"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2450"/>
         <source>Quick message prompt</source>
         <translation>快捷消息提示词</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2456"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2465"/>
         <source>Use lowercase letters, numbers, and hyphens.</source>
         <translation>使用小写字母、数字和连字符。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2464"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2473"/>
         <source>New</source>
         <translation>新建</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2470"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2479"/>
         <source>Save changes</source>
         <translation>保存更改</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2470"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2479"/>
         <source>Add quick message</source>
         <translation>添加快捷消息</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2493"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2502"/>
         <source>Ask mode can remember an allow or deny choice for this session, one saved Profile, or all Profiles. Exact, prefix, wildcard, and regular-expression matching are supported.</source>
         <translation>询问模式可在本次会话、一个已保存的 Profile 或所有 Profile 中记住允许或拒绝选择，并支持精确、前缀、通配符和正则表达式匹配。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2554"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2563"/>
         <source>Allow</source>
         <translation>允许</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2554"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2563"/>
         <source>Deny</source>
         <translation>拒绝</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2554"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2563"/>
         <source>Ask</source>
         <translation>询问</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2582"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2591"/>
         <source>Exact action</source>
         <translation>精确匹配</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2582"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2591"/>
         <source>Starts with</source>
         <translation>前缀匹配</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2582"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2591"/>
         <source>Wildcard</source>
         <translation>通配符</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2582"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2591"/>
         <source>Regular expression</source>
         <translation>正则表达式</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2582"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2591"/>
         <source>Any action of this type</source>
         <translation>此类型的任意操作</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2584"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2593"/>
         <source>Rule matcher</source>
         <translation>规则匹配方式</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2592"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2601"/>
         <source>Command or action pattern</source>
         <translation>命令或操作匹配模式</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2725"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2734"/>
         <source>Remove MCP server %1</source>
         <translation>移除 MCP 服务器 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2729"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2738"/>
         <source>MCP server removed.</source>
         <translation>MCP 服务器已移除。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2729"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2738"/>
         <source>The MCP server could not be removed.</source>
         <translation>无法移除 MCP 服务器。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2743"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2752"/>
         <source>Server id</source>
         <translation>服务器 ID</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2750"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2759"/>
         <source>local-files</source>
         <translation>local-files</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2751"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2760"/>
         <source>MCP server id</source>
         <translation>MCP 服务器 ID</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2756"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2765"/>
         <source>Tool namespace</source>
         <translation>工具命名空间</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2762"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2771"/>
         <source>files</source>
         <translation>files</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2763"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2772"/>
         <source>MCP tool namespace</source>
         <translation>MCP 工具命名空间</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2768"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2777"/>
         <source>Executable</source>
         <translation>可执行文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2774"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2783"/>
         <source>Absolute path to node.exe or server.exe</source>
         <translation>node.exe 或 server.exe 的绝对路径</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2775"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2784"/>
         <source>MCP executable path</source>
         <translation>MCP 可执行文件路径</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2780"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2789"/>
         <source>Arguments</source>
         <translation>参数</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2786"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2795"/>
         <source>[&quot;server.js&quot;, &quot;--stdio&quot;]</source>
         <translation>[&quot;server.js&quot;, &quot;--stdio&quot;]</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2787"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2796"/>
         <source>MCP arguments as a JSON string array</source>
         <translation>以 JSON 字符串数组表示的 MCP 参数</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2792"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2801"/>
         <source>Working directory</source>
         <translation>工作目录</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2798"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2807"/>
         <source>Optional absolute directory</source>
         <translation>可选的绝对目录</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2799"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2808"/>
         <source>MCP working directory</source>
         <translation>MCP 工作目录</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2804"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2813"/>
         <source>Server trust</source>
         <translation>服务器信任级别</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1384"/>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2812"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1393"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2821"/>
         <source>Disabled</source>
         <translation>已禁用</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1061"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1070"/>
         <source>Visual effects</source>
         <translation>视觉效果</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1072"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1081"/>
         <source>Full (material, shadows, motion)</source>
         <translation>完整（材质、阴影、动效）</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1072"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1081"/>
         <source>Reduced (no shadows, shorter motion)</source>
         <translation>精简（无阴影，动效更短）</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1072"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1081"/>
         <source>Off (solid surfaces, no motion)</source>
         <translation>关闭（纯色表面，无动效）</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1073"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1082"/>
         <source>Visual effects tier</source>
         <translation>视觉效果层级</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1081"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1090"/>
         <source>Performance mode keeps this preference but temporarily disables material, shadows and motion. It is restored when performance mode is turned off.</source>
         <translation>性能模式会保留此偏好，但暂时关闭材质、阴影和动画；关闭性能模式后恢复。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1100"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1109"/>
         <source>Acrylic</source>
         <translation>亚克力</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1100"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1109"/>
         <source>Glass</source>
         <translation>玻璃</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1107"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1116"/>
         <source>Background opacity</source>
         <translation>背景不透明度</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1123"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1132"/>
         <source>Window and terminal background opacity</source>
         <translation>窗口与终端背景不透明度</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2812"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2821"/>
         <source>Discover only</source>
         <translation>仅发现</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2812"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2821"/>
         <source>Allow reviewed tools</source>
         <translation>允许已审核工具</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2813"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2822"/>
         <source>MCP server trust</source>
         <translation>MCP 服务器信任级别</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2824"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2833"/>
         <source>Start this stdio server with ztermy</source>
         <translation>随 ztermy 启动此 stdio 服务器</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2833"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2842"/>
         <source>New server</source>
         <translation>新建服务器</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2843"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2852"/>
         <source>Save server</source>
         <translation>保存服务器</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2843"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2852"/>
         <source>Add server</source>
         <translation>添加服务器</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2876"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2885"/>
         <source>Untrusted server description: %1</source>
         <translation>不受信任的服务器描述：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2885"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2894"/>
         <source>Schema digest: %1</source>
         <translation>架构摘要：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2919"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2928"/>
         <source>Approval is invalidated automatically if the description or schema changes.</source>
         <translation>描述或架构发生变化时，批准会自动失效。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2926"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2935"/>
         <source>Close</source>
         <translation>关闭</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2930"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2939"/>
         <source>Revoke</source>
         <translation>撤销</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2930"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2939"/>
         <source>Approve exact schema</source>
         <translation>批准此精确架构</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2935"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2944"/>
         <source>MCP tool approval revoked.</source>
         <translation>MCP 工具批准已撤销。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2935"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2944"/>
         <source>MCP tool schema approved.</source>
         <translation>MCP 工具架构已批准。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2935"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2944"/>
         <source>The MCP tool approval could not be changed.</source>
         <translation>无法更改 MCP 工具批准状态。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2974"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2983"/>
         <source>Approved exact schema</source>
         <translation>已批准精确架构</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2974"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2983"/>
         <source>Review required</source>
         <translation>需要审核</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2982"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2991"/>
         <source>Review</source>
         <translation>审核</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2983"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2992"/>
         <source>Review schema for %1</source>
         <translation>审核 %1 的架构</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2996"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3005"/>
         <source>Encrypted conversation history</source>
         <translation>加密对话历史</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3007"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3016"/>
         <source>Keep bounded AI conversations after restart</source>
         <translation>重启后保留有界的 AI 对话</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3014"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3023"/>
         <source>Encrypted conversation history enabled.</source>
         <translation>已启用加密对话历史。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3014"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3023"/>
         <source>Conversation history retention disabled.</source>
         <translation>已停用对话历史保留。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3014"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3023"/>
         <source>Choose Windows Credential Manager or an unlocked portable vault before enabling history.</source>
         <translation>请先选择 Windows 凭据管理器或已解锁的便携保险库，再启用历史。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3023"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3032"/>
         <source>History is off by default. Transcript bodies use authenticated encryption; only the small data key is stored in the active credential vault. Disabling retention does not delete existing encrypted history.</source>
         <translation>历史默认关闭。对话正文使用认证加密；活动凭据保险库只保存小型数据密钥。停用保留不会删除已有的加密历史。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3033"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3042"/>
         <source>History unavailable: %1</source>
         <translation>历史不可用：%1</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3045"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3054"/>
         <source>%n saved conversation(s)</source>
         <translation>
             <numerusform>%n 个已保存的对话</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3052"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3061"/>
         <source>Export decrypted JSON</source>
         <translation>导出解密后的 JSON</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3053"/>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3394"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3062"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3403"/>
         <source>Export decrypted AI conversation history</source>
         <translation>导出解密后的 AI 对话历史</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3059"/>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3406"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3068"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3415"/>
         <source>Delete history</source>
         <translation>删除历史</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3060"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3069"/>
         <source>Delete encrypted AI conversation history and its key</source>
         <translation>删除加密的 AI 对话历史及其密钥</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3073"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3082"/>
         <source>Credential storage</source>
         <translation>凭据存储</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3081"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3090"/>
         <source>Windows Credential Manager is the installed-mode default. Portable mode uses an AES-256-GCM encrypted vault protected by your master password. Session storage is erased when ztermy exits.</source>
         <translation>安装模式默认使用 Windows 凭据管理器。便携模式使用由主密码保护的 AES-256-GCM 加密保险库。退出 ztermy 时，仅会话存储会被清除。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3095"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3104"/>
         <source>Move credentials to</source>
         <translation>将凭据移动到</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3105"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3114"/>
         <source>Credential storage destination</source>
         <translation>凭据存储目标</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3118"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3127"/>
         <source>Remove verified copies from the previous store</source>
         <translation>从原存储中移除已验证的副本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3128"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3137"/>
         <source>Active store: %1</source>
         <translation>当前存储：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3136"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3145"/>
         <source>Migrate</source>
         <translation>迁移</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3137"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3146"/>
         <source>Migrate credentials to selected storage</source>
         <translation>将凭据迁移到所选存储</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3156"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3165"/>
         <source>Portable vault</source>
         <translation>便携保险库</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3164"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3173"/>
         <source>Create a master password before migrating credentials into the portable vault.</source>
         <translation>将凭据迁移到便携保险库之前，请先创建主密码。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3164"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3173"/>
         <source>The portable vault is locked. Unlock it to connect with or modify saved credentials.</source>
         <translation>便携保险库已锁定。请先解锁，再使用或修改已保存的凭据。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3164"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3173"/>
         <source>The portable vault is unlocked for this ztermy session. The master password is never persisted.</source>
         <translation>便携保险库已在本次 ztermy 会话中解锁。主密码永远不会持久保存。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3176"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3185"/>
         <source>Master password (minimum 8 characters)</source>
         <translation>主密码（至少 8 个字符）</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3176"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3185"/>
         <source>New master password (minimum 8 characters)</source>
         <translation>新主密码（至少 8 个字符）</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3176"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3185"/>
         <source>Create master password (minimum 8 characters)</source>
         <translation>创建主密码（至少 8 个字符）</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3188"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3197"/>
         <source>Confirm master password (minimum 8 characters)</source>
         <translation>确认主密码（至少 8 个字符）</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3197"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3206"/>
         <source>The master password must contain at least 8 characters.</source>
         <translation>主密码必须至少包含 8 个字符。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3209"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3218"/>
         <source>Lock</source>
         <translation>锁定</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3210"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3219"/>
         <source>Lock portable credential vault</source>
         <translation>锁定便携凭据保险库</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3215"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3224"/>
         <source>Portable vault locked.</source>
         <translation>便携保险库已锁定。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3225"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3234"/>
         <source>Create vault</source>
         <translation>创建保险库</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3225"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3234"/>
         <source>Unlock</source>
         <translation>解锁</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3225"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3234"/>
         <source>Change password</source>
         <translation>更改密码</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3226"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3235"/>
         <source>%1 for portable credential vault</source>
         <translation>用于便携凭据保险库的%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3234"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3243"/>
         <source>Portable vault created and unlocked.</source>
         <translation>便携保险库已创建并解锁。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3237"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3246"/>
         <source>Portable vault unlocked.</source>
         <translation>便携保险库已解锁。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3240"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3249"/>
         <source>Portable vault password changed.</source>
         <translation>便携保险库密码已更改。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3257"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3266"/>
         <source>Credential cleanup</source>
         <translation>凭据清理</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3265"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3274"/>
         <source>Clear active credentials or remove copies deliberately retained in another store. Clearing the active store also detaches credentials from saved hosts.</source>
         <translation>清除活动凭据，或移除特意保留在其他存储中的副本。清除活动存储也会解除凭据与已保存主机的关联。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3279"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3288"/>
         <source>Credential store</source>
         <translation>凭据存储</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3290"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3299"/>
         <source>Credential store to clear</source>
         <translation>要清除的凭据存储</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3298"/>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3427"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3307"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3436"/>
         <source>Clear store</source>
         <translation>清除存储</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3299"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3308"/>
         <source>Clear selected credential store</source>
         <translation>清除所选凭据存储</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3329"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3338"/>
         <source>Reset defaults</source>
         <translation>恢复默认值</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3330"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3339"/>
         <source>Reset all application settings</source>
         <translation>重置所有应用设置</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3333"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3342"/>
         <source>Default settings restored.</source>
         <translation>已恢复默认设置。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3333"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3342"/>
         <source>Default settings could not be restored.</source>
         <translation>无法恢复默认设置。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3346"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3355"/>
         <source>Discard changes</source>
         <translation>放弃更改</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3347"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3356"/>
         <source>Discard unsaved setting changes</source>
         <translation>放弃未保存的设置更改</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3350"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3359"/>
         <source>Unsaved changes discarded.</source>
         <translation>已放弃未保存的更改。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3358"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3367"/>
         <source>Apply</source>
         <translation>应用</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3359"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3368"/>
         <source>Apply application settings</source>
         <translation>应用程序设置</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3371"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3380"/>
         <source>Move credentials to session-only storage?</source>
         <translation>将凭据移动到仅会话存储？</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3371"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3380"/>
         <source>Remove credentials from the previous store?</source>
         <translation>从原存储中移除凭据？</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3372"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3381"/>
         <source>Credentials will be verified in memory and removed from the persistent store. They will be lost when ztermy exits.</source>
         <translation>凭据将在内存中验证并从持久存储中移除。退出 ztermy 后，这些凭据将丢失。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3372"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3381"/>
         <source>After every credential is copied and verified, ztermy will remove its copy from the previous store.</source>
         <translation>复制并验证全部凭据后，ztermy 将从原存储中移除对应副本。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3373"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3382"/>
         <source>Migrate and remove</source>
         <translation>迁移并移除</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3383"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3392"/>
         <source>Diagnostic reports (*.json)</source>
         <translation>诊断报告 (*.json)</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3383"/>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3396"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3392"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3405"/>
         <source>All files (*)</source>
         <translation>所有文件 (*)</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3387"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3396"/>
         <source>Diagnostic report exported.</source>
         <translation>诊断报告已导出。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3396"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3405"/>
         <source>JSON files (*.json)</source>
         <translation>JSON 文件 (*.json)</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3404"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3413"/>
         <source>Delete all AI conversation history?</source>
         <translation>删除所有 AI 对话历史？</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3405"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3414"/>
         <source>This removes the encrypted history, its recovery copy, and the data-encryption key. This action cannot be undone.</source>
         <translation>这将删除加密历史、其恢复副本和数据加密密钥。此操作无法撤销。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3413"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3422"/>
         <source>Restart ztermy now?</source>
         <translation>立即重启 ztermy？</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3414"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3423"/>
         <source>The rendering mode is saved. Restarting closes current terminal connections; saved tabs can be restored afterwards.</source>
         <translation>渲染模式已保存。重启将关闭当前终端连接，之后可恢复已保存的标签页。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3415"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3424"/>
         <source>Restart now</source>
         <translation>立即重启</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3425"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3434"/>
         <source>Clear the active credential store?</source>
         <translation>清除当前凭据存储？</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3425"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3434"/>
         <source>Clear retained credential copies?</source>
         <translation>清除保留的凭据副本？</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3426"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3435"/>
         <source>This permanently removes ztermy passwords and key passphrases from the active store. Host profiles remain, but will ask for credentials next time.</source>
         <translation>这将从当前存储中永久移除 ztermy 密码和密钥口令。主机配置会保留，但下次连接时将再次要求输入凭据。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3426"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3435"/>
         <source>This permanently removes all ztermy credential copies from the selected inactive store. Credentials and host references in the active store remain unchanged.</source>
         <translation>这将从所选非活动存储中永久移除全部 ztermy 凭据副本。当前存储中的凭据和主机引用不会更改。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3430"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3439"/>
         <source>Active credentials were removed and detached from saved hosts.</source>
         <translation>已移除活动凭据，并解除其与已保存主机的关联。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="3430"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="3439"/>
         <source>Retained credential copies were removed from the selected store.</source>
         <translation>已从所选存储中移除保留的凭据副本。</translation>
     </message>
@@ -7697,92 +7697,117 @@
 <context>
     <name>ShortcutSettings</name>
     <message>
-        <location filename="../src/ui/qml/ShortcutSettings.qml" line="98"/>
+        <location filename="../src/ui/qml/ShortcutSettings.qml" line="17"/>
+        <source>Show or hide the main window</source>
+        <translation>显示或隐藏主窗口</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/ShortcutSettings.qml" line="18"/>
+        <source>System-wide, including when another application is focused</source>
+        <translation>系统级快捷键，其他应用在前台时也可使用</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/ShortcutSettings.qml" line="305"/>
+        <source>System-wide</source>
+        <translation>系统级</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/ShortcutSettings.qml" line="35"/>
+        <source>The shortcut could not be saved.</source>
+        <translation>无法保存此快捷键。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/ShortcutSettings.qml" line="314"/>
+        <source>Hides only when the main window is in front; otherwise restores and focuses it. Detached windows are unchanged. Clear the shortcut to disable it.</source>
+        <translation>主窗口在前台时隐藏，否则恢复并聚焦。独立窗口不受影响。清空快捷键即可禁用。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/ShortcutSettings.qml" line="119"/>
         <source>Shortcut for %1</source>
         <translation>“%1”的快捷键</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ShortcutSettings.qml" line="129"/>
+        <location filename="../src/ui/qml/ShortcutSettings.qml" line="153"/>
         <source>Press shortcut…</source>
         <translation>请按快捷键…</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ShortcutSettings.qml" line="129"/>
+        <location filename="../src/ui/qml/ShortcutSettings.qml" line="153"/>
         <source>Unbound</source>
         <translation>未绑定</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ShortcutSettings.qml" line="157"/>
+        <location filename="../src/ui/qml/ShortcutSettings.qml" line="181"/>
         <source>Unbind %1</source>
         <translation>解绑“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ShortcutSettings.qml" line="174"/>
+        <location filename="../src/ui/qml/ShortcutSettings.qml" line="200"/>
         <source>Unbind shortcut</source>
         <translation>解绑快捷键</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ShortcutSettings.qml" line="186"/>
+        <location filename="../src/ui/qml/ShortcutSettings.qml" line="212"/>
         <source>Reset %1 to its default shortcut</source>
         <translation>将“%1”重置为默认快捷键</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ShortcutSettings.qml" line="189"/>
+        <location filename="../src/ui/qml/ShortcutSettings.qml" line="218"/>
         <source>The shortcut could not be reset.</source>
         <translation>无法重置此快捷键。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ShortcutSettings.qml" line="206"/>
+        <location filename="../src/ui/qml/ShortcutSettings.qml" line="234"/>
         <source>Reset to default</source>
         <translation>恢复默认</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ShortcutSettings.qml" line="243"/>
+        <location filename="../src/ui/qml/ShortcutSettings.qml" line="271"/>
         <source>Search actions and shortcuts</source>
         <translation>搜索操作和快捷键</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ShortcutSettings.qml" line="244"/>
+        <location filename="../src/ui/qml/ShortcutSettings.qml" line="272"/>
         <source>Search keyboard shortcuts</source>
         <translation>搜索键盘快捷键</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ShortcutSettings.qml" line="253"/>
+        <location filename="../src/ui/qml/ShortcutSettings.qml" line="281"/>
         <source>Reset all</source>
         <translation>全部重置</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ShortcutSettings.qml" line="255"/>
+        <location filename="../src/ui/qml/ShortcutSettings.qml" line="283"/>
         <source>Reset all keyboard shortcuts</source>
         <translation>重置全部键盘快捷键</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ShortcutSettings.qml" line="258"/>
+        <location filename="../src/ui/qml/ShortcutSettings.qml" line="286"/>
         <source>The shortcuts could not be reset.</source>
         <translation>无法重置快捷键。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ShortcutSettings.qml" line="266"/>
+        <location filename="../src/ui/qml/ShortcutSettings.qml" line="294"/>
         <source>Press a shortcut. Escape cancels; Backspace or Delete clears the binding.</source>
         <translation>请按下快捷键。Escape 取消；Backspace 或 Delete 清除绑定。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ShortcutSettings.qml" line="275"/>
+        <location filename="../src/ui/qml/ShortcutSettings.qml" line="324"/>
         <source>Application</source>
         <translation>应用</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ShortcutSettings.qml" line="280"/>
+        <location filename="../src/ui/qml/ShortcutSettings.qml" line="329"/>
         <source>Tabs</source>
         <translation>标签页</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ShortcutSettings.qml" line="285"/>
+        <location filename="../src/ui/qml/ShortcutSettings.qml" line="334"/>
         <source>Terminal</source>
         <translation>终端</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ShortcutSettings.qml" line="291"/>
+        <location filename="../src/ui/qml/ShortcutSettings.qml" line="340"/>
         <source>No matching shortcuts</source>
         <translation>没有匹配的快捷键</translation>
     </message>
@@ -9135,25 +9160,25 @@ Click to unpin · Double-click pins the whole window</source>
         <translation>打开设置</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/DetachedTerminalWindow.qml" line="275"/>
+        <location filename="../src/ui/qml/DetachedTerminalWindow.qml" line="287"/>
         <location filename="../src/ui/qml/TitleWindowActions.qml" line="208"/>
         <source>Minimize</source>
         <translation>最小化</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/DetachedTerminalWindow.qml" line="275"/>
+        <location filename="../src/ui/qml/DetachedTerminalWindow.qml" line="287"/>
         <location filename="../src/ui/qml/TitleWindowActions.qml" line="218"/>
         <source>Restore</source>
         <translation>还原</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/DetachedTerminalWindow.qml" line="275"/>
+        <location filename="../src/ui/qml/DetachedTerminalWindow.qml" line="287"/>
         <location filename="../src/ui/qml/TitleWindowActions.qml" line="218"/>
         <source>Maximize</source>
         <translation>最大化</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/DetachedTerminalWindow.qml" line="275"/>
+        <location filename="../src/ui/qml/DetachedTerminalWindow.qml" line="287"/>
         <location filename="../src/ui/qml/TitleWindowActions.qml" line="230"/>
         <source>Close</source>
         <translation>关闭</translation>
@@ -9535,137 +9560,142 @@ Click to unpin · Double-click pins the whole window</source>
 <context>
     <name>WindowBehaviorSettings</name>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="96"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="59"/>
+        <source>Wake the main window on the screen containing the pointer</source>
+        <translation>在鼠标所在的屏幕唤醒主窗口</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="106"/>
         <source>Restore detached windows on the next launch</source>
         <translation>下次启动时恢复独立窗口</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="148"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="158"/>
         <source>Allow terminals to change titles</source>
         <translation>允许终端修改标题</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="176"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="186"/>
         <source>A manually renamed tab keeps its name. Clear the name to restore automatic titles.</source>
         <translation>手动重命名的标签始终保持名称。清空名称可恢复自动标题。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="24"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="25"/>
         <source>Window behavior</source>
         <translation>窗口行为</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="58"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="68"/>
         <source>Keep ztermy running in the notification area when the window is closed</source>
         <translation>关闭窗口时让 ztermy 在通知区域继续运行</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="64"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="74"/>
         <source>The tray menu can show or hide the window and exit ztermy completely.</source>
         <translation>托盘菜单可以显示或隐藏窗口，也可以彻底退出 ztermy。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="76"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="86"/>
         <source>Close a pane automatically when its shell exits or SSH session disconnects</source>
         <translation>Shell 退出或 SSH 会话断开后自动关闭窗格</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="85"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="95"/>
         <source>Restore terminal tabs and pane layouts on the next launch</source>
         <translation>下次启动时恢复终端标签页和窗格布局</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="107"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="117"/>
         <source>Open restored local terminals automatically</source>
         <translation>自动打开已恢复的本地终端</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="118"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="128"/>
         <source>Reconnect restored SSH sessions automatically</source>
         <translation>自动重新连接已恢复的 SSH 会话</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="127"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="137"/>
         <source>Prioritize performance on software-rendered or low-power machines</source>
         <translation>在软件渲染或低性能设备上优先保证性能</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="135"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="145"/>
         <source>Reuse the running instance for the same data directory</source>
         <translation>同一数据目录复用已运行的实例</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="140"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="150"/>
         <source>Portable and installed copies with separate data directories remain independent. Applies on next launch.</source>
         <translation>使用不同数据目录的便携版与安装版互不影响，下次启动时生效。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="155"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="165"/>
         <source>Automatically hide the window title bar</source>
         <translation>自动隐藏窗口顶栏</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="160"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="170"/>
         <source>Hover the narrow strip above the content to reveal the title bar. The content does not move.</source>
         <translation>悬停内容上方的窄空白带可唤出顶栏；终端内容不会移动。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="165"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="175"/>
         <source>Terminal tab widths</source>
         <translation>终端标签宽度</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="172"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="182"/>
         <source>All titles, shrink together</source>
         <translation>全部显示标题，空间不足时同步缩窄</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="172"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="182"/>
         <source>Active title, other tabs as icons</source>
         <translation>仅活动标签显示标题，其余显示图标</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="181"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="191"/>
         <source>Double-click a terminal tab</source>
         <translation>双击终端标签页</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="187"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="197"/>
         <source>Rename</source>
         <translation>重命名</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="187"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="197"/>
         <source>Close tab</source>
         <translation>关闭标签页</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="187"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="197"/>
         <source>No action</source>
         <translation>无操作</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="190"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="200"/>
         <source>Tab close button</source>
         <translation>标签页关闭按钮</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="196"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="206"/>
         <source>Always visible</source>
         <translation>始终显示</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="196"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="206"/>
         <source>Show on hover or keyboard focus</source>
         <translation>悬停或获得键盘焦点时显示</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="196"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="206"/>
         <source>Hidden (use the tab menu)</source>
         <translation>隐藏（通过标签页菜单关闭）</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="201"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="211"/>
         <source>Uses a truly opaque window and disables material, shadows and motion. Your selected visual-effects preference is kept and restored when this mode is turned off. Restart required.</source>
         <translation>使用真正不透明的窗口，并关闭材质、阴影和动画。所选视觉效果偏好会保留，并在关闭此模式后恢复。需要重启。</translation>
     </message>
@@ -10473,102 +10503,102 @@ Click to unpin · Double-click pins the whole window</source>
         <translation>终端通知 — %1</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4761"/>
-        <location filename="../src/application/AppController.cpp" line="7495"/>
+        <location filename="../src/application/AppController.cpp" line="4782"/>
+        <location filename="../src/application/AppController.cpp" line="7532"/>
         <source>The maximum of 32 terminal tabs is already open</source>
         <translation>已达到最多 32 个终端标签页的限制</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4789"/>
-        <location filename="../src/application/AppController.cpp" line="5328"/>
+        <location filename="../src/application/AppController.cpp" line="4810"/>
+        <location filename="../src/application/AppController.cpp" line="5349"/>
         <source>Starting local terminal...</source>
         <translation>正在启动本地终端…</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4880"/>
-        <location filename="../src/application/AppController.cpp" line="5386"/>
+        <location filename="../src/application/AppController.cpp" line="4901"/>
+        <location filename="../src/application/AppController.cpp" line="5407"/>
         <source>Unable to start local terminal: %1</source>
         <translation>无法启动本地终端：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5308"/>
+        <location filename="../src/application/AppController.cpp" line="5329"/>
         <source>SSH pane duplicated; reconnecting...</source>
         <translation>SSH 窗格已复制；正在重新连接...</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5843"/>
+        <location filename="../src/application/AppController.cpp" line="5864"/>
         <source>Session log could not be started.</source>
         <translation>无法启动会话日志。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6166"/>
-        <location filename="../src/application/AppController.cpp" line="6229"/>
+        <location filename="../src/application/AppController.cpp" line="6187"/>
+        <location filename="../src/application/AppController.cpp" line="6250"/>
         <source>The script definition is invalid.</source>
         <translation>脚本定义无效。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6188"/>
+        <location filename="../src/application/AppController.cpp" line="6209"/>
         <source>The script contains an invalid variable.</source>
         <translation>脚本包含无效变量。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6217"/>
+        <location filename="../src/application/AppController.cpp" line="6238"/>
         <source>The script contains an invalid step.</source>
         <translation>脚本包含无效步骤。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6238"/>
+        <location filename="../src/application/AppController.cpp" line="6259"/>
         <source>The script library has reached its 256 item limit.</source>
         <translation>脚本库已达到 256 项上限。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6248"/>
-        <location filename="../src/application/AppController.cpp" line="6384"/>
-        <location filename="../src/application/AppController.cpp" line="6410"/>
-        <location filename="../src/application/AppController.cpp" line="6437"/>
+        <location filename="../src/application/AppController.cpp" line="6269"/>
+        <location filename="../src/application/AppController.cpp" line="6405"/>
+        <location filename="../src/application/AppController.cpp" line="6431"/>
+        <location filename="../src/application/AppController.cpp" line="6458"/>
         <source>The script no longer exists.</source>
         <translation>该脚本已不存在。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6256"/>
-        <location filename="../src/application/AppController.cpp" line="6394"/>
+        <location filename="../src/application/AppController.cpp" line="6277"/>
+        <location filename="../src/application/AppController.cpp" line="6415"/>
         <source>The script could not be saved.</source>
         <translation>无法保存脚本。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6304"/>
+        <location filename="../src/application/AppController.cpp" line="6325"/>
         <source>Choose a running target terminal for the script.</source>
         <translation>请为脚本选择一个正在运行的目标终端。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6316"/>
+        <location filename="../src/application/AppController.cpp" line="6337"/>
         <source>Fill every required script variable with a valid value.</source>
         <translation>请为每个必填脚本变量填写有效值。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6323"/>
+        <location filename="../src/application/AppController.cpp" line="6344"/>
         <source>A script is already running in this terminal.</source>
         <translation>此终端中已有脚本正在运行。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6324"/>
+        <location filename="../src/application/AppController.cpp" line="6345"/>
         <source>The script could not be started.</source>
         <translation>无法启动脚本。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6358"/>
+        <location filename="../src/application/AppController.cpp" line="6379"/>
         <source>Enter a name and command, then choose a valid shell scope.</source>
         <translation>请输入名称和命令，然后选择有效的 Shell 适用范围。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6469"/>
-        <location filename="../src/application/AppController.cpp" line="6483"/>
-        <location filename="../src/application/AppController.cpp" line="6491"/>
+        <location filename="../src/application/AppController.cpp" line="6490"/>
+        <location filename="../src/application/AppController.cpp" line="6504"/>
+        <location filename="../src/application/AppController.cpp" line="6512"/>
         <source>The script library could not be imported.</source>
         <translation>无法导入脚本库。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6417"/>
+        <location filename="../src/application/AppController.cpp" line="6438"/>
         <source>The script could not be deleted.</source>
         <translation>无法删除脚本。</translation>
     </message>
@@ -10643,67 +10673,67 @@ Click to unpin · Double-click pins the whole window</source>
         <translation>未安装</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4131"/>
+        <location filename="../src/application/AppController.cpp" line="4137"/>
         <source>Retry the response. If it fails again, review the provider settings.</source>
         <translation>重试回复；若仍然失败，请检查供应商设置。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4145"/>
+        <location filename="../src/application/AppController.cpp" line="4151"/>
         <source>Check the connection and retry this response.</source>
         <translation>检查网络连接后重试此回复。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4150"/>
+        <location filename="../src/application/AppController.cpp" line="4156"/>
         <source>Sign in with ChatGPT again in AI settings, then retry this response.</source>
         <translation>请在 AI 设置中重新登录 ChatGPT，然后重试此回答。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4151"/>
+        <location filename="../src/application/AppController.cpp" line="4157"/>
         <source>Update the API key in AI settings, then retry this response.</source>
         <translation>在 AI 设置中更新 API 密钥，然后重试此回复。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4156"/>
+        <location filename="../src/application/AppController.cpp" line="4162"/>
         <source>The provider asked ztermy to wait about %1 seconds before retrying.</source>
         <translation>提供商要求 ztermy 等待约 %1 秒后再重试。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4159"/>
+        <location filename="../src/application/AppController.cpp" line="4165"/>
         <source>Wait a moment and retry, or switch the provider or model in AI settings.</source>
         <translation>稍候重试，或在 AI 设置中切换供应商或模型。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4163"/>
+        <location filename="../src/application/AppController.cpp" line="4169"/>
         <source>Switch the provider or model, or update the provider quota before retrying.</source>
         <translation>切换供应商或模型，或更新供应商配额后重试。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4167"/>
+        <location filename="../src/application/AppController.cpp" line="4173"/>
         <source>Check the endpoint, model, and provider settings before retrying.</source>
         <translation>检查端点、模型和供应商设置后重试。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4171"/>
+        <location filename="../src/application/AppController.cpp" line="4177"/>
         <source>The provider is temporarily unavailable. Retry in a moment.</source>
         <translation>供应商暂时不可用，请稍后重试。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4175"/>
+        <location filename="../src/application/AppController.cpp" line="4181"/>
         <source>The response was stopped. Retry when ready.</source>
         <translation>回复已停止，可在准备好后重试。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4179"/>
+        <location filename="../src/application/AppController.cpp" line="4185"/>
         <source>Check endpoint compatibility in AI settings, or retry the response.</source>
         <translation>在 AI 设置中检查端点兼容性，或重试此回复。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4183"/>
+        <location filename="../src/application/AppController.cpp" line="4189"/>
         <source>Start a new conversation or send a shorter request with less attached context.</source>
         <translation>新建对话，或减少附加上下文后发送更短的请求。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4368"/>
+        <location filename="../src/application/AppController.cpp" line="4374"/>
         <source>MCP tool: %1
 Server: %2
 
@@ -10716,92 +10746,92 @@ Arguments (untrusted):
 %3</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4382"/>
+        <location filename="../src/application/AppController.cpp" line="4388"/>
         <source>MCP tools run in an external process and their descriptions and results are untrusted.</source>
         <translation>MCP 工具在外部进程中运行，其描述和结果均不受信任。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4406"/>
+        <location filename="../src/application/AppController.cpp" line="4412"/>
         <source>Send Ctrl+C to tracked command %1</source>
         <translation>向跟踪的命令 %1 发送 Ctrl+C</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4413"/>
+        <location filename="../src/application/AppController.cpp" line="4419"/>
         <source>Save runbook: %1</source>
         <translation>保存运行手册：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4435"/>
+        <location filename="../src/application/AppController.cpp" line="4441"/>
         <source>Upload with SFTP</source>
         <translation>通过 SFTP 上传</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4435"/>
+        <location filename="../src/application/AppController.cpp" line="4441"/>
         <source>Download with SFTP</source>
         <translation>通过 SFTP 下载</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4778"/>
+        <location filename="../src/application/AppController.cpp" line="4799"/>
         <source>No supported local shell is available</source>
         <translation>没有可用的受支持本地 Shell</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5413"/>
+        <location filename="../src/application/AppController.cpp" line="5434"/>
         <source>Retrying restored terminal...</source>
         <translation>正在重试恢复终端...</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5424"/>
+        <location filename="../src/application/AppController.cpp" line="5445"/>
         <source>The restore quarantine state could not be saved.</source>
         <translation>无法保存恢复隔离状态。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6117"/>
+        <location filename="../src/application/AppController.cpp" line="6138"/>
         <source>Stop and review a non-empty recording before saving it as a script.</source>
         <translation>请停止并检查非空录制，再将其保存为脚本。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6134"/>
+        <location filename="../src/application/AppController.cpp" line="6155"/>
         <source>The recording does not contain any command actions.</source>
         <translation>录制中不包含任何命令操作。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6454"/>
+        <location filename="../src/application/AppController.cpp" line="6475"/>
         <source>The script order could not be saved.</source>
         <translation>无法保存脚本顺序。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6496"/>
+        <location filename="../src/application/AppController.cpp" line="6517"/>
         <source>The imported script library exceeds the 256 item limit.</source>
         <translation>导入的脚本库超过 256 项上限。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6520"/>
+        <location filename="../src/application/AppController.cpp" line="6541"/>
         <source>The imported script library could not be saved.</source>
         <translation>无法保存导入的脚本库。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6535"/>
+        <location filename="../src/application/AppController.cpp" line="6556"/>
         <source>The workspace could not be exported.</source>
         <translation>无法导出工作区。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6539"/>
+        <location filename="../src/application/AppController.cpp" line="6560"/>
         <source>Workspace exported.</source>
         <translation>工作区已导出。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6548"/>
+        <location filename="../src/application/AppController.cpp" line="6569"/>
         <source>Close open terminal tabs before importing a workspace.</source>
         <translation>导入工作区前请关闭已打开的终端标签。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6557"/>
+        <location filename="../src/application/AppController.cpp" line="6578"/>
         <source>The workspace file is invalid or could not be imported.</source>
         <translation>工作区文件无效或无法导入。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6563"/>
+        <location filename="../src/application/AppController.cpp" line="6584"/>
         <source>Workspace imported.</source>
         <translation>工作区已导入。</translation>
     </message>
@@ -10828,376 +10858,376 @@ Arguments (untrusted):
         </translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6576"/>
+        <location filename="../src/application/AppController.cpp" line="6597"/>
         <source>The script library could not be exported.</source>
         <translation>无法导出脚本库。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6604"/>
+        <location filename="../src/application/AppController.cpp" line="6625"/>
         <source>Connect the SSH terminal before reading remote history.</source>
         <translation>请先连接 SSH 终端，再读取远程历史记录。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7085"/>
+        <location filename="../src/application/AppController.cpp" line="7106"/>
         <source>Upload %1 items</source>
         <translation>上传 %1 个项目</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7126"/>
+        <location filename="../src/application/AppController.cpp" line="7147"/>
         <source>Download %1 items</source>
         <translation>下载 %1 个项目</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7371"/>
+        <location filename="../src/application/AppController.cpp" line="7392"/>
         <source>The shortcut could not be saved.</source>
         <translation>无法保存快捷键。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7447"/>
+        <location filename="../src/application/AppController.cpp" line="7484"/>
         <source>Complete the SSH host, port, username, and private-key fields</source>
         <translation>请填写 SSH 主机、端口、用户名和私钥字段</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7471"/>
+        <location filename="../src/application/AppController.cpp" line="7508"/>
         <source>Complete the SSH host, port, username, and password fields</source>
         <translation>请填写 SSH 主机、端口、用户名和密码字段</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7513"/>
+        <location filename="../src/application/AppController.cpp" line="7550"/>
         <source>Starting SSH connection...</source>
         <translation>正在启动 SSH 连接…</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7615"/>
+        <location filename="../src/application/AppController.cpp" line="7652"/>
         <source>Automatic reconnect stopped after %1 attempt(s).</source>
         <translation>自动重连在尝试 %1 次后停止。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7627"/>
+        <location filename="../src/application/AppController.cpp" line="7664"/>
         <source>SSH connection lost. Reconnecting in %1 second(s) (attempt %2 of %3).</source>
         <translation>SSH 连接已中断。将在 %1 秒后重连（第 %2/%3 次）。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7651"/>
+        <location filename="../src/application/AppController.cpp" line="7688"/>
         <source>SSH reconnect stopped because the saved host no longer exists.</source>
         <translation>已保存的主机不存在，SSH 重连已停止。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7658"/>
+        <location filename="../src/application/AppController.cpp" line="7695"/>
         <source>SSH reconnect needs an available saved credential.</source>
         <translation>SSH 重连需要可用的已保存凭据。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7668"/>
+        <location filename="../src/application/AppController.cpp" line="7705"/>
         <source>Reconnecting to SSH host...</source>
         <translation>正在重新连接 SSH 主机...</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7675"/>
+        <location filename="../src/application/AppController.cpp" line="7712"/>
         <source>SSH reconnect could not start.</source>
         <translation>无法启动 SSH 重连。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7757"/>
+        <location filename="../src/application/AppController.cpp" line="7794"/>
         <source>Automatic SSH reconnect cancelled.</source>
         <translation>已取消 SSH 自动重连。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7967"/>
+        <location filename="../src/application/AppController.cpp" line="8004"/>
         <source>Transfer recovery unavailable</source>
         <translation>传输恢复不可用</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7970"/>
+        <location filename="../src/application/AppController.cpp" line="8007"/>
         <source>The previous transfer state could not be read. New transfers are still available.</source>
         <translation>无法读取之前的传输状态。仍可创建新传输。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7971"/>
+        <location filename="../src/application/AppController.cpp" line="8008"/>
         <source>Transfer recovery state could not be saved. Active transfers may not be recoverable after exit.</source>
         <translation>无法保存传输恢复状态。退出后可能无法恢复活动传输。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7987"/>
+        <location filename="../src/application/AppController.cpp" line="8024"/>
         <source>Batch transfer recovery unavailable</source>
         <translation>批量传输恢复不可用</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7990"/>
+        <location filename="../src/application/AppController.cpp" line="8027"/>
         <source>Previous batch transfer state could not be read. New transfers remain available.</source>
         <translation>无法读取上次的批量传输状态。仍可创建新的传输。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7991"/>
+        <location filename="../src/application/AppController.cpp" line="8028"/>
         <source>Batch transfer state could not be saved. Active batches may not be recoverable after exit.</source>
         <translation>无法保存批量传输状态。退出后可能无法恢复活动批次。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8031"/>
+        <location filename="../src/application/AppController.cpp" line="8068"/>
         <source>Download complete</source>
         <translation>下载完成</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8031"/>
+        <location filename="../src/application/AppController.cpp" line="8068"/>
         <source>Upload complete</source>
         <translation>上传完成</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8036"/>
+        <location filename="../src/application/AppController.cpp" line="8073"/>
         <source>File transfer failed</source>
         <translation>文件传输失败</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8040"/>
+        <location filename="../src/application/AppController.cpp" line="8077"/>
         <source>File transfer cancelled</source>
         <translation>文件传输已取消</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8098"/>
+        <location filename="../src/application/AppController.cpp" line="8135"/>
         <source>Unlock the credential vault to browse remote files.</source>
         <translation>解锁凭据保险库后才能浏览远程文件。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8099"/>
+        <location filename="../src/application/AppController.cpp" line="8136"/>
         <source>This SSH session needs a saved credential before remote files can be opened.</source>
         <translation>此 SSH 会话需要已保存的凭据才能打开远程文件。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8115"/>
+        <location filename="../src/application/AppController.cpp" line="8152"/>
         <source>The SFTP session could not be started.</source>
         <translation>无法启动 SFTP 会话。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8283"/>
+        <location filename="../src/application/AppController.cpp" line="8320"/>
         <source>The profile was saved, but the connection could not be started.</source>
         <translation>配置已保存，但无法启动连接。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8324"/>
+        <location filename="../src/application/AppController.cpp" line="8361"/>
         <source>Select an identity that still exists in the keychain.</source>
         <translation>请选择钥匙串中仍然存在的身份。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8360"/>
+        <location filename="../src/application/AppController.cpp" line="8397"/>
         <source>Select up to three distinct saved jump hosts.</source>
         <translation>请选择最多三个互不相同的已保存跳板主机。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8442"/>
+        <location filename="../src/application/AppController.cpp" line="8479"/>
         <source>Create the portable credential vault in Settings &gt; Security before saving a secret.</source>
         <translation>保存凭据前，请先在“设置 &gt; 安全”中创建便携凭据保险库。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8559"/>
+        <location filename="../src/application/AppController.cpp" line="8596"/>
         <source>Remove this host from the jump-host chain of &quot;%1&quot; before deleting it.</source>
         <translation>请先从“%1”的跳板链中移除此主机，然后再删除。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8565"/>
+        <location filename="../src/application/AppController.cpp" line="8602"/>
         <source>Delete the port forwarding rules that use this host before deleting it.</source>
         <translation>请先删除使用此主机的端口转发规则。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8770"/>
+        <location filename="../src/application/AppController.cpp" line="8807"/>
         <source>This host profile has no saved credential.</source>
         <translation>此主机配置没有已保存的凭据。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8793"/>
+        <location filename="../src/application/AppController.cpp" line="8830"/>
         <source>This host profile has no saved proxy credential.</source>
         <translation>此主机配置没有已保存的代理凭据。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8818"/>
+        <location filename="../src/application/AppController.cpp" line="8855"/>
         <source>The identity selected by this host is missing or incomplete.</source>
         <translation>此主机选择的身份已丢失或不完整。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8838"/>
+        <location filename="../src/application/AppController.cpp" line="8875"/>
         <source>Enter the credential required by this host.</source>
         <translation>请输入此主机所需的凭据。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8855"/>
+        <location filename="../src/application/AppController.cpp" line="8892"/>
         <source>Enter the credential required by this proxy.</source>
         <translation>请输入此代理所需的凭据。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8865"/>
+        <location filename="../src/application/AppController.cpp" line="8902"/>
         <source>A configured jump host no longer exists.</source>
         <translation>配置的某个跳板主机已不存在。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8873"/>
+        <location filename="../src/application/AppController.cpp" line="8910"/>
         <source>The identity selected by jump host &quot;%1&quot; is missing or incomplete.</source>
         <translation>跳板主机“%1”选择的身份已丢失或不完整。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8892"/>
+        <location filename="../src/application/AppController.cpp" line="8929"/>
         <source>Save the credential for jump host &quot;%1&quot; before using this chain.</source>
         <translation>使用此链路前，请先保存跳板主机“%1”的凭据。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8910"/>
+        <location filename="../src/application/AppController.cpp" line="8947"/>
         <source>Save the proxy credential for jump host &quot;%1&quot; before using this chain.</source>
         <translation>使用此链路前，请先保存跳板主机“%1”的代理凭据。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9236"/>
+        <location filename="../src/application/AppController.cpp" line="9273"/>
         <source>Off</source>
         <translation>关闭</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9240"/>
+        <location filename="../src/application/AppController.cpp" line="9277"/>
         <source>Low</source>
         <translation>低</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9244"/>
+        <location filename="../src/application/AppController.cpp" line="9281"/>
         <source>Medium</source>
         <translation>中</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9248"/>
+        <location filename="../src/application/AppController.cpp" line="9285"/>
         <source>High</source>
         <translation>高</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9252"/>
+        <location filename="../src/application/AppController.cpp" line="9289"/>
         <source>Maximum</source>
         <translation>最高</translation>
     </message>
     <message>
         <location filename="../src/application/AppController.cpp" line="3809"/>
-        <location filename="../src/application/AppController.cpp" line="9256"/>
+        <location filename="../src/application/AppController.cpp" line="9293"/>
         <source>Automatic</source>
         <translation>自动</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9264"/>
+        <location filename="../src/application/AppController.cpp" line="9301"/>
         <source>Uses this provider&apos;s documented reasoning controls. Unsupported levels are not shown.</source>
         <translation>使用此供应商文档明确支持的推理控制，不显示不受支持的级别。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9265"/>
+        <location filename="../src/application/AppController.cpp" line="9302"/>
         <source>This provider or model does not expose a documented reasoning control; ztermy leaves it unchanged.</source>
         <translation>此供应商或模型未公开受支持的推理控制；ztermy 将保持其默认行为。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9274"/>
-        <location filename="../src/application/AppController.cpp" line="9284"/>
+        <location filename="../src/application/AppController.cpp" line="9311"/>
+        <location filename="../src/application/AppController.cpp" line="9321"/>
         <source>Invalid API address</source>
         <translation>API 地址无效</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9433"/>
+        <location filename="../src/application/AppController.cpp" line="9470"/>
         <source>Choose a supported model provider.</source>
         <translation>请选择受支持的模型供应商。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9559"/>
+        <location filename="../src/application/AppController.cpp" line="9596"/>
         <source>Could not fetch models (HTTP %1).</source>
         <translation>无法获取模型（HTTP %1）。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9560"/>
+        <location filename="../src/application/AppController.cpp" line="9597"/>
         <source>Could not reach the model provider.</source>
         <translation>无法连接模型供应商。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9574"/>
+        <location filename="../src/application/AppController.cpp" line="9611"/>
         <source>The provider model list is too large.</source>
         <translation>供应商返回的模型列表过大。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9612"/>
+        <location filename="../src/application/AppController.cpp" line="9649"/>
         <source>The provider returned no models.</source>
         <translation>供应商未返回任何模型。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9743"/>
+        <location filename="../src/application/AppController.cpp" line="9780"/>
         <source>Could not open the browser for ChatGPT sign-in.</source>
         <translation>无法打开浏览器完成 ChatGPT 登录。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9889"/>
+        <location filename="../src/application/AppController.cpp" line="9926"/>
         <source>Sign in with ChatGPT to view subscription usage.</source>
         <translation>登录 ChatGPT 后可查看订阅用量。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9967"/>
+        <location filename="../src/application/AppController.cpp" line="10004"/>
         <source>Could not fetch ChatGPT usage (HTTP %1).</source>
         <translation>无法获取 ChatGPT 用量（HTTP %1）。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9968"/>
+        <location filename="../src/application/AppController.cpp" line="10005"/>
         <source>Could not reach ChatGPT usage.</source>
         <translation>无法连接 ChatGPT 用量服务。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9982"/>
+        <location filename="../src/application/AppController.cpp" line="10019"/>
         <source>ChatGPT returned an oversized usage response.</source>
         <translation>ChatGPT 返回的用量响应过大。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10063"/>
+        <location filename="../src/application/AppController.cpp" line="10100"/>
         <source>Encrypted AI history requires Windows Credential Manager or the portable vault.</source>
         <translation>加密 AI 历史需要 Windows 凭据管理器或便携保险库。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10069"/>
+        <location filename="../src/application/AppController.cpp" line="10106"/>
         <source>Unlock the portable credential vault before enabling encrypted AI history.</source>
         <translation>请先解锁便携凭据保险库，再启用加密 AI 历史。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10226"/>
+        <location filename="../src/application/AppController.cpp" line="10263"/>
         <source>No command failure with a reliable exit status is available in this session.</source>
         <translation>此会话中没有包含可靠退出状态的失败命令。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10232"/>
+        <location filename="../src/application/AppController.cpp" line="10269"/>
         <source>Explain the last failed command, identify the likely cause, and suggest the safest next diagnostic step.</source>
         <translation>解释上次失败的命令，判断可能原因，并建议最安全的下一步诊断操作。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10272"/>
+        <location filename="../src/application/AppController.cpp" line="10309"/>
         <source>This terminal is not linked to a saved Profile.</source>
         <translation>此终端未关联已保存的 Profile。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10364"/>
+        <location filename="../src/application/AppController.cpp" line="10401"/>
         <source>Enter a name, a unique slash command, and prompt text.</source>
         <translation>请输入名称、唯一的斜杠命令和提示词。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10384"/>
+        <location filename="../src/application/AppController.cpp" line="10421"/>
         <source>This slash command is already used.</source>
         <translation>此斜杠命令已被使用。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10396"/>
+        <location filename="../src/application/AppController.cpp" line="10433"/>
         <source>The quick message limit has been reached.</source>
         <translation>已达到快捷消息数量上限。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10406"/>
-        <location filename="../src/application/AppController.cpp" line="10433"/>
+        <location filename="../src/application/AppController.cpp" line="10443"/>
+        <location filename="../src/application/AppController.cpp" line="10470"/>
         <source>The quick message no longer exists.</source>
         <translation>此快捷消息已不存在。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10758"/>
+        <location filename="../src/application/AppController.cpp" line="10795"/>
         <source>There is no conversation context to compact.</source>
         <translation>没有可压缩的对话上下文。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10778"/>
-        <location filename="../src/application/AppController.cpp" line="10788"/>
+        <location filename="../src/application/AppController.cpp" line="10815"/>
+        <location filename="../src/application/AppController.cpp" line="10825"/>
         <source>The conversation is already compact.</source>
         <translation>当前对话已经足够精简。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11036"/>
+        <location filename="../src/application/AppController.cpp" line="11073"/>
         <source>
 Recent terminal output:
 %1</source>
@@ -11206,259 +11236,259 @@ Recent terminal output:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11083"/>
+        <location filename="../src/application/AppController.cpp" line="11120"/>
         <source>Attach no more than four text files to one message.</source>
         <translation>一条消息最多附加四个文本文件。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11197"/>
-        <location filename="../src/application/AppController.cpp" line="11317"/>
+        <location filename="../src/application/AppController.cpp" line="11234"/>
+        <location filename="../src/application/AppController.cpp" line="11354"/>
         <source>Attach no more than four images to one message.</source>
         <translation>一条消息最多附加四张图片。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11326"/>
+        <location filename="../src/application/AppController.cpp" line="11363"/>
         <source>Could not attach the clipboard image.</source>
         <translation>无法附加剪贴板图片。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11389"/>
+        <location filename="../src/application/AppController.cpp" line="11426"/>
         <source>Could not attach these images: %1</source>
         <translation>无法附加这些图片：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11963"/>
+        <location filename="../src/application/AppController.cpp" line="12000"/>
         <source>HTTP %1</source>
         <translation>HTTP %1</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11967"/>
+        <location filename="../src/application/AppController.cpp" line="12004"/>
         <source>Code: %1</source>
         <translation>错误码：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11971"/>
+        <location filename="../src/application/AppController.cpp" line="12008"/>
         <source>Request: %1</source>
         <translation>请求：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="12119"/>
+        <location filename="../src/application/AppController.cpp" line="12156"/>
         <source>Sign in with ChatGPT before starting a conversation.</source>
         <translation>请先登录 ChatGPT，再开始对话。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="12159"/>
+        <location filename="../src/application/AppController.cpp" line="12196"/>
         <source>The selected provider protocol does not support native web search.</source>
         <translation>所选供应商协议不支持原生联网检索。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11993"/>
+        <location filename="../src/application/AppController.cpp" line="12030"/>
         <source>Searching the web</source>
         <translation>正在检索网络</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="12019"/>
+        <location filename="../src/application/AppController.cpp" line="12056"/>
         <source>Web search</source>
         <translation>联网检索</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16408"/>
+        <location filename="../src/application/AppController.cpp" line="16445"/>
         <source>Assistant permission rules could not be loaded.</source>
         <translation>无法加载助手权限规则。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16414"/>
+        <location filename="../src/application/AppController.cpp" line="16451"/>
         <source>Assistant permission rules are invalid.</source>
         <translation>助手权限规则无效。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16444"/>
+        <location filename="../src/application/AppController.cpp" line="16481"/>
         <source>The assistant permission rule is invalid.</source>
         <translation>此助手权限规则无效。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16462"/>
+        <location filename="../src/application/AppController.cpp" line="16499"/>
         <source>Assistant permission rules could not be saved.</source>
         <translation>无法保存助手权限规则。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16667"/>
+        <location filename="../src/application/AppController.cpp" line="16704"/>
         <source>This terminal was quarantined after a restore failure.</source>
         <translation>此终端在恢复失败后已被隔离。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16681"/>
+        <location filename="../src/application/AppController.cpp" line="16718"/>
         <source>This terminal was quarantined because its restore guard could not be saved.</source>
         <translation>此终端因无法保存恢复保护状态而被隔离。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16892"/>
+        <location filename="../src/application/AppController.cpp" line="16939"/>
         <source>Skill directories and SKILL.md must be regular local entries.</source>
         <translation>技能目录和 SKILL.md 必须是普通本地条目。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16894"/>
+        <location filename="../src/application/AppController.cpp" line="16941"/>
         <source>SKILL.md is missing.</source>
         <translation>缺少 SKILL.md。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16896"/>
+        <location filename="../src/application/AppController.cpp" line="16943"/>
         <source>SKILL.md could not be read.</source>
         <translation>无法读取 SKILL.md。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16898"/>
+        <location filename="../src/application/AppController.cpp" line="16945"/>
         <source>SKILL.md exceeds the 128 KiB limit.</source>
         <translation>SKILL.md 超过 128 KiB 限制。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16900"/>
+        <location filename="../src/application/AppController.cpp" line="16947"/>
         <source>SKILL.md must be valid UTF-8 text.</source>
         <translation>SKILL.md 必须是有效的 UTF-8 文本。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16902"/>
+        <location filename="../src/application/AppController.cpp" line="16949"/>
         <source>SKILL.md needs YAML frontmatter enclosed by --- lines.</source>
         <translation>SKILL.md 需要由 --- 行包围的 YAML 前置元数据。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16904"/>
+        <location filename="../src/application/AppController.cpp" line="16951"/>
         <source>The frontmatter name is missing.</source>
         <translation>前置元数据缺少 name。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16906"/>
+        <location filename="../src/application/AppController.cpp" line="16953"/>
         <source>The skill name must use lowercase letters, numbers, and single hyphens.</source>
         <translation>技能名称只能使用小写字母、数字和单个连字符。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16908"/>
+        <location filename="../src/application/AppController.cpp" line="16955"/>
         <source>The frontmatter name must match the skill directory name.</source>
         <translation>前置元数据中的名称必须与技能目录名一致。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16910"/>
+        <location filename="../src/application/AppController.cpp" line="16957"/>
         <source>The frontmatter description is missing.</source>
         <translation>前置元数据缺少 description。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16912"/>
+        <location filename="../src/application/AppController.cpp" line="16959"/>
         <source>The skill description exceeds 1024 characters.</source>
         <translation>技能描述超过 1024 个字符。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16914"/>
+        <location filename="../src/application/AppController.cpp" line="16961"/>
         <source>The compatibility field exceeds 500 characters.</source>
         <translation>compatibility 字段超过 500 个字符。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16916"/>
+        <location filename="../src/application/AppController.cpp" line="16963"/>
         <source>The skill has no Markdown instructions after its frontmatter.</source>
         <translation>技能在前置元数据之后没有 Markdown 指令。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16918"/>
+        <location filename="../src/application/AppController.cpp" line="16965"/>
         <source>The skill contains unsupported control characters.</source>
         <translation>技能包含不支持的控制字符。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16920"/>
+        <location filename="../src/application/AppController.cpp" line="16967"/>
         <source>Only the first 200 skill directories are loaded.</source>
         <translation>仅加载前 200 个技能目录。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16922"/>
+        <location filename="../src/application/AppController.cpp" line="16969"/>
         <source>The skill could not be loaded.</source>
         <translation>无法加载该技能。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10389"/>
+        <location filename="../src/application/AppController.cpp" line="10426"/>
         <source>The quick message is too long or contains unsupported characters.</source>
         <translation>快捷消息过长或包含不支持的字符。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10414"/>
+        <location filename="../src/application/AppController.cpp" line="10451"/>
         <source>The quick message could not be saved.</source>
         <translation>无法保存快捷消息。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10438"/>
+        <location filename="../src/application/AppController.cpp" line="10475"/>
         <source>The quick message could not be deleted.</source>
         <translation>无法删除快捷消息。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10550"/>
+        <location filename="../src/application/AppController.cpp" line="10587"/>
         <source>The target terminal session changed before approval.</source>
         <translation>终端会话在审批前已发生变化。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10578"/>
-        <location filename="../src/application/AppController.cpp" line="10592"/>
-        <location filename="../src/application/AppController.cpp" line="13385"/>
+        <location filename="../src/application/AppController.cpp" line="10615"/>
+        <location filename="../src/application/AppController.cpp" line="10629"/>
+        <location filename="../src/application/AppController.cpp" line="13422"/>
         <source>The command result could not resume the AI turn.</source>
         <translation>命令结果无法恢复 AI 回合。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10619"/>
+        <location filename="../src/application/AppController.cpp" line="10656"/>
         <source>The user denied this terminal action.</source>
         <translation>用户拒绝了此终端操作。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10626"/>
+        <location filename="../src/application/AppController.cpp" line="10663"/>
         <source>The denied command result could not resume the AI turn.</source>
         <translation>被拒绝的命令结果无法恢复 AI 回合。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10686"/>
+        <location filename="../src/application/AppController.cpp" line="10723"/>
         <source>The user denied this MCP tool call.</source>
         <translation>用户拒绝了此次 MCP 工具调用。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10694"/>
+        <location filename="../src/application/AppController.cpp" line="10731"/>
         <source>The denied MCP tool result could not resume the AI turn.</source>
         <translation>被拒绝的 MCP 工具结果无法恢复 AI 回合。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10726"/>
+        <location filename="../src/application/AppController.cpp" line="10763"/>
         <source>The MCP tool result could not resume the AI turn.</source>
         <translation>MCP 工具结果无法恢复 AI 回合。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11019"/>
+        <location filename="../src/application/AppController.cpp" line="11056"/>
         <source>No recent terminal activity is available to attach.</source>
         <translation>没有可附加的最近终端活动。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11025"/>
+        <location filename="../src/application/AppController.cpp" line="11062"/>
         <source>Approximate terminal context. Command and output boundaries are not available for this shell.</source>
         <translation>近似终端上下文。当前 Shell 无法提供命令与输出的精确边界。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11028"/>
+        <location filename="../src/application/AppController.cpp" line="11065"/>
         <source>
 Recent commands (newest first):</source>
         <translation>
 最近的命令（最新优先）：</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11040"/>
+        <location filename="../src/application/AppController.cpp" line="11077"/>
         <source>Recent terminal activity (approximate)</source>
         <translation>最近终端活动（近似）</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11053"/>
+        <location filename="../src/application/AppController.cpp" line="11090"/>
         <source>Command: %1</source>
         <translation>命令：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11056"/>
+        <location filename="../src/application/AppController.cpp" line="11093"/>
         <source>
 Exit status: %1</source>
         <translation>
 退出状态：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11060"/>
+        <location filename="../src/application/AppController.cpp" line="11097"/>
         <source>
 Output:
 %1</source>
@@ -11467,423 +11497,423 @@ Output:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11064"/>
+        <location filename="../src/application/AppController.cpp" line="11101"/>
         <source>Terminal command: %1</source>
         <translation>终端命令：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11182"/>
+        <location filename="../src/application/AppController.cpp" line="11219"/>
         <source>Could not attach these text files: %1</source>
         <translation>无法附加这些文本文件：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11472"/>
-        <location filename="../src/application/AppController.cpp" line="11711"/>
+        <location filename="../src/application/AppController.cpp" line="11509"/>
+        <location filename="../src/application/AppController.cpp" line="11748"/>
         <source>Terminal selection</source>
         <translation>终端选区</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11703"/>
+        <location filename="../src/application/AppController.cpp" line="11740"/>
         <source>Select terminal text before attaching it.</source>
         <translation>请先选择终端文本再附加。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="12108"/>
+        <location filename="../src/application/AppController.cpp" line="12145"/>
         <source>Configure an AI provider URL and model before starting a conversation.</source>
         <translation>开始对话前，请先配置 AI 提供商 URL 和模型。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="12614"/>
+        <location filename="../src/application/AppController.cpp" line="12651"/>
         <source>The current terminal reconnected during this AI turn.</source>
         <translation>当前终端在此次 AI 对话轮次中已重新连接。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="12656"/>
+        <location filename="../src/application/AppController.cpp" line="12693"/>
         <source>The MCP tool cannot be queued for this session.</source>
         <translation>无法为此会话排队执行 MCP 工具。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="12689"/>
+        <location filename="../src/application/AppController.cpp" line="12726"/>
         <source>The MCP tool call was duplicated, changed, or exceeded dispatch bounds.</source>
         <translation>MCP 工具调用重复、已更改或超出调度限制。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="12706"/>
+        <location filename="../src/application/AppController.cpp" line="12743"/>
         <source>The active mode or permission rule denied the MCP tool call.</source>
         <translation>当前模式或权限规则拒绝了此 MCP 工具调用。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="12732"/>
+        <location filename="../src/application/AppController.cpp" line="12769"/>
         <source>The MCP tool dispatch state changed before it could be started.</source>
         <translation>MCP 工具的派发状态在启动前发生了变化。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="12808"/>
+        <location filename="../src/application/AppController.cpp" line="12845"/>
         <source>The MCP tool call was cancelled.</source>
         <translation>MCP 工具调用已取消。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="12609"/>
-        <location filename="../src/application/AppController.cpp" line="12842"/>
+        <location filename="../src/application/AppController.cpp" line="12646"/>
+        <location filename="../src/application/AppController.cpp" line="12879"/>
         <source>The target terminal session is unavailable.</source>
         <translation>目标终端会话不可用。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6620"/>
+        <location filename="../src/application/AppController.cpp" line="6641"/>
         <source>Shell history could not be read through SFTP. Check the connection and history file.</source>
         <translation>无法通过 SFTP 读取 Shell 历史，请检查连接和历史文件。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6658"/>
+        <location filename="../src/application/AppController.cpp" line="6679"/>
         <source>The Shell history file could not be identified. Only this session&apos;s commands are shown; no command will be injected to discover history.</source>
         <translation>无法确定 Shell 历史文件，仅显示本次会话的命令；不会向终端注入命令来查找历史。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6668"/>
+        <location filename="../src/application/AppController.cpp" line="6689"/>
         <source>Shell history file could not be read.</source>
         <translation>无法读取 Shell 历史文件。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7732"/>
+        <location filename="../src/application/AppController.cpp" line="7769"/>
         <source>Opening local terminal...</source>
         <translation>正在打开本地终端...</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10485"/>
+        <location filename="../src/application/AppController.cpp" line="10522"/>
         <source>The user skills folder could not be scanned.</source>
         <translation>无法扫描用户技能文件夹。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10498"/>
-        <location filename="../src/application/AppController.cpp" line="10516"/>
+        <location filename="../src/application/AppController.cpp" line="10535"/>
+        <location filename="../src/application/AppController.cpp" line="10553"/>
         <source>The user skills folder could not be opened.</source>
         <translation>无法打开用户技能文件夹。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="12176"/>
+        <location filename="../src/application/AppController.cpp" line="12213"/>
         <source>Select no more than four skills for one request.</source>
         <translation>每次请求最多选择四个技能。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="12187"/>
+        <location filename="../src/application/AppController.cpp" line="12224"/>
         <source>One selected skill is no longer available. Reload User skills and try again.</source>
         <translation>一个已选技能不再可用。请重新加载用户技能后重试。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="12909"/>
+        <location filename="../src/application/AppController.cpp" line="12946"/>
         <source>The pending command was cancelled.</source>
         <translation>待处理的命令已取消。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="12945"/>
+        <location filename="../src/application/AppController.cpp" line="12982"/>
         <source>The current terminal changed during the AI turn.</source>
         <translation>当前终端在此次 AI 对话轮次中发生了变化。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13161"/>
+        <location filename="../src/application/AppController.cpp" line="13198"/>
         <source>The terminal-frame wait result could not resume the AI turn.</source>
         <translation>终端帧等待结果无法恢复 AI 对话轮次。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13223"/>
+        <location filename="../src/application/AppController.cpp" line="13260"/>
         <source>The command dispatch did not return an identifier.</source>
         <translation>命令派发未返回标识符。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13258"/>
+        <location filename="../src/application/AppController.cpp" line="13295"/>
         <source>The command was dispatched but no completion observer is available.</source>
         <translation>命令已派发，但没有可用的完成状态观察器。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13338"/>
+        <location filename="../src/application/AppController.cpp" line="13375"/>
         <source>The terminal frame observer is unavailable.</source>
         <translation>终端画面观察器不可用。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13415"/>
+        <location filename="../src/application/AppController.cpp" line="13452"/>
         <source>The command wait was cancelled.</source>
         <translation>命令等待已取消。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13526"/>
+        <location filename="../src/application/AppController.cpp" line="13563"/>
         <source>The command-wait result could not resume the AI turn.</source>
         <translation>命令等待结果无法恢复 AI 对话轮次。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13644"/>
+        <location filename="../src/application/AppController.cpp" line="13681"/>
         <source>The terminal scrollback is unavailable for this session: %1.</source>
         <translation>此会话无法使用终端回滚缓冲区：%1。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13666"/>
+        <location filename="../src/application/AppController.cpp" line="13703"/>
         <source>The terminal action is unsupported.</source>
         <translation>不支持此终端操作。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13675"/>
+        <location filename="../src/application/AppController.cpp" line="13712"/>
         <source>The proposed runbook is invalid.</source>
         <translation>建议的运行手册无效。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13701"/>
-        <location filename="../src/application/AppController.cpp" line="13707"/>
+        <location filename="../src/application/AppController.cpp" line="13738"/>
+        <location filename="../src/application/AppController.cpp" line="13744"/>
         <source>The runbook could not be saved.</source>
         <translation>无法保存运行手册。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13721"/>
+        <location filename="../src/application/AppController.cpp" line="13758"/>
         <source>SFTP transfer is unavailable.</source>
         <translation>SFTP 传输不可用。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13727"/>
-        <location filename="../src/application/AppController.cpp" line="13735"/>
+        <location filename="../src/application/AppController.cpp" line="13764"/>
+        <location filename="../src/application/AppController.cpp" line="13772"/>
         <source>The SFTP transfer paths are invalid.</source>
         <translation>SFTP 传输路径无效。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13743"/>
+        <location filename="../src/application/AppController.cpp" line="13780"/>
         <source>The local upload source must be a regular non-symlink file.</source>
         <translation>本地上传源必须是常规的非符号链接文件。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13750"/>
+        <location filename="../src/application/AppController.cpp" line="13787"/>
         <source>The local download destination must be a non-symlink file path in an existing directory.</source>
         <translation>本地下载目标必须是现有目录中的非符号链接文件路径。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13768"/>
+        <location filename="../src/application/AppController.cpp" line="13805"/>
         <source>The SFTP transfer could not be queued.</source>
         <translation>无法将 SFTP 传输加入队列。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13782"/>
-        <location filename="../src/application/AppController.cpp" line="13802"/>
+        <location filename="../src/application/AppController.cpp" line="13819"/>
+        <location filename="../src/application/AppController.cpp" line="13839"/>
         <source>The user is typing a command line; wait for it to finish.</source>
         <translation>用户正在输入命令；请等待输入完成。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13849"/>
-        <location filename="../src/application/AppController.cpp" line="13863"/>
+        <location filename="../src/application/AppController.cpp" line="13886"/>
+        <location filename="../src/application/AppController.cpp" line="13900"/>
         <source>The tracked command no longer exists.</source>
         <translation>跟踪的命令已不存在。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13853"/>
+        <location filename="../src/application/AppController.cpp" line="13890"/>
         <source>The tracked command scope changed.</source>
         <translation>跟踪命令的作用域已发生变化。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13870"/>
+        <location filename="../src/application/AppController.cpp" line="13907"/>
         <source>The tracked command is no longer running.</source>
         <translation>跟踪的命令已不再运行。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13875"/>
+        <location filename="../src/application/AppController.cpp" line="13912"/>
         <source>The tracked command could not be interrupted.</source>
         <translation>无法中断跟踪的命令。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13994"/>
-        <location filename="../src/application/AppController.cpp" line="14128"/>
+        <location filename="../src/application/AppController.cpp" line="14031"/>
+        <location filename="../src/application/AppController.cpp" line="14165"/>
         <source>Choose system, portable, or session credential storage.</source>
         <translation>请选择系统、便携或仅会话凭据存储。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="14006"/>
+        <location filename="../src/application/AppController.cpp" line="14043"/>
         <source>Delete encrypted AI history or keep the previous credential store before moving credentials to session storage.</source>
         <translation>将凭据迁移到会话存储前，请删除加密 AI 历史，或保留先前的凭据存储。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="14035"/>
+        <location filename="../src/application/AppController.cpp" line="14072"/>
         <source>Credentials were copied, but the storage preference could not be saved. The old store remains active.</source>
         <translation>凭据已复制，但无法保存存储偏好。原存储仍处于活动状态。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="14055"/>
+        <location filename="../src/application/AppController.cpp" line="14092"/>
         <source>Migration succeeded, but credentials remain in the previous store.</source>
         <translation>迁移成功，但凭据仍保留在原存储中。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="14113"/>
+        <location filename="../src/application/AppController.cpp" line="14150"/>
         <source>Credentials were restored because host profiles could not be updated.</source>
         <translation>由于无法更新主机配置，凭据已恢复。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="14157"/>
+        <location filename="../src/application/AppController.cpp" line="14194"/>
         <source>Choose a valid host profile, forwarding type, and bind port.</source>
         <translation>请选择有效的主机配置、转发类型和监听端口。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="14164"/>
+        <location filename="../src/application/AppController.cpp" line="14201"/>
         <source>Enter a destination host and port for this forwarding rule.</source>
         <translation>请输入此转发规则的目标主机和端口。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="14184"/>
+        <location filename="../src/application/AppController.cpp" line="14221"/>
         <source>Complete the forwarding rule with valid names and endpoints.</source>
         <translation>请使用有效的名称和端点补全转发规则。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="14216"/>
-        <location filename="../src/application/AppController.cpp" line="14281"/>
+        <location filename="../src/application/AppController.cpp" line="14253"/>
+        <location filename="../src/application/AppController.cpp" line="14318"/>
         <source>The forwarding rule no longer exists.</source>
         <translation>此转发规则已不存在。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="14223"/>
+        <location filename="../src/application/AppController.cpp" line="14260"/>
         <source>%1 copy</source>
         <translation>%1 副本</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="14298"/>
+        <location filename="../src/application/AppController.cpp" line="14335"/>
         <source>Stop another forwarding rule before starting this one.</source>
         <translation>请先停止另一条转发规则，再启动此规则。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="14306"/>
+        <location filename="../src/application/AppController.cpp" line="14343"/>
         <source>The host profile used by this forwarding rule no longer exists.</source>
         <translation>此转发规则使用的主机配置已不存在。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="14329"/>
+        <location filename="../src/application/AppController.cpp" line="14366"/>
         <source>Unable to allocate the forwarding worker.</source>
         <translation>无法分配转发工作线程。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="14395"/>
+        <location filename="../src/application/AppController.cpp" line="14432"/>
         <source>Unable to start the forwarding worker.</source>
         <translation>无法启动转发工作线程。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="14504"/>
+        <location filename="../src/application/AppController.cpp" line="14541"/>
         <source>Session log failed: %1</source>
         <translation>会话日志失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="14646"/>
+        <location filename="../src/application/AppController.cpp" line="14683"/>
         <source>AI conversation</source>
         <translation>AI 对话</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="15015"/>
+        <location filename="../src/application/AppController.cpp" line="15052"/>
         <source>SSH host key changed; connection blocked</source>
         <translation>SSH 主机密钥已更改；连接已阻止</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="15089"/>
-        <location filename="../src/application/AppController.cpp" line="15496"/>
+        <location filename="../src/application/AppController.cpp" line="15126"/>
+        <location filename="../src/application/AppController.cpp" line="15533"/>
         <source>The dropped files could not be queued for upload.</source>
         <translation>无法将拖放的文件加入上传队列。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="15190"/>
+        <location filename="../src/application/AppController.cpp" line="15227"/>
         <source>This folder could not be expanded.</source>
         <translation>无法展开此文件夹。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="15279"/>
+        <location filename="../src/application/AppController.cpp" line="15316"/>
         <source>The remote directory could not be loaded.</source>
         <translation>无法加载远程目录。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="15283"/>
+        <location filename="../src/application/AppController.cpp" line="15320"/>
         <source>The remote file operation failed.</source>
         <translation>远程文件操作失败。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="15298"/>
+        <location filename="../src/application/AppController.cpp" line="15335"/>
         <source>The SFTP connection failed.</source>
         <translation>SFTP 连接失败。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="15503"/>
+        <location filename="../src/application/AppController.cpp" line="15540"/>
         <source>Preparing the remote home directory for upload...</source>
         <translation>正在准备远程主目录以进行上传...</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="15507"/>
+        <location filename="../src/application/AppController.cpp" line="15544"/>
         <source>Open SFTP before dropping files on this terminal.</source>
         <translation>请先打开 SFTP，再将文件拖放到此终端。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="15975"/>
+        <location filename="../src/application/AppController.cpp" line="16012"/>
         <source>No terminal session</source>
         <translation>没有终端会话</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16135"/>
+        <location filename="../src/application/AppController.cpp" line="16172"/>
         <source>Unable to load the saved port forwarding rules.</source>
         <translation>无法加载已保存的端口转发规则。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16169"/>
+        <location filename="../src/application/AppController.cpp" line="16206"/>
         <source>Unable to save the port forwarding rules.</source>
         <translation>无法保存端口转发规则。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16189"/>
+        <location filename="../src/application/AppController.cpp" line="16226"/>
         <source>The SSH connection for the forwarding rule failed.</source>
         <translation>转发规则的 SSH 连接失败。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16192"/>
+        <location filename="../src/application/AppController.cpp" line="16229"/>
         <source>The local bind address or port is unavailable.</source>
         <translation>本地监听地址或端口不可用。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16195"/>
+        <location filename="../src/application/AppController.cpp" line="16232"/>
         <source>The SSH server rejected the remote listener.</source>
         <translation>SSH 服务器拒绝了远程监听。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16198"/>
+        <location filename="../src/application/AppController.cpp" line="16235"/>
         <source>The forwarding transport was disconnected.</source>
         <translation>转发传输连接已断开。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16201"/>
+        <location filename="../src/application/AppController.cpp" line="16238"/>
         <source>The forwarding worker exhausted an internal resource.</source>
         <translation>转发工作线程耗尽了内部资源。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16431"/>
+        <location filename="../src/application/AppController.cpp" line="16468"/>
         <source>Quick messages could not be loaded.</source>
         <translation>无法加载快捷消息。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16510"/>
+        <location filename="../src/application/AppController.cpp" line="16547"/>
         <source>Saved scripts could not be loaded.</source>
         <translation>无法加载已保存的脚本。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16594"/>
+        <location filename="../src/application/AppController.cpp" line="16631"/>
         <source>A terminal that interrupted startup was quarantined. Retry it from its pane when ready.</source>
         <translation>一个导致启动中断的终端已被隔离。准备好后可在其窗格中重试。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16611"/>
+        <location filename="../src/application/AppController.cpp" line="16648"/>
         <source>Some local settings were recovered from a last-known-good backup. Review them before continuing.</source>
         <translation>部分本地设置已从最后一次有效备份中恢复。请在继续前检查这些设置。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16652"/>
+        <location filename="../src/application/AppController.cpp" line="16689"/>
         <source>Restoring local terminal...</source>
         <translation>正在恢复本地终端...</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5419"/>
-        <location filename="../src/application/AppController.cpp" line="16690"/>
+        <location filename="../src/application/AppController.cpp" line="5440"/>
+        <location filename="../src/application/AppController.cpp" line="16727"/>
         <source>Unable to restore local terminal: %1</source>
         <translation>无法恢复本地终端：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16714"/>
+        <location filename="../src/application/AppController.cpp" line="16751"/>
         <source>SSH workspace restored; reconnect when ready.</source>
         <translation>SSH 工作区已恢复；准备好后可重新连接。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="16718"/>
+        <location filename="../src/application/AppController.cpp" line="16755"/>
         <source>The saved SSH host for this workspace no longer exists.</source>
         <translation>此工作区保存的 SSH 主机已不存在。</translation>
     </message>
@@ -11891,17 +11921,17 @@ Output:
 <context>
     <name>ztermy::NativeWindow</name>
     <message>
-        <location filename="../src/platform/windows/NativeWindow.cpp" line="918"/>
+        <location filename="../src/platform/windows/NativeWindow.cpp" line="978"/>
         <source>Hide ztermy</source>
         <translation>隐藏 ztermy</translation>
     </message>
     <message>
-        <location filename="../src/platform/windows/NativeWindow.cpp" line="918"/>
+        <location filename="../src/platform/windows/NativeWindow.cpp" line="978"/>
         <source>Show ztermy</source>
         <translation>显示 ztermy</translation>
     </message>
     <message>
-        <location filename="../src/platform/windows/NativeWindow.cpp" line="919"/>
+        <location filename="../src/platform/windows/NativeWindow.cpp" line="979"/>
         <source>Exit ztermy</source>
         <translation>退出 ztermy</translation>
     </message>
@@ -12191,7 +12221,7 @@ Output:
 <context>
     <name>ztermy::terminal::LocalTerminalSession</name>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4608"/>
+        <location filename="../src/application/AppController.cpp" line="4614"/>
         <source>Local PowerShell connected</source>
         <translation>本地 PowerShell 已连接</translation>
     </message>
@@ -12216,7 +12246,7 @@ Output:
         <translation>终端写入线程遇到未知错误</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4610"/>
+        <location filename="../src/application/AppController.cpp" line="4616"/>
         <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="236"/>
         <source>Local terminal stopped</source>
         <translation>本地终端已停止</translation>
@@ -12360,6 +12390,34 @@ Output:
         <location filename="../src/ui/terminal/TerminalItemPainting.cpp" line="738"/>
         <source>COPY MODE  ·  Esc cancel  ·  Y copy</source>
         <translation>复制模式  ·  Esc 取消  ·  Y 复制</translation>
+    </message>
+</context>
+<context>
+    <name>ztermy::windowing::WindowsGlobalShortcut</name>
+    <message>
+        <location filename="../src/platform/windows/WindowsGlobalShortcut.cpp" line="31"/>
+        <source>Use a single shortcut, for example Ctrl+Alt+Space.</source>
+        <translation>请使用单个快捷键，例如 Ctrl+Alt+Space。</translation>
+    </message>
+    <message>
+        <location filename="../src/platform/windows/WindowsGlobalShortcut.cpp" line="44"/>
+        <source>Include Ctrl, Alt or Win so ordinary typing is not intercepted.</source>
+        <translation>请包含 Ctrl、Alt 或 Win，避免拦截正常输入。</translation>
+    </message>
+    <message>
+        <location filename="../src/platform/windows/WindowsGlobalShortcut.cpp" line="110"/>
+        <source>This key cannot be registered as a global shortcut.</source>
+        <translation>此按键无法注册为全局快捷键。</translation>
+    </message>
+    <message>
+        <location filename="../src/platform/windows/WindowsGlobalShortcut.cpp" line="122"/>
+        <source>The main window is unavailable.</source>
+        <translation>主窗口不可用。</translation>
+    </message>
+    <message>
+        <location filename="../src/platform/windows/WindowsGlobalShortcut.cpp" line="126"/>
+        <source>The global shortcut is already in use or reserved by Windows. Choose another shortcut.</source>
+        <translation>全局快捷键已被占用或由 Windows 保留，请选择其它快捷键。</translation>
     </message>
 </context>
 <context>

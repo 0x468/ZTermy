@@ -3879,7 +3879,9 @@ QVariantMap AppController::windowInteractionSettings() const
             {QStringLiteral("tabDoubleClick"), settings.tabDoubleClick},
             {QStringLiteral("tabCloseButton"), settings.tabCloseButton},
             {QStringLiteral("autoHideTitleBar"), settings.autoHideTitleBar},
-            {QStringLiteral("tabWidthMode"), settings.tabWidthMode}};
+            {QStringLiteral("tabWidthMode"), settings.tabWidthMode},
+            {QStringLiteral("globalShortcut"), settings.globalShortcut},
+            {QStringLiteral("summonToCursorScreen"), settings.summonToCursorScreen}};
 }
 
 bool AppController::saveWindowInteractionSettings(const QVariantMap &changes)
@@ -3900,9 +3902,19 @@ bool AppController::saveWindowInteractionSettings(const QVariantMap &changes)
         .tabCloseButton = values.value(QStringLiteral("tabCloseButton")).toString(),
         .autoHideTitleBar = values.value(QStringLiteral("autoHideTitleBar")).toBool(),
         .tabWidthMode = values.value(QStringLiteral("tabWidthMode")).toString(),
+        .globalShortcut = values.value(QStringLiteral("globalShortcut")).toString().trimmed(),
+        .summonToCursorScreen = values.value(QStringLiteral("summonToCursorScreen")).toBool(),
     };
     updated.allowTerminalTitleChanges = values.value(QStringLiteral("allowTerminalTitleChanges")).toBool();
     updated.restoreDetachedWindows = values.value(QStringLiteral("restoreDetachedWindows")).toBool();
+    if (!updated.windowInteraction.valid())
+        return false;
+    // Re-recording a stored chord must retry registration after a startup conflict.
+    if (changes.contains(QStringLiteral("globalShortcut")) && updated.windowInteraction == m_settings.windowInteraction
+        && m_globalShortcutHandler
+        && !m_globalShortcutHandler(updated.windowInteraction.globalShortcut,
+                                    updated.windowInteraction.summonToCursorScreen))
+        return false;
     return persistApplicationSettings(updated);
 }
 
@@ -4743,6 +4755,21 @@ QObject *AppController::localFiles() const noexcept
 QString AppController::startLocalTerminal()
 {
     return startLocalTerminalAt({});
+}
+
+QString AppController::openLocalDirectory(const QString &directory)
+{
+    if (!QDir::isAbsolutePath(directory) || directory.contains(QChar::Null))
+        return {};
+    const QString tabId = startLocalTerminalAt(directory);
+    if (!tabId.isEmpty())
+        emit localDirectoryOpened(tabId);
+    return tabId;
+}
+
+void AppController::setGlobalShortcutHandler(std::function<bool(const QString &, bool)> handler)
+{
+    m_globalShortcutHandler = std::move(handler);
 }
 
 QString AppController::startLocalTerminalWithShell(const QString &shellId)
@@ -7394,23 +7421,39 @@ bool AppController::resetActionShortcut(const QString &actionId)
         .toBool();
 }
 
+bool AppController::setGlobalShortcutFromKey(const int key, const int modifiers)
+{
+    return saveWindowInteractionSettings(
+        {{QStringLiteral("globalShortcut"), actions::ActionRegistry::shortcutFromKeyEvent(key, modifiers)}});
+}
+
 bool AppController::resetAllActionShortcuts()
 {
-    if (m_actionRegistry.overrides().isEmpty())
+    const auto previousInteraction = m_settings.windowInteraction;
+    const bool resetGlobal = !previousInteraction.globalShortcut.isEmpty();
+    if (m_actionRegistry.overrides().isEmpty() && !resetGlobal)
     {
         return true;
     }
     const QMap<QString, QString> previousOverrides = m_actionRegistry.overrides();
+    if (resetGlobal && m_globalShortcutHandler
+        && !m_globalShortcutHandler({}, previousInteraction.summonToCursorScreen))
+        return false;
     static_cast<void>(m_actionRegistry.resetAllShortcuts());
     config::ApplicationSettings updated = m_settings;
     updated.shortcutOverrides.clear();
+    updated.windowInteraction.globalShortcut.clear();
     if (!m_settingsStore.save(updated))
     {
         m_actionRegistry.setOverrides(previousOverrides);
+        if (resetGlobal && m_globalShortcutHandler)
+            (void)m_globalShortcutHandler(previousInteraction.globalShortcut, previousInteraction.summonToCursorScreen);
         return false;
     }
     m_settings = std::move(updated);
     emit actionRegistryChanged();
+    if (resetGlobal)
+        emit applicationSettingsChanged();
     return true;
 }
 
@@ -16810,8 +16853,18 @@ void AppController::persistWorkspaceState(const TerminalTab &tab, const bool sho
 
 bool AppController::persistApplicationSettings(const config::ApplicationSettings &settings)
 {
+    const auto previousInteraction = m_settings.windowInteraction;
+    const bool shortcutChanged =
+        previousInteraction.globalShortcut != settings.windowInteraction.globalShortcut
+        || previousInteraction.summonToCursorScreen != settings.windowInteraction.summonToCursorScreen;
+    if (shortcutChanged && m_globalShortcutHandler
+        && !m_globalShortcutHandler(settings.windowInteraction.globalShortcut,
+                                    settings.windowInteraction.summonToCursorScreen))
+        return false;
     if (!m_settingsStore.save(settings))
     {
+        if (shortcutChanged && m_globalShortcutHandler)
+            (void)m_globalShortcutHandler(previousInteraction.globalShortcut, previousInteraction.summonToCursorScreen);
         qCWarning(appControllerLog) << "Unable to persist application settings";
         return false;
     }

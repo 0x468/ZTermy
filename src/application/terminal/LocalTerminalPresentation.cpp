@@ -113,25 +113,21 @@ void LocalTerminalSession::buildSnapshot(const bool force)
 
 void LocalTerminalSession::scheduleSynchronizedOutputFallback(const std::int64_t startedNanoseconds)
 {
-    (void)QMetaObject::invokeMethod(
-        this,
-        [this, startedNanoseconds] {
-            QTimer::singleShot(1000, Qt::PreciseTimer, this, [this, startedNanoseconds] {
-                if (!m_running.load(std::memory_order_acquire)
-                    || m_synchronizedOutputStartedNanoseconds.load(std::memory_order_acquire) != startedNanoseconds
-                    || !m_engineDirty.load(std::memory_order_acquire))
-                {
-                    return;
-                }
-                std::scoped_lock lock(m_commandMutex);
-                if (m_commands.empty() || !std::holds_alternative<SnapshotRequestCommand>(m_commands.back()))
-                {
-                    m_commands.emplace_back(SnapshotRequestCommand{});
-                    m_commandAvailable.notify_one();
-                }
-            });
-        },
-        Qt::QueuedConnection);
+    // Deliver on the context's owner thread; destruction cancels the callback.
+    QTimer::singleShot(1000, Qt::PreciseTimer, this, [this, startedNanoseconds] {
+        if (!m_running.load(std::memory_order_acquire)
+            || m_synchronizedOutputStartedNanoseconds.load(std::memory_order_acquire) != startedNanoseconds
+            || !m_engineDirty.load(std::memory_order_acquire))
+        {
+            return;
+        }
+        std::scoped_lock lock(m_commandMutex);
+        if (m_commands.empty() || !std::holds_alternative<SnapshotRequestCommand>(m_commands.back()))
+        {
+            m_commands.emplace_back(SnapshotRequestCommand{});
+            m_commandAvailable.notify_one();
+        }
+    });
 }
 
 void LocalTerminalSession::scheduleLatestSnapshotDelivery()

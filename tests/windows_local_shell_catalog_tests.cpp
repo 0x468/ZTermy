@@ -96,6 +96,11 @@ void WindowsLocalShellCatalogTests::resolvesNushellAndWslProfiles()
     if (!wsl)
         return;
     QCOMPARE(wsl->arguments, QStringList{QStringLiteral("~")});
+    const auto normal = ztermy::terminal::WindowsLocalShellCatalog::launchSpec(*wsl);
+    QCOMPARE(normal.arguments, QStringList{QStringLiteral("~")});
+    const auto here = ztermy::terminal::WindowsLocalShellCatalog::launchSpec(*wsl, QStringLiteral("D:/space & % !"));
+    QVERIFY(here.arguments.isEmpty());
+    QCOMPARE(here.workingDirectory, QStringLiteral("D:/space & % !"));
 }
 
 void WindowsLocalShellCatalogTests::detectsStableCatalogEntriesWithoutDuplicateIds()

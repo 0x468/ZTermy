@@ -54,7 +54,7 @@ void SvgIconImageProviderTests::rendersAllInterfaceIconsWithThemeColors()
     ztermy::ui::SvgIconImageProvider provider(QStringLiteral(ZTERMY_TEST_ICON_DIRECTORY));
     const auto files =
         QDir(QStringLiteral(ZTERMY_TEST_ICON_DIRECTORY)).entryList({QStringLiteral("*.svg")}, QDir::Files);
-    QCOMPARE(files.size(), 90);
+    QCOMPARE(files.size(), 91);
     for (const auto &file : files)
         for (const auto *color : {"eeeeee", "222222"})
             for (const int size : {16, 20, 30, 40})
