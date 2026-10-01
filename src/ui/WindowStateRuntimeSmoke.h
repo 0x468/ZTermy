@@ -212,35 +212,38 @@ verifyHostProfileIconPicker(NativeWindow &window, const QString &captureName = Q
     qInfo() << "Window restore startup: main bounds/selection, detached native maximum/selection:" << mainRestored
             << detachedRestored;
     auto *detachedQuick = qobject_cast<QQuickWindow *>(detached);
-    auto *tabBar =
-        detachedQuick ? findWindowSmokeItem(detachedQuick->contentItem(), QStringLiteral("detachedTabBar")) : nullptr;
+    auto *tabBar = detachedQuick
+                       ? findWindowSmokeItem(detachedQuick->contentItem(), QStringLiteral("detachedWindowControls"))
+                       : nullptr;
     const bool hiddenByDefault = tabBar && !tabBar->isVisible() && tabBar->height() == 0;
     const auto selectionBeforeToggle = detached ? detached->property("workspaceId") : QVariant{};
-    const bool toggled = detached && QMetaObject::invokeMethod(detached, "toggleTabBar");
+    const bool toggled = detached && QMetaObject::invokeMethod(detached, "toggleWindowControls");
     processWindowEventsFor(100ms);
     const bool shown = toggled && tabBar && tabBar->isVisible() && tabBar->height() == 32;
     if (detached)
-        QMetaObject::invokeMethod(detached, "toggleTabBar");
+        QMetaObject::invokeMethod(detached, "toggleWindowControls");
     processWindowEventsFor(100ms);
     const bool hiddenAgain = tabBar && !tabBar->isVisible() && tabBar->height() == 0
                              && detached->property("workspaceId") == selectionBeforeToggle;
     qInfo() << "Detached tab chrome: hidden initially, shown, hidden without changing selection:" << hiddenByDefault
             << shown << hiddenAgain;
     if (detached)
-        QMetaObject::invokeMethod(detached, "toggleTabBar");
+        QMetaObject::invokeMethod(detached, "toggleWindowControls");
     processWindowEventsFor(100ms);
     auto *mainTab = findWindowSmokeItem(window.contentItem(), QStringLiteral("workspaceTitle-main-check"));
     auto *detachedTab = detachedQuick ? findWindowSmokeItem(detachedQuick->contentItem(),
                                                             QStringLiteral("workspaceTitle-detached-selected"))
                                       : nullptr;
-    const bool profileIcons = mainTab && detachedTab
-                              && mainTab->property("iconName").toString() == QStringLiteral("security")
-                              && detachedTab->property("iconName").toString() == QStringLiteral("security");
-    qInfo() << "Profile icon reaches main and detached Tab delegates:" << profileIcons;
+    const auto detachedTabs = detached ? detached->property("tabs").toList() : QVariantList{};
+    const bool profileIcons =
+        mainTab && !detachedTab && detachedTabs.size() == 1
+        && mainTab->property("iconName").toString() == QStringLiteral("security")
+        && detachedTabs.first().toMap().value(QStringLiteral("iconName")).toString() == QStringLiteral("security");
+    qInfo() << "Profile icon retained without a detached Tab delegate:" << profileIcons;
     const bool capturedIcons =
         captureWindowSmokeItem(mainTab, QStringLiteral("profile-icon-main.png"))
         && captureWindowSmokeItem(
-            findWindowSmokeItem(detachedQuick->contentItem(), QStringLiteral("workspaceTitle-detached-selected")),
+            findWindowSmokeItem(detachedQuick->contentItem(), QStringLiteral("detachedWorkspaceViewport")),
             QStringLiteral("profile-icon-detached.png"));
     const bool statusPresentation = !QCoreApplication::arguments().contains(QStringLiteral("--status-visual-smoke"))
                                     || (detachedQuick && verifyWindowStatusPresentation(window, *detachedQuick));

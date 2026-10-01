@@ -14,6 +14,16 @@ Rectangle {
     required property var fontCatalog
     required property var windowChrome
     readonly property int titleBarHeight: Theme.titleBarHeight
+    readonly property bool autoHideTitleBar: controller.windowInteractionSettings.autoHideTitleBar
+    readonly property int titleTriggerHeight: 8
+    readonly property int reservedTitleHeight: autoHideTitleBar ? titleTriggerHeight : titleBarHeight
+    property bool titleBarRevealed: false
+    property int titleHoverElapsed: 0
+    property int titleLeaveElapsed: 0
+    readonly property bool titleBarShown: !autoHideTitleBar || titleBarRevealed
+    readonly property bool equalTerminalTabWidths: controller.windowInteractionSettings.tabWidthMode === "equal"
+    onTitleBarShownChanged: scheduleTitleBarMetrics()
+    onReservedTitleHeightChanged: scheduleTitleBarMetrics()
     readonly property int captionButtonWidth: 46
     readonly property int titleQuickActionWidth: 40
     readonly property int titleQuickActionsWidth: titleQuickActionWidth * (width < 700 ? 2 : 4)
@@ -241,6 +251,8 @@ Rectangle {
     }
 
     function terminalTabStripDesiredWidth() {
+        if (equalTerminalTabWidths)
+            return root.mainTerminalTabs.length * 184 + Math.max(0, root.mainTerminalTabs.length - 1) * 2;
         let width = Math.max(0, root.mainTerminalTabs.length - 1) * 2;
         for (let index = 0; index < root.mainTerminalTabs.length; ++index)
             width += root.currentPage === "terminal" && root.mainTerminalTabs[index].id === root.mainWorkspaceId ? terminalTabPreferredWidth(root.mainTerminalTabs[index].title) : 38;
@@ -248,7 +260,49 @@ Rectangle {
     }
 
     function reportTitleBarMetrics() {
-        root.windowChrome.setTitleBarMetrics(titleBarHeight, titleNavigation.width + 8, width - (captionButtonWidth * 3) - titleQuickActionsWidth - titleSecurityActionWidth, width - (captionButtonWidth * 2), captionButtonWidth);
+        if (!titleBarShown)
+            root.windowChrome.setTitleBarMetrics(titleTriggerHeight, 0, width, width, 0);
+        else
+            root.windowChrome.setTitleBarMetrics(titleBarHeight, titleNavigation.width + 8, width - (captionButtonWidth * 3) - titleQuickActionsWidth - titleSecurityActionWidth, width - (captionButtonWidth * 2), captionButtonWidth);
+    }
+
+    function titleInteractionHeld() {
+        if (newTerminalMenu.visible || titleTabOverflow.menuOpen || settingsTitleTab.menuOpen || titleControls.menuOpen || draggedTerminalTabId.length > 0 || transferCenter.visible || commandPalette.visible)
+            return true;
+        for (let index = 0; index < titleTerminalTabs.count; ++index) {
+            const tab = titleTerminalTabs.itemAtIndex(index);
+            if (tab && tab.menuOpen)
+                return true;
+        }
+        let focused = root.Window.window ? root.Window.window.activeFocusItem : null;
+        let keyboardFocus = false;
+        while (focused) {
+            keyboardFocus = keyboardFocus || focused.visualFocus === true;
+            if (focused === titleBar)
+                return keyboardFocus;
+            focused = focused.parent;
+        }
+        return false;
+    }
+
+    Timer {
+        interval: 50
+        repeat: true
+        running: root.autoHideTitleBar && root.visible && root.Window.window && root.Window.window.visibility !== Window.Minimized
+        onTriggered: {
+            const inside = root.windowChrome.titleBarPointerInside(root.titleBarShown ? root.titleBarHeight : root.titleTriggerHeight);
+            if (inside || root.titleInteractionHeld()) {
+                root.titleLeaveElapsed = 0;
+                root.titleHoverElapsed += interval;
+                if (root.titleHoverElapsed >= 150)
+                    root.titleBarRevealed = true;
+            } else {
+                root.titleHoverElapsed = 0;
+                root.titleLeaveElapsed += interval;
+                if (root.titleLeaveElapsed >= 300)
+                    root.titleBarRevealed = false;
+            }
+        }
     }
 
     function scheduleTitleBarMetrics() {
@@ -907,12 +961,27 @@ Rectangle {
     }
 
     Rectangle {
+        id: reservedTitleSpace
+        objectName: "mainTitleTriggerStrip"
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        height: root.reservedTitleHeight
+        color: root.chromeColor
+    }
+
+    Rectangle {
         id: titleBar
+        objectName: "mainTitleBar"
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
         height: root.titleBarHeight
-        color: root.chromeColor
+        // A revealed overlay must mask terminal text even at zero material opacity.
+        color: root.autoHideTitleBar ? Theme.floatingBackground : root.chromeColor
+        visible: root.titleBarShown
+        enabled: visible
+        z: 90
 
         Row {
             id: titleNavigation
@@ -998,6 +1067,7 @@ Rectangle {
                 objectName: "titleTerminalTabs"
                 readonly property real availableWidth: Math.max(0, root.titleNavigationWidth - hostsTitleTab.width - sftpTitleTab.width - 36 - settingsTitleTab.width - titleTabOverflow.width)
                 readonly property real desiredTabWidth: root.terminalTabStripDesiredWidth()
+                readonly property real equalTabWidth: Math.max(38, Math.min(184, (availableWidth - Math.max(0, count - 1) * spacing) / Math.max(1, count)))
                 currentIndex: -1
                 width: count === 0 ? 0 : Math.min(availableWidth, desiredTabWidth)
                 height: titleNavigation.height
@@ -1101,8 +1171,9 @@ Rectangle {
                     canMoveLeft: modelData.canMoveLeft
                     canMoveRight: modelData.canMoveRight
                     iconName: modelData.iconName || "terminal"
-                    compact: !selected
-                    width: selected ? root.terminalTabPreferredWidth(modelData.title) : 38
+                    compact: width < 76
+                    width: root.equalTerminalTabWidths ? titleTerminalTabs.equalTabWidth : (selected ? root.terminalTabPreferredWidth(modelData.title) : 38)
+                    selectedBackground: root.currentPage === "terminal" ? "transparent" : Theme.tabSelectedBackground
                     height: titleTerminalTabs.height
                     Behavior on width {
                         MotionRelocate {}
@@ -1226,7 +1297,7 @@ Rectangle {
         id: recoveryBanner
 
         objectName: "startupRecoveryBanner"
-        anchors.top: titleBar.bottom
+        anchors.top: reservedTitleSpace.bottom
         anchors.left: parent.left
         anchors.right: parent.right
         height: root.controller.startupRecoveryNotice.length > 0 ? 42 : 0

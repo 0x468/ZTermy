@@ -6,6 +6,16 @@ Release assets are published through GitHub Releases.
 
 ## Unreleased
 
+- Add optional immersive auto-hide chrome, revealed only from a separate top
+  strip without resizing the terminal. Keep it open while the pointer remains
+  over the bar, including repeated Tab switching.
+- Add equal-width adaptive terminal titles alongside the active-title/icon
+  policy, and replace bright terminal Tab cards with theme-aware ink and a
+  restrained active indicator.
+- Simplify detached windows to one workspace with multiple Panes, overlay
+  window controls and explicit whole-layout return. Restore legacy multi-Tab
+  windows as separate windows without losing layouts or session identities.
+
 - Unify interface icons using the reviewed Tabler outline set while preserving
   branding, stable icon IDs and native window behavior; retain documented
   memory/disk silhouettes where no matching upstream shape exists.

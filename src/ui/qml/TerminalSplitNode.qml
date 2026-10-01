@@ -40,7 +40,7 @@ Item {
     signal terminalSearchRequested
     signal zoomPaneRequested(string paneId)
     signal detachPaneRequested(string paneId)
-    signal toggleTabBarRequested
+    signal toggleWindowControlsRequested
 
     function forceActiveFocus() {
         // qmllint disable missing-property
@@ -883,13 +883,13 @@ Item {
                 revealed: paneActionRevealHover.hovered || interactionActive
                 anchors.top: parent.top
                 anchors.right: parent.right
-                anchors.topMargin: 8
+                anchors.topMargin: paneActions.windowControlsVisible ? 40 : 8
                 anchors.rightMargin: 8
                 visible: !!root.controller
                 z: 13
                 onZoomRequested: root.zoomPaneRequested(leaf.node.id)
                 onDetachRequested: root.detachPaneRequested(leaf.node.id)
-                onToggleTabBarRequested: root.toggleTabBarRequested()
+                onToggleWindowControlsRequested: root.toggleWindowControlsRequested()
             }
 
             StatePanel {
@@ -1141,8 +1141,8 @@ Item {
                     function onDetachPaneRequested(paneId) {
                         root.detachPaneRequested(paneId);
                     }
-                    function onToggleTabBarRequested() {
-                        root.toggleTabBarRequested();
+                    function onToggleWindowControlsRequested() {
+                        root.toggleWindowControlsRequested();
                     }
                 }
             }
@@ -1296,8 +1296,8 @@ Item {
                     function onDetachPaneRequested(paneId) {
                         root.detachPaneRequested(paneId);
                     }
-                    function onToggleTabBarRequested() {
-                        root.toggleTabBarRequested();
+                    function onToggleWindowControlsRequested() {
+                        root.toggleWindowControlsRequested();
                     }
                 }
             }

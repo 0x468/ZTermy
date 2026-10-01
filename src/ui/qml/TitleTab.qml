@@ -1,7 +1,7 @@
 import QtQuick
 
 // Title-bar tab (UI V2 chapter 6). One treatment for the Workspace, SFTP,
-// Settings and terminal tabs: a hover pill inset from the bar, an opaque
+// Settings and terminal tabs: a hover pill inset from the bar, a material-aware
 // selected card whose rounded top corners meet the page below, and the shared
 // focus ring. Consumers set the width; the content row centres itself unless
 // a trailing inset reserves room for a close affordance, in which case it is
@@ -15,6 +15,7 @@ Item {
     property bool customIcon: false
     property bool selected: false
     property bool compact: false
+    property color selectedBackground: Theme.tabSelectedBackground
     property string actionObjectName: ""
     property string accessibleName: title
     property string toolTip: ""
@@ -62,19 +63,30 @@ Item {
         }
     }
 
-    // Selected card: opaque and drawn over the bar's bottom hairline so it
+    // Selected card: drawn over the bar's bottom hairline so it
     // joins the page below.
     Rectangle {
         anchors.fill: parent
         anchors.topMargin: 4
         topLeftRadius: Theme.radiusControl
         topRightRadius: Theme.radiusControl
-        color: Theme.tabSelectedBackground
+        color: control.selectedBackground
         opacity: control.selected ? 1 : 0
 
         Behavior on opacity {
             MotionFeedback {}
         }
+    }
+
+    Rectangle {
+        anchors.bottom: parent.bottom
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: Math.min(24, parent.width - 12)
+        height: 2
+        radius: 1
+        color: Theme.accent
+        visible: control.selected
+        opacity: 0.75
     }
 
     Rectangle {

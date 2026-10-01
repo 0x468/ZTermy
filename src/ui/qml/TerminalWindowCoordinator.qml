@@ -206,11 +206,7 @@ QtObject {
     }
 
     function clearTabPreviews(keepWindowId = "") {
-        for (const id in windows) {
-            if (id === keepWindowId)
-                windows[id].tabBarVisible = true;
-            windows[id].tabBarPreview = false;
-        }
+    // Detached windows have one workspace; there is no Tab strip to preview.
     }
 
     function activateWorkspace(workspaceId) {
@@ -242,11 +238,6 @@ QtObject {
         dropTarget = ({});
         for (const id in windows) {
             const window = windows[id];
-            const p = window.contentItem.mapFromGlobal(globalPosition.x, globalPosition.y);
-            window.tabBarPreview = !window.tabBarVisible && p.x >= 0 && p.x < window.width && p.y >= 0 && p.y < (window.tabBarPreview ? 32 : 20) && WindowControl.acceptsDropAt(window, p, null);
-        }
-        for (const id in windows) {
-            const window = windows[id];
             if (!window.visible)
                 continue;
             const p = window.contentItem.mapFromGlobal(globalPosition.x, globalPosition.y);
@@ -254,13 +245,9 @@ QtObject {
                 continue;
             if (!WindowControl.acceptsDropAt(window, p, null))
                 continue;
-            if ((window.tabBarVisible || window.tabBarPreview) && p.y < 32) {
-                dropTarget = window.tabDropTarget(globalPosition);
-            } else {
-                const view = viewportAt(window.contentItem, globalPosition);
-                if (view)
-                    dropTarget = paneDropTarget(view, globalPosition, window.contentItem, id);
-            }
+            const view = viewportAt(window.contentItem, globalPosition);
+            if (view)
+                dropTarget = paneDropTarget(view, globalPosition, window.contentItem, id);
             return;
         }
         updateMainDropTarget(globalPosition);
@@ -302,7 +289,7 @@ QtObject {
         if (!WindowControl.acceptsDropAt(hostRoot.windowChrome, point, null))
             return;
         const tabs = hostRoot.mainTerminalTabs;
-        if (point.y < hostRoot.titleBarHeight) {
+        if (point.y < hostRoot.titleBarHeight && hostRoot.titleBarShown) {
             for (let index = 0; index < tabs.length; ++index) {
                 const item = titleTabs.itemAtIndex(index);
                 if (!item)

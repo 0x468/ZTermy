@@ -11,14 +11,14 @@ RowLayout {
     property string paneTitle: ""
     property int paneCount: 1
     readonly property var hostWindow: root.Window.window
-    readonly property bool detachedWindow: hostWindow && hostWindow.tabBarVisible !== undefined
-    readonly property bool tabBarVisible: detachedWindow && hostWindow.tabBarVisible
+    readonly property bool detachedWindow: hostWindow && hostWindow.windowControlsVisible !== undefined
+    readonly property bool windowControlsVisible: detachedWindow && hostWindow.windowControlsVisible
     property bool zoomed: false
-    property bool revealed: tabBarVisible
+    property bool revealed: windowControlsVisible
     readonly property bool interactionActive: hover.hovered || activeFocus || newPaneMenu.visible
     signal zoomRequested
     signal detachRequested
-    signal toggleTabBarRequested
+    signal toggleWindowControlsRequested
     spacing: 2
     opacity: revealed ? 1 : 0
     enabled: revealed
@@ -42,15 +42,18 @@ RowLayout {
     // bound inside the delegate so toggling headers, zoom or pane count
     // does not rebuild the array and re-create every button.
     Repeater {
-        model: ["headers", "zoom", "detach", "copy", "new", "close"]
+        model: ["headers", "drag", "zoom", "detach", "copy", "new", "close"]
         delegate: AppIconButton {
             id: button
             required property string modelData
             property string dragPaneId: root.paneId
             property string dragPaneTitle: root.paneTitle
+            property bool dragWindow: modelData === "headers" && root.detachedWindow
             objectName: "terminalPaneAction-" + modelData + "-" + root.paneId
             visible: {
                 switch (modelData) {
+                case "drag":
+                    return root.detachedWindow && root.paneCount > 1;
                 case "zoom":
                 case "close":
                     return root.paneCount > 1;
@@ -63,7 +66,9 @@ RowLayout {
             label: {
                 switch (modelData) {
                 case "headers":
-                    return root.detachedWindow ? (root.tabBarVisible ? qsTr("Hide headers") : qsTr("Show headers")) : qsTr("Drag pane");
+                    return root.detachedWindow ? (root.windowControlsVisible ? qsTr("Hide window controls — drag to move window") : qsTr("Show window controls — drag to move window")) : qsTr("Drag pane");
+                case "drag":
+                    return qsTr("Drag pane");
                 case "zoom":
                     return root.zoomed ? qsTr("Restore pane layout") : qsTr("Zoom this pane within its tab");
                 case "detach":
@@ -76,8 +81,8 @@ RowLayout {
                     return qsTr("Close this pane");
                 }
             }
-            iconName: modelData === "headers" ? "list" : modelData === "zoom" ? "locate" : modelData === "detach" ? "external-link" : modelData === "copy" ? "copy" : modelData === "new" ? "plus" : "close"
-            selected: (modelData === "headers" && root.tabBarVisible) || (modelData === "zoom" && root.zoomed)
+            iconName: modelData === "headers" || modelData === "drag" ? "list" : modelData === "zoom" ? "locate" : modelData === "detach" ? "external-link" : modelData === "copy" ? "copy" : modelData === "new" ? "plus" : "close"
+            selected: (modelData === "headers" && root.windowControlsVisible) || (modelData === "zoom" && root.zoomed)
             onWorkspace: true
             iconColor: selected ? Theme.accent : Theme.workspaceText
             toolTipEnabled: !newPaneMenu.visible
@@ -85,7 +90,7 @@ RowLayout {
                 switch (modelData) {
                 case "headers":
                     if (root.detachedWindow)
-                        root.toggleTabBarRequested();
+                        root.toggleWindowControlsRequested();
                     break;
                 case "zoom":
                     root.zoomRequested();

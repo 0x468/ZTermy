@@ -55,10 +55,11 @@ From lowest to highest:
 `controlBackground`, `controlHover`, and `controlPressed` are interaction
 surfaces. They must not be substituted with page-specific blues or greens.
 
-`tabSelectedBackground` is the opaque card behind the selected title-bar tab
-(ADR 0123). It reads lighter than `chromeBackground` in both skins (the light
-chrome tint equals `controlBackground`, so the control colour cannot mark a
-selected tab) and joins the page below the bar.
+`tabSelectedBackground` remains the selected card for content pages (ADR 0123).
+Terminal Tabs instead inherit the workspace surface and use themed ink plus a
+small accent indicator, without a bright opaque card or a second alpha layer.
+Auto-hidden title bars use an opaque `floatingBackground` when revealed, so
+terminal glyphs cannot show through the overlay (ADR 0135).
 
 Every opaque surface is an `AppSurface { elevation: n }` (ADR 0120). The
 component owns the fill, hairline (`border` below elevation 2, `borderStrong`
@@ -312,10 +313,12 @@ duration to 0, so transitions become immediate without per-site guards.
   target row into view with a fixed 96 px lead and never rebuilds the page.
   Defaults shown by reset affordances come from one controller map, not from
   literals repeated in QML.
-- Title-bar tabs keep fixed widths per page and breakpoint; the selected card
-  and hover pill never change a tab's width. A pane header sits inside the
-  pane frame so the active accent border wraps it, and the viewport reserves
-  the header height rather than the header pushing the viewport.
+- Terminal Tabs default to equal widths, shrinking together from titles to
+  icons; active-title/other-icons remains an option. Hover/selection never
+  changes width. Auto-hide reserves a separate 8 px top strip and reveals an
+  overlay, never resizing the terminal. Pointer-held Tab switching keeps it
+  open. Detached windows contain one workspace with multiple Panes, no Tab
+  strip, and optional overlay window controls (ADR 0135).
 
 ## Performance boundary
 

@@ -37,6 +37,7 @@ MouseArea {
     property string paneTitle: ""
     property bool dragging: false
     property bool windowMove: false
+    property bool windowMoveSource: false
     NativeDragPreview {
         visible: control.dragging
         globalPosition: control.mapToGlobal(control.pointerPoint.x, control.pointerPoint.y)
@@ -46,11 +47,12 @@ MouseArea {
     function dragSourceAt(global) {
         if (control.hostRoot.currentPage !== "terminal")
             return null;
-        const handle = control.coordinator.viewportAt(control.terminalArea, global, "terminalPaneAction-headers-");
+        const handle = control.coordinator.viewportAt(control.terminalArea, global, "terminalPaneAction-headers-") || control.coordinator.viewportAt(control.terminalArea, global, "terminalPaneAction-drag-");
         if (handle)
             return {
                 "paneId": handle.dragPaneId,
-                "paneTitle": handle.dragPaneTitle
+                "paneTitle": handle.dragPaneTitle,
+                "dragWindow": handle.dragWindow
             };
         return null;
     }
@@ -68,6 +70,7 @@ MouseArea {
         pointerPoint = pressPoint;
         dragging = false;
         windowMove = false;
+        windowMoveSource = source.dragWindow;
         control.coordinator.draggedPaneId = paneId;
     }
     onPositionChanged: mouse => {
@@ -75,7 +78,7 @@ MouseArea {
             return;
         pointerPoint = Qt.point(mouse.x, mouse.y);
         if (!dragging && Math.hypot(mouse.x - pressPoint.x, mouse.y - pressPoint.y) >= 10) {
-            if (control.hostRoot.tabBarVisible !== undefined && !control.hostRoot.tabBarVisible) {
+            if (windowMoveSource) {
                 windowMove = true;
                 control.coordinator.draggedPaneId = "";
                 control.hostRoot.startSystemMove();
@@ -97,8 +100,8 @@ MouseArea {
             control.coordinator.finishPaneDrop(id, mouse.x < 0 || mouse.y < 0 || mouse.x > width || mouse.y > height);
         } else {
             control.coordinator.draggedPaneId = "";
-            if (control.hostRoot.tabBarVisible !== undefined) {
-                control.hostRoot.toggleTabBar();
+            if (windowMoveSource) {
+                control.hostRoot.toggleWindowControls();
             } else if (control.hostRoot.controller.activateTerminalPane(id)) {
                 control.hostRoot.focusTerminalAfterLayout();
             }

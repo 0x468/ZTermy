@@ -77,7 +77,8 @@ constexpr qint64 unifiedMaterialSchemaVersion = 37;
 constexpr qint64 sessionLifecycleSchemaVersion = 38;
 constexpr qint64 terminalTitleSchemaVersion = 39;
 constexpr qint64 detachedWindowsSchemaVersion = 40;
-constexpr qint64 currentSchemaVersion = detachedWindowsSchemaVersion;
+constexpr qint64 immersiveTitleBarSchemaVersion = 41;
+constexpr qint64 currentSchemaVersion = immersiveTitleBarSchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -534,8 +535,13 @@ using ztermy::config::ThemePreference;
     };
     if (version >= windowInteractionSchemaVersion)
     {
-        const auto window = ztermy::config::WindowInteractionSettings::fromJson(
-            root.value(QStringLiteral("windowInteraction")).toObject());
+        auto windowDocument = root.value(QStringLiteral("windowInteraction")).toObject();
+        if (version < immersiveTitleBarSchemaVersion)
+        {
+            windowDocument.insert(QStringLiteral("autoHideTitleBar"), false);
+            windowDocument.insert(QStringLiteral("tabWidthMode"), QStringLiteral("equal"));
+        }
+        const auto window = ztermy::config::WindowInteractionSettings::fromJson(windowDocument);
         if (!window)
             return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
         settings.windowInteraction = *window;

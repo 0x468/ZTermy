@@ -11,6 +11,7 @@ private slots:
     void classifiesResizeEdges();
     void classifiesCaptionControlsAndClient();
     void disablesResizeAreasWhenMaximized();
+    void immersiveStripPreservesDragResizeAndTerminalInput();
     void constrainsMaximizedClientToWorkArea();
     void scalesMinimumTrackSizeForDpi();
     void tracksClientAreaAnimationPreference();
@@ -71,6 +72,28 @@ void WindowHitTestTests::disablesResizeAreasWhenMaximized()
     QCOMPARE(classifyHitTest({1, 200}, size, metrics, true), Client);
     QCOMPARE(classifyHitTest({400, 1}, size, metrics, true), Caption);
     QCOMPARE(classifyHitTest({930, 1}, size, metrics, true), MaximizeButton);
+}
+
+void WindowHitTestTests::immersiveStripPreservesDragResizeAndTerminalInput()
+{
+    using enum ztermy::windowing::HitArea;
+    for (const int scale : {1, 2})
+    {
+        const ztermy::windowing::Size size{.width = 1000 * scale, .height = 700 * scale};
+        const ztermy::windowing::HitTestMetrics metrics{
+            .resizeBorder = 8 * scale,
+            .caption = {.x = 0, .y = 0, .width = size.width, .height = 8 * scale},
+            .maximizeButton = {},
+            .topResizeBorder = 2 * scale,
+        };
+        QCOMPARE(classifyHitTest({500 * scale, scale}, size, metrics, false), Top);
+        QCOMPARE(classifyHitTest({500 * scale, 5 * scale}, size, metrics, false), Caption);
+        QCOMPARE(classifyHitTest({500 * scale, 9 * scale}, size, metrics, false), Client);
+        // The old caption's maximize location must not remain an invisible button.
+        QCOMPARE(classifyHitTest({930 * scale, 24 * scale}, size, metrics, false), Client);
+        QCOMPARE(classifyHitTest({500 * scale, scale}, size, metrics, true), Caption);
+        QCOMPARE(classifyHitTest({scale, 300 * scale}, size, metrics, false), Left);
+    }
 }
 
 void WindowHitTestTests::constrainsMaximizedClientToWorkArea()

@@ -5,6 +5,10 @@
 
 ## Decision
 
+The multi-Tab detached-window interaction below is historical. ADR 0135
+supersedes it with single-workspace detached windows and overlay window controls.
+The restoration, visibility correction and native state guarantees remain.
+
 ### Window movement and layout editing (2026-09-27)
 
 Detached windows start with their Tab strip hidden. With the strip hidden, the

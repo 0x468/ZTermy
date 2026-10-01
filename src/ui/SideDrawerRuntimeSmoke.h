@@ -107,7 +107,7 @@ inline bool verifyHostEditorDismissal(NativeWindow &window, AppController &contr
     const auto profiles = controller.property("hostProfiles").toList();
     if (profiles.isEmpty())
         return false;
-    const QVariant profile = profiles.back();
+    const QVariant &profile = profiles.back();
     QMetaObject::invokeMethod(pane, "editProfile", Q_ARG(QVariant, profile));
     pause();
     passed = click("hostEditorClose") && !expanded() && !dialog->property("visible").toBool() && passed;

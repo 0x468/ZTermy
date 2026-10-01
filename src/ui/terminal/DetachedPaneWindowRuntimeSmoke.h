@@ -38,7 +38,7 @@ inline bool verifyDetachedCaptionStateRoundTrip(QQuickWindow &detached, const QS
         return false;
     const LPARAM oldPosition = MAKELPARAM(oldButton.x, oldButton.y);
     detached.setProperty("nativeMaximizeButtonHovered", true);
-    QMetaObject::invokeMethod(&detached, "toggleTabBar");
+    QMetaObject::invokeMethod(&detached, "toggleWindowControls");
     processWindowEventsFor(100ms);
     const bool hiddenClient = SendMessageW(handle, WM_NCHITTEST, 0, oldPosition) == HTCLIENT;
     const bool wasMaximized = IsZoomed(handle) != FALSE;
@@ -54,7 +54,7 @@ inline bool verifyDetachedCaptionStateRoundTrip(QQuickWindow &detached, const QS
     const bool inert = !detached.property("nativeMaximizeButtonHovered").toBool()
                        && !detached.property("nativeMaximizeButtonPressed").toBool()
                        && (IsZoomed(handle) != FALSE) == wasMaximized;
-    QMetaObject::invokeMethod(&detached, "toggleTabBar");
+    QMetaObject::invokeMethod(&detached, "toggleWindowControls");
     processWindowEventsFor(100ms);
     qInfo() << "Hidden caption: old button is client, stale hover/click is inert:" << hiddenClient << inert;
     if (!hiddenClient || !inert)

@@ -379,6 +379,21 @@ void NativeWindow::setTitleBarMetrics(const qreal titleHeight, const qreal capti
                        << "maximizeWidth=" << m_maximizeWidth << "dpr=" << devicePixelRatio();
 }
 
+bool NativeWindow::titleBarPointerInside(const qreal height) const
+{
+    if (!isVisible() || visibility() == QWindow::Minimized)
+        return false;
+    const auto position = QCursor::pos();
+    const auto local = mapFromGlobal(position);
+    POINT nativePosition{};
+    if (!GetCursorPos(&nativePosition))
+        return false;
+    const HWND hovered = WindowFromPoint(nativePosition);
+    const auto handle = reinterpret_cast<HWND>(winId()); // NOLINT(performance-no-int-to-ptr)
+    return hovered != nullptr && GetAncestor(hovered, GA_ROOT) == handle && local.x() >= 0 && local.x() < width()
+           && local.y() >= 0 && local.y() < height;
+}
+
 bool NativeWindow::event(QEvent *event)
 {
     if (event->type() == QEvent::Close && m_closeToTrayEnabled && !m_exitingFromTray)
@@ -656,6 +671,8 @@ LRESULT NativeWindow::nativeHitTest(const HWND windowHandle, const LPARAM lParam
                 .width = qRound(m_maximizeWidth * scale),
                 .height = qRound(m_titleHeight * scale),
             },
+        // Leave a usable caption below the resize edge in immersive mode.
+        .topResizeBorder = m_maximizeWidth == 0 && m_captionLeft == 0 ? qRound(2 * scale) : -1,
     };
 
     const auto area =

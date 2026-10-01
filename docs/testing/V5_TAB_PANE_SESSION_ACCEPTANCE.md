@@ -93,3 +93,43 @@ SHA-256：`6EDD3D59D44F53ABCB83B50D49812B5966BDF9ECA0CC5B413FA40AA420CCC491`。
 ```powershell
 .\build\validation\v55-20260913\ztermy.exe --data-dir D:\Repo\Qt\ztermy\build\test-data\v55-manual
 ```
+
+## 2026-10-01 沉浸式顶栏与独立窗口简化
+
+此节更新当前产品规则，前面的记录保留为历史证据。ADR 0135 替代弹窗多 Tab
+管理：一个独立窗口只承载一个工作区，可含多个 Pane；没有 Tab 栏。旧多 Tab
+窗口记录拆分恢复，原选中工作区保留原窗口位置。
+
+主窗口增加常驻/自动隐藏和等宽标题/活动标题优先两个设置。自动隐藏预留
+8 个逻辑像素（顶部 2 px 保留缩放命中），150 ms 唤出、300 ms 离开收起；
+浮层不改变终端网格。鼠标留在展开顶栏时，切换 Tab 不收起。活动终端 Tab
+以主题文字和短强调线标记，不叠加亮色不透明胶囊。
+
+本轮针对性证据（Debug，单屏 100%）：
+
+- `application-settings`、`window-hit-test`、`app-controller`、`window-state`
+  回归通过，包括 schema 40→41 保留无关设置、错误值拒绝和旧弹窗无损拆分。
+- `title-bar-immersive-runtime` 通过，42.57 s。真实指针进入窄带后视口尺寸、
+  场景位置均不变，`sizeRequested` 为 0；切换三个 Tab 保持显示，离开收起，
+  终端区域悬停不唤出。1120/600 px 窗宽的等宽 Tab 实测为 184/63.33 px。
+- 四套主题及亮/暗×透明/亚克力/纯色×常驻/浮层的 0% 材质场景已保存截图，
+  并检查真实桌面合成。浮层底色完全不透明，常驻透明材质不新增不透明层。
+  完全透明的常驻模式仍受桌面背景对比度影响，不承诺任意桌面上的文字可读性。
+- Windows MCP 已实际悬停窄带、连续点击三个 Tab 并截图，浮层保持显示。
+  隔离复验窗口自动退出 0，没有留下 ztermy 测试进程。
+- `--terminal-render-smoke --workspace-transfers-only --detached-tabs-only`
+  退出 0：无 Tab 栏、窗口按钮不挤压视口、新建增加 Pane、外来布局合入目标
+  Pane、遮挡拒绝和显式整布局回附通过；原生最大化/最小化/恢复命中通过。
+- `verify_window_restore.ps1` 连续两次真实重启通过：三个工作区保留、旧弹窗
+  两个 Tab 拆成两个窗口、原选中项保留原位置/正常尺寸/最大化状态，无子进程
+  残留。证据目录：`build/msvc-dynamic-debug/test-data/window-restore-f7b68a54c0744c80a0dae2ba82bee229/`。
+- C++ 格式、96 个 QML 的格式/lint、2365 条翻译和针对性 clang-tidy 通过。
+  静态检查覆盖修改的设置/控制器/原生窗口源文件、包含运行夹具的 main.cpp
+  及修改的三个测试源文件；没有为本轮执行无关全量回归。
+
+截图和日志：`build/msvc-dynamic-debug/test-data/title-bar-immersive-runtime/`、
+`build/test-data/title-bar-desktop-20261001a/`、
+`build/test-data/detached-single-20261001g/`。
+早期 a–f 弹窗回归受隐藏启动和桌面遮挡影响，失败记录保留，不计为通过。
+测试只对自身窗口暂时置顶，并用真实置顶遮挡窗口验证拒绝路径，不修改产品
+遮挡策略。多屏混合 DPI 与物理跨屏拖动本轮没有条件重验；不据此宣称已验收。

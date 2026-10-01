@@ -96,7 +96,7 @@ int resizeBorderForWindow(const HWND windowHandle) noexcept
 
 bool handleDetachedWindowFrameMessage(QQuickWindow &window, const MSG &message, qintptr *result)
 {
-    const bool captionVisible = window.property("tabBarVisible").toBool() || window.property("tabBarPreview").toBool();
+    const bool captionVisible = window.property("windowControlsVisible").toBool();
     if (!captionVisible)
     {
         window.setProperty("nativeMaximizeButtonHovered", false);

@@ -13,6 +13,8 @@ struct WindowInteractionSettings final
     int navigationExpandedWidth = 208;
     QString tabDoubleClick = QStringLiteral("rename");
     QString tabCloseButton = QStringLiteral("hover");
+    bool autoHideTitleBar = false;
+    QString tabWidthMode = QStringLiteral("equal");
     bool operator==(const WindowInteractionSettings &) const = default;
 
     [[nodiscard]] bool valid() const
@@ -22,7 +24,8 @@ struct WindowInteractionSettings final
                && QStringList{QStringLiteral("rename"), QStringLiteral("close"), QStringLiteral("none")}.contains(
                    tabDoubleClick)
                && QStringList{QStringLiteral("always"), QStringLiteral("hover"), QStringLiteral("hidden")}.contains(
-                   tabCloseButton);
+                   tabCloseButton)
+               && QStringList{QStringLiteral("equal"), QStringLiteral("active")}.contains(tabWidthMode);
     }
     [[nodiscard]] QJsonObject toJson() const
     {
@@ -30,7 +33,9 @@ struct WindowInteractionSettings final
                 {QStringLiteral("navigationWidth"), navigationWidth},
                 {QStringLiteral("navigationExpandedWidth"), navigationExpandedWidth},
                 {QStringLiteral("tabDoubleClick"), tabDoubleClick},
-                {QStringLiteral("tabCloseButton"), tabCloseButton}};
+                {QStringLiteral("tabCloseButton"), tabCloseButton},
+                {QStringLiteral("autoHideTitleBar"), autoHideTitleBar},
+                {QStringLiteral("tabWidthMode"), tabWidthMode}};
     }
     [[nodiscard]] static std::optional<WindowInteractionSettings> fromJson(const QJsonObject &json)
     {
@@ -38,7 +43,9 @@ struct WindowInteractionSettings final
             || !json.value(QStringLiteral("navigationWidth")).isDouble()
             || !json.value(QStringLiteral("navigationExpandedWidth")).isDouble()
             || !json.value(QStringLiteral("tabDoubleClick")).isString()
-            || !json.value(QStringLiteral("tabCloseButton")).isString())
+            || !json.value(QStringLiteral("tabCloseButton")).isString()
+            || !json.value(QStringLiteral("autoHideTitleBar")).isBool()
+            || !json.value(QStringLiteral("tabWidthMode")).isString())
             return std::nullopt;
         WindowInteractionSettings result{
             .singleInstance = json.value(QStringLiteral("singleInstance")).toBool(),
@@ -46,6 +53,8 @@ struct WindowInteractionSettings final
             .navigationExpandedWidth = json.value(QStringLiteral("navigationExpandedWidth")).toInt(-1),
             .tabDoubleClick = json.value(QStringLiteral("tabDoubleClick")).toString(),
             .tabCloseButton = json.value(QStringLiteral("tabCloseButton")).toString(),
+            .autoHideTitleBar = json.value(QStringLiteral("autoHideTitleBar")).toBool(),
+            .tabWidthMode = json.value(QStringLiteral("tabWidthMode")).toString(),
         };
         return result.valid() ? std::optional(result) : std::nullopt;
     }

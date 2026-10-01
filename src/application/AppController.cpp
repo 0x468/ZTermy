@@ -3877,7 +3877,9 @@ QVariantMap AppController::windowInteractionSettings() const
             {QStringLiteral("navigationWidth"), settings.navigationWidth},
             {QStringLiteral("navigationExpandedWidth"), settings.navigationExpandedWidth},
             {QStringLiteral("tabDoubleClick"), settings.tabDoubleClick},
-            {QStringLiteral("tabCloseButton"), settings.tabCloseButton}};
+            {QStringLiteral("tabCloseButton"), settings.tabCloseButton},
+            {QStringLiteral("autoHideTitleBar"), settings.autoHideTitleBar},
+            {QStringLiteral("tabWidthMode"), settings.tabWidthMode}};
 }
 
 bool AppController::saveWindowInteractionSettings(const QVariantMap &changes)
@@ -3896,6 +3898,8 @@ bool AppController::saveWindowInteractionSettings(const QVariantMap &changes)
         .navigationExpandedWidth = values.value(QStringLiteral("navigationExpandedWidth")).toInt(),
         .tabDoubleClick = values.value(QStringLiteral("tabDoubleClick")).toString(),
         .tabCloseButton = values.value(QStringLiteral("tabCloseButton")).toString(),
+        .autoHideTitleBar = values.value(QStringLiteral("autoHideTitleBar")).toBool(),
+        .tabWidthMode = values.value(QStringLiteral("tabWidthMode")).toString(),
     };
     updated.allowTerminalTitleChanges = values.value(QStringLiteral("allowTerminalTitleChanges")).toBool();
     updated.restoreDetachedWindows = values.value(QStringLiteral("restoreDetachedWindows")).toBool();
@@ -16544,6 +16548,39 @@ void AppController::loadWorkspaceState()
         std::erase_if(m_workspaceState.terminalWindows, [](const auto &window) {
             return window.id != "main";
         });
+    }
+    // A detached window now owns exactly one workspace. Preserve every old
+    // workspace and its layout while splitting legacy multi-Tab windows.
+    std::vector<std::string> detachedOwners;
+    for (auto &layout : m_workspaceState.terminalWorkspaces)
+    {
+        if (layout.windowId.empty() || layout.windowId == "main")
+            continue;
+        const auto oldOwner = layout.windowId;
+        auto placement =
+            std::ranges::find(m_workspaceState.terminalWindows, oldOwner, &workbench::TerminalWindowState::id);
+        const bool anotherSelected =
+            placement != m_workspaceState.terminalWindows.end() && placement->selectedWorkspaceId != layout.id
+            && std::ranges::any_of(m_workspaceState.terminalWorkspaces, [&](const auto &other) {
+                   return other.windowId == oldOwner && other.id == placement->selectedWorkspaceId;
+               });
+        if (!anotherSelected && std::ranges::find(detachedOwners, oldOwner) == detachedOwners.end())
+        {
+            detachedOwners.push_back(oldOwner);
+            if (placement != m_workspaceState.terminalWindows.end())
+                placement->selectedWorkspaceId = layout.id;
+            continue;
+        }
+        layout.windowId = utf8String(QUuid::createUuid().toString(QUuid::WithoutBraces));
+        if (placement != m_workspaceState.terminalWindows.end())
+        {
+            auto separate = *placement;
+            separate.id = layout.windowId;
+            separate.selectedWorkspaceId = layout.id;
+            separate.x += 24;
+            separate.y += 24;
+            m_workspaceState.terminalWindows.push_back(std::move(separate));
+        }
     }
     if (!m_workspaceState.restoreAttemptIntentId.empty())
     {

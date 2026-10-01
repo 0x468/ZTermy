@@ -83,12 +83,15 @@ try {
         }
         $saved = Get-Content $statePath -Raw | ConvertFrom-Json
         $placement = @($saved.terminalWindows | Where-Object id -EQ 'restore-window')
+        $detached = @($saved.terminalWorkspaces | Where-Object windowId -NE 'main')
+        $owners = @($detached.windowId | Select-Object -Unique)
         if ($saved.terminalWorkspaces.Count -ne 3 -or $placement.Count -ne 1 -or
+            $detached.Count -ne 2 -or $owners.Count -ne 2 -or $saved.terminalWindows.Count -ne 3 -or
             !$placement[0].maximized -or $placement[0].selectedWorkspaceId -ne 'detached-selected' -or
             $placement[0].width -ne 800 -or $placement[0].height -ne 520) {
             throw 'Shutdown overwrote selected Tab, normal bounds, maximization or topology'
         }
-        Write-Output "PASS restart $pass : native state, selected Tab, normal bounds, topology, no children"
+        Write-Output "PASS restart $pass : native state, selected workspace, normal bounds, legacy tabs split without loss, no children"
         $owned.Dispose()
         $owned = $null
     }

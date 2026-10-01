@@ -10,6 +10,7 @@ Row {
     required property var transferPopup
     required property var commandPopup
     readonly property bool compact: hostRoot.width < 700
+    readonly property bool menuOpen: alwaysOnTopMenu.visible || compactMenu.visible
 
     objectName: "titleControls"
     anchors.right: parent.right

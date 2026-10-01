@@ -26,6 +26,7 @@ TitleTab {
     property bool dropCompleted: false
     readonly property bool closeButtonShown: !compact && closeButtonMode !== "hidden"
     readonly property bool tabHovered: hovered || closeAction.hovered
+    readonly property bool menuOpen: tabMenu.visible || reorderDrag.active
     signal closeRequested
     signal reconnectRequested
     signal duplicateRequested

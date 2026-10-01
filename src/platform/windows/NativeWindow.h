@@ -65,6 +65,7 @@ public:
     Q_INVOKABLE void requestRestart() { emit restartRequested(); }
     Q_INVOKABLE void setTitleBarMetrics(qreal titleHeight, qreal captionLeft, qreal controlsLeft, qreal maximizeLeft,
                                         qreal maximizeWidth);
+    Q_INVOKABLE [[nodiscard]] bool titleBarPointerInside(qreal height) const;
 
 signals:
     void restartRequested();

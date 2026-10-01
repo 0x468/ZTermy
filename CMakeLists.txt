@@ -4864,6 +4864,13 @@ if(BUILD_TESTING)
             --smoke-test
             --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/qml-native-window-smoke"
     )
+    add_test(
+        NAME title-bar-immersive-runtime
+        COMMAND ztermy
+            --title-bar-immersive-smoke
+            --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/title-bar-immersive-runtime"
+    )
+    set_tests_properties(title-bar-immersive-runtime PROPERTIES RUN_SERIAL TRUE TIMEOUT 60)
 endif()
 
 if(CMAKE_VERSION VERSION_LESS 4.3)

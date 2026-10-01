@@ -271,6 +271,7 @@ private slots:
     void usesUnnumberedLocalShellTitles();
     void managesTerminalSessionLifecyclePreferences();
     void restoresDetachedOwnershipOnlyWhenEnabled();
+    void restoresLegacyDetachedTabsAsSeparateWindows();
     void coalescesWindowPlacementUntilLayoutSave();
     void unifiesThemePolicyAndSystemAppearance();
     void closesMultipleWorkspacesWithReentrantObservers();
@@ -2322,6 +2323,61 @@ void AppControllerTests::restoresDetachedOwnershipOnlyWhenEnabled()
             QCOMPARE(ztermy::config::ApplicationSettingsStore(settingsPath).load()->restoreDetachedWindows, !detached);
             QCOMPARE(session->starts, 0);
         }
+}
+
+void AppControllerTests::restoresLegacyDetachedTabsAsSeparateWindows()
+{
+    QTemporaryDir directory;
+    const auto settingsPath = directory.filePath(QStringLiteral("settings.json"));
+    ztermy::config::ApplicationSettings settings;
+    settings.reopenLocalSessions = false;
+    QVERIFY(ztermy::config::ApplicationSettingsStore(settingsPath).save(settings));
+    ztermy::workbench::WorkspaceState saved;
+    for (const auto *id : {"first", "second"})
+    {
+        const std::string workspaceId(id);
+        auto layout = ztermy::workbench::makeSinglePaneTerminalWorkspace(
+            workspaceId, workspaceId + "-pane",
+            {.id = workspaceId + "-intent", .profileId = "commandPrompt", .title = "CMD"});
+        layout.windowId = "old-window";
+        layout.manualTitle = workspaceId + " title";
+        saved.terminalWorkspaces.push_back(std::move(layout));
+    }
+    saved.activeTerminalWorkspaceId = "second";
+    saved.terminalWindows.push_back({.id = "old-window",
+                                     .selectedWorkspaceId = "second",
+                                     .screenName = "saved-screen",
+                                     .x = 100,
+                                     .y = 120,
+                                     .width = 900,
+                                     .height = 600,
+                                     .maximized = true});
+    QVERIFY(
+        ztermy::workbench::WorkspaceStateStore(directory.filePath(QStringLiteral("workspace_state.json"))).save(saved));
+    const auto session = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")), settingsPath, [session] {
+                                         return std::make_unique<FakeLocalTerminalSession>(session);
+                                     });
+    QCOMPARE(controller.terminalTabs().size(), 2);
+    const auto first = controller.terminalWorkspace(QStringLiteral("first"));
+    const auto second = controller.terminalWorkspace(QStringLiteral("second"));
+    const auto firstOwner = first.value(QStringLiteral("windowId")).toString();
+    const auto secondOwner = second.value(QStringLiteral("windowId")).toString();
+    QCOMPARE(secondOwner, QStringLiteral("old-window"));
+    QVERIFY(!firstOwner.isEmpty() && secondOwner != firstOwner && firstOwner != QStringLiteral("main"));
+    QCOMPARE(first.value(QStringLiteral("activePaneId")).toString(), QStringLiteral("first-pane"));
+    QCOMPARE(second.value(QStringLiteral("activePaneId")).toString(), QStringLiteral("second-pane"));
+    QCOMPARE(second.value(QStringLiteral("title")).toString(), QStringLiteral("second title"));
+    for (const auto &owner : {firstOwner, secondOwner})
+    {
+        const auto placement = controller.terminalWindowState(owner);
+        QCOMPARE(placement.value(QStringLiteral("width")).toInt(), 900);
+        QCOMPARE(placement.value(QStringLiteral("height")).toInt(), 600);
+        QVERIFY(placement.value(QStringLiteral("maximized")).toBool());
+    }
+    QCOMPARE(controller.activeTerminalTabId(), QStringLiteral("second"));
+    QCOMPARE(session->starts, 0);
 }
 
 void AppControllerTests::coalescesWindowPlacementUntilLayoutSave()

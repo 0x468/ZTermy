@@ -16,6 +16,8 @@ SectionCard {
     property alias restoreDetachedWindows: restoreDetachedWindowsSwitch.checked
     property alias tabDoubleClickIndex: tabDoubleClickBox.currentIndex
     property alias tabCloseButtonIndex: tabCloseButtonBox.currentIndex
+    property alias autoHideTitleBar: autoHideTitleBarSwitch.checked
+    property alias tabWidthModeIndex: tabWidthModeBox.currentIndex
     signal performanceModeEdited(bool enabled)
     objectName: "settingsWindowBehaviorCard"
     Layout.fillWidth: true
@@ -28,6 +30,8 @@ SectionCard {
         restoreDetachedWindows = values.restoreDetachedWindows;
         tabDoubleClickIndex = ["rename", "close", "none"].indexOf(values.tabDoubleClick);
         tabCloseButtonIndex = ["always", "hover", "hidden"].indexOf(values.tabCloseButton);
+        autoHideTitleBar = values.autoHideTitleBar;
+        tabWidthModeIndex = ["equal", "active"].indexOf(values.tabWidthMode);
     }
 
     function interactionValues() {
@@ -36,7 +40,9 @@ SectionCard {
             allowTerminalTitleChanges: allowTerminalTitleChanges,
             restoreDetachedWindows: restoreDetachedWindows,
             tabDoubleClick: ["rename", "close", "none"][tabDoubleClickIndex],
-            tabCloseButton: ["always", "hover", "hidden"][tabCloseButtonIndex]
+            tabCloseButton: ["always", "hover", "hidden"][tabCloseButtonIndex],
+            autoHideTitleBar: autoHideTitleBar,
+            tabWidthMode: ["equal", "active"][tabWidthModeIndex]
         };
     }
 
@@ -141,6 +147,29 @@ SectionCard {
             Layout.fillWidth: true
             text: qsTr("Allow terminals to change titles")
             accessibleName: text
+        }
+        AppSwitch {
+            id: autoHideTitleBarSwitch
+            objectName: "settingsAutoHideTitleBarSwitch"
+            Layout.fillWidth: true
+            text: qsTr("Automatically hide the window title bar")
+            accessibleName: text
+        }
+        Text {
+            Layout.fillWidth: true
+            text: qsTr("Hover the narrow strip above the content to reveal the title bar. The content does not move.")
+            color: Theme.textMuted
+            wrapMode: Text.WordWrap
+        }
+        Text {
+            text: qsTr("Terminal tab widths")
+            color: Theme.text
+        }
+        AppComboBox {
+            id: tabWidthModeBox
+            objectName: "settingsTabWidthMode"
+            Layout.fillWidth: true
+            model: [qsTr("All titles, shrink together"), qsTr("Active title, other tabs as icons")]
         }
         Text {
             Layout.fillWidth: true

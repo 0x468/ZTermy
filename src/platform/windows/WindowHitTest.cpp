@@ -37,7 +37,8 @@ HitArea classifyHitTest(const Point point, const Size windowSize, const HitTestM
     {
         const bool onLeft = point.x >= 0 && point.x < metrics.resizeBorder;
         const bool onRight = point.x < windowSize.width && point.x >= windowSize.width - metrics.resizeBorder;
-        const bool onTop = point.y >= 0 && point.y < metrics.resizeBorder;
+        const int topBorder = metrics.topResizeBorder < 0 ? metrics.resizeBorder : metrics.topResizeBorder;
+        const bool onTop = point.y >= 0 && point.y < topBorder;
         const bool onBottom = point.y < windowSize.height && point.y >= windowSize.height - metrics.resizeBorder;
 
         if (onTop && onLeft)

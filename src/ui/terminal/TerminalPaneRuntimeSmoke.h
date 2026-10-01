@@ -3,8 +3,8 @@
 #include "application/AppController.h"
 #include "platform/windows/NativeWindow.h"
 #include "ui/WindowStateRuntimeSmoke.h"
-#include "ui/terminal/DetachedMultiTabRuntimeSmoke.h"
 #include "ui/terminal/DetachedPaneWindowRuntimeSmoke.h"
+#include "ui/terminal/DetachedWorkspaceRuntimeSmoke.h"
 #include "ui/terminal/TerminalItem.h"
 
 #include <QDir>
@@ -280,13 +280,13 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
     qInfo() << "Window transfer independent native window:" << passed;
     if (detached)
     {
-        const bool detachedHeaderHidden = !detached->property("tabBarVisible").toBool();
+        const bool detachedHeaderHidden = !detached->property("windowControlsVisible").toBool();
         qInfo() << "Detached tab bar is hidden by default:" << detachedHeaderHidden;
         passed = passed && detachedHeaderHidden;
         const auto handle = reinterpret_cast<HWND>(detached->winId()); // NOLINT(performance-no-int-to-ptr)
         auto *actions = detached->findChild<QQuickItem *>(QStringLiteral("terminalPaneActions-") + paneId);
         const bool toolbarHidden = actions && actions->opacity() < 0.01;
-        QMetaObject::invokeMethod(detached, "toggleTabBar");
+        QMetaObject::invokeMethod(detached, "toggleWindowControls");
         settle();
         auto *maximizeAction = visualQuickItem(detached->contentItem(), "detachedWindowAction-maximize");
         bool nativeSnapHit = false;
@@ -349,7 +349,7 @@ inline bool runWorkspaceTransferRuntimeSmoke(NativeWindow &window, AppController
     window.rootObject()->setProperty("currentPage", QStringLiteral("terminal"));
     settleWindowLayout(window);
     if (QCoreApplication::arguments().contains(QStringLiteral("--detached-tabs-only")))
-        return verifyDetachedTabGrouping(window, controller, outputDirectory);
+        return verifyDetachedSingleWorkspace(window, controller, outputDirectory);
     if (QCoreApplication::arguments().contains(QStringLiteral("--workspace-merge-only")))
     {
         const auto workspaceId = controller.activeTerminalTabId();
