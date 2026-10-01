@@ -1092,6 +1092,7 @@ set(ZTERMY_INTERFACE_ICON_FILES
     resources/icons/key.svg
     resources/icons/lock.svg
     resources/icons/list.svg
+    resources/icons/grip.svg
     resources/icons/memory.svg
     resources/icons/locate.svg
     resources/icons/minus.svg

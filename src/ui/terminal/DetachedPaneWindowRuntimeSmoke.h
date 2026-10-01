@@ -31,6 +31,10 @@ namespace ztermy::ui
 inline bool verifyDetachedCaptionStateRoundTrip(QQuickWindow &detached, const QString &outputDirectory)
 {
     using namespace std::chrono_literals;
+    const auto previousPointer = QCursor::pos();
+    const auto restorePointer = qScopeGuard([&] {
+        QCursor::setPos(previousPointer);
+    });
     const auto handle = reinterpret_cast<HWND>(detached.winId()); // NOLINT(performance-no-int-to-ptr)
     POINT oldButton{.x = qRound((detached.width() - 48) * detached.devicePixelRatio()),
                     .y = qRound(16 * detached.devicePixelRatio())};
@@ -38,8 +42,17 @@ inline bool verifyDetachedCaptionStateRoundTrip(QQuickWindow &detached, const QS
         return false;
     const LPARAM oldPosition = MAKELPARAM(oldButton.x, oldButton.y);
     detached.setProperty("nativeMaximizeButtonHovered", true);
-    QMetaObject::invokeMethod(&detached, "toggleWindowControls");
-    processWindowEventsFor(100ms);
+    QCursor::setPos(detached.mapToGlobal(QPoint{detached.width() / 2, 200}));
+    detached.setProperty("windowControlsVisible", false);
+    const bool dismissed = settleWindowUntil(
+        [&detached] {
+            return !detached.property("windowControlsVisible").toBool()
+                   && !detached.property("windowChromeInteractive").toBool();
+        },
+        2s);
+    qInfo() << "Detached dismissal: settled, requested, interactive, native hover:" << dismissed
+            << detached.property("windowControlsVisible") << detached.property("windowChromeInteractive")
+            << detached.property("nativeMaximizeButtonHovered");
     const bool hiddenClient = SendMessageW(handle, WM_NCHITTEST, 0, oldPosition) == HTCLIENT;
     const bool wasMaximized = IsZoomed(handle) != FALSE;
     // Even stale native hover/click messages must not resurrect hidden chrome.
@@ -54,12 +67,16 @@ inline bool verifyDetachedCaptionStateRoundTrip(QQuickWindow &detached, const QS
     const bool inert = !detached.property("nativeMaximizeButtonHovered").toBool()
                        && !detached.property("nativeMaximizeButtonPressed").toBool()
                        && (IsZoomed(handle) != FALSE) == wasMaximized;
-    QMetaObject::invokeMethod(&detached, "toggleWindowControls");
+    QCursor::setPos(detached.mapToGlobal(QPoint{detached.width() / 2, 6}));
+    detached.setProperty("windowControlsVisible", true);
     processWindowEventsFor(100ms);
     qInfo() << "Hidden caption: old button is client, stale hover/click is inert:" << hiddenClient << inert;
     if (!hiddenClient || !inert)
         return false;
     const auto clickCaption = [&detached, handle](const QString &kind) {
+        QCursor::setPos(detached.mapToGlobal(QPoint{detached.width() / 2, 6}));
+        detached.setProperty("windowControlsVisible", true);
+        processWindowEventsFor(200ms);
         const QString name = QStringLiteral("detachedWindowAction-") + kind;
         auto *button = detachedVisualQuickItem(detached.contentItem(), name);
         if (button == nullptr)
@@ -92,6 +109,7 @@ inline bool verifyDetachedCaptionStateRoundTrip(QQuickWindow &detached, const QS
                                },
                                3s);
     qInfo() << "Detached caption maximize:" << maximized;
+    QCursor::setPos(detached.mapToGlobal(QPoint{detached.width() / 2, 6}));
     const auto capture = detached.contentItem()->grabToImage();
     const bool captured =
         capture

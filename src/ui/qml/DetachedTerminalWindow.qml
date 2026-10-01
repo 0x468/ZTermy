@@ -17,6 +17,12 @@ Window {
     property var pendingPasteViewport: null
     property int pendingPasteLineCount: 0
     property bool windowControlsVisible: false
+    readonly property int titleTriggerHeight: hostRoot.titleTriggerHeight
+    readonly property int windowControlsHeight: Theme.titleBarHeight
+    readonly property real windowChromeHeight: windowControlsHeight * windowControls.revealProgress
+    readonly property bool windowChromeInteractive: windowControls.revealProgress > 0
+    property int titleHoverElapsed: 0
+    property int titleLeaveElapsed: 0
     property bool nativeMaximizeButtonHovered: false
     property bool nativeMaximizeButtonPressed: false
     readonly property var controller: hostRoot.controller
@@ -102,8 +108,37 @@ Window {
     function openTerminalSearch() {
         searchPanel.openSearch();
     }
-    function toggleWindowControls() {
-        windowControlsVisible = !windowControlsVisible;
+    function titleInteractionHeld(focused) {
+        let keyboardFocus = false;
+        while (focused) {
+            keyboardFocus = keyboardFocus || focused.visualFocus === true;
+            if (focused === windowControls)
+                return keyboardFocus;
+            focused = focused.parent;
+        }
+        // Hover is already covered by the native pointer probe. A stale
+        // non-client hover notification must not pin the overlay open.
+        return nativeMaximizeButtonPressed;
+    }
+    Timer {
+        interval: 50
+        repeat: true
+        running: detachedTerminalWindow.visible && detachedTerminalWindow.visibility !== Window.Minimized
+        onTriggered: {
+            const extent = Math.max(detachedTerminalWindow.titleTriggerHeight, detachedTerminalWindow.windowChromeHeight);
+            const inside = detachedTerminalWindow.hostRoot.windowChrome.titleBarPointerInside(extent, detachedTerminalWindow);
+            if (inside || (detachedTerminalWindow.windowControlsVisible && detachedTerminalWindow.titleInteractionHeld(detachedTerminalWindow.activeFocusItem))) {
+                detachedTerminalWindow.titleLeaveElapsed = 0;
+                detachedTerminalWindow.titleHoverElapsed += interval;
+                if (detachedTerminalWindow.titleHoverElapsed >= 150)
+                    detachedTerminalWindow.windowControlsVisible = true;
+            } else {
+                detachedTerminalWindow.titleHoverElapsed = 0;
+                detachedTerminalWindow.titleLeaveElapsed += interval;
+                if (detachedTerminalWindow.titleLeaveElapsed >= 300)
+                    detachedTerminalWindow.windowControlsVisible = false;
+            }
+        }
     }
     function focusTerminalAfterLayout() {
         controller.activateTerminalTab(workspaceId);
@@ -161,13 +196,47 @@ Window {
         color: Theme.workspaceBackground
     }
 
-    Item {
+    Rectangle {
+        objectName: "detachedTitleTriggerStrip"
+        width: parent.width
+        height: detachedTerminalWindow.titleTriggerHeight
+        color: Qt.rgba(Theme.floatingBackground.r, Theme.floatingBackground.g, Theme.floatingBackground.b, 1 / 255)
+    }
+
+    MouseArea {
+        objectName: "detachedTitleBarInputShield"
+        width: parent.width
+        height: detachedTerminalWindow.windowControlsHeight
+        visible: detachedTerminalWindow.windowChromeInteractive
+        z: 90
+        acceptedButtons: Qt.AllButtons
+        property point pressPosition
+        onPressed: mouse => pressPosition = Qt.point(mouse.x, mouse.y)
+        onPositionChanged: mouse => {
+            if (pressed && (pressedButtons & Qt.LeftButton) && Math.hypot(mouse.x - pressPosition.x, mouse.y - pressPosition.y) >= drag.threshold)
+                detachedTerminalWindow.startSystemMove();
+        }
+        onDoubleClicked: mouse => {
+            if (mouse.button === Qt.LeftButton)
+                WindowControl.toggleMaximize(detachedTerminalWindow);
+        }
+        onWheel: wheel => wheel.accepted = true
+    }
+
+    Rectangle {
         id: windowControls
         objectName: "detachedWindowControls"
-        anchors.right: parent.right
-        width: 128
-        visible: detachedTerminalWindow.windowControlsVisible
-        z: 90
+        x: 0
+        y: 0
+        width: parent.width
+        height: detachedTerminalWindow.windowControlsHeight
+        color: Theme.floatingBackground
+        property real revealProgress: detachedTerminalWindow.windowControlsVisible ? 1 : 0
+        visible: revealProgress > 0
+        z: 91
+        transform: Translate {
+            y: -windowControls.height * (1 - windowControls.revealProgress)
+        }
         enabled: visible
         onVisibleChanged: {
             if (!visible) {
@@ -175,20 +244,29 @@ Window {
                 detachedTerminalWindow.nativeMaximizeButtonPressed = false;
             }
         }
-        height: visible ? 32 : 0
-        MouseArea {
-            anchors.fill: parent
-            onPressed: {
-                detachedTerminalWindow.startSystemMove();
+        Behavior on revealProgress {
+            NumberAnimation {
+                duration: Motion.reduced ? 0 : detachedTerminalWindow.windowControlsVisible ? Motion.enter : Motion.exit
+                easing.type: detachedTerminalWindow.windowControlsVisible ? Motion.enterEasing : Motion.exitEasing
             }
-            onDoubleClicked: WindowControl.toggleMaximize(detachedTerminalWindow)
+        }
+        Text {
+            anchors.left: parent.left
+            anchors.leftMargin: 14
+            anchors.verticalCenter: parent.verticalCenter
+            width: Math.max(0, parent.width - 160)
+            text: detachedTerminalWindow.workspace.title || qsTr("Terminal")
+            font.family: Theme.uiFont
+            font.pixelSize: Theme.textBody
+            color: Theme.text
+            elide: Text.ElideRight
         }
         TitleChromeAction {
             objectName: "detachedReattachAllButton"
-            x: 0
+            x: parent.width - 128
             width: 32
-            height: 32
-            iconName: "external-link"
+            height: parent.height
+            iconName: "chevron-left"
             accessibleName: qsTr("Reattach window to main window")
             toolTip: accessibleName
             onActivated: detachedTerminalWindow.coordinator.reattachAll(detachedTerminalWindow)
@@ -201,7 +279,7 @@ Window {
                     required property string modelData
                     objectName: "detachedWindowAction-" + modelData
                     width: 32
-                    height: 32
+                    height: windowControls.height
                     kind: modelData
                     chrome: detachedTerminalWindow
                     externallyHovered: modelData === "maximize" && detachedTerminalWindow.nativeMaximizeButtonHovered
@@ -224,7 +302,7 @@ Window {
         id: detachedViewport
         objectName: "detachedWorkspaceViewport"
         anchors.fill: parent
-        anchors.topMargin: 0
+        anchors.topMargin: detachedTerminalWindow.titleTriggerHeight
         controller: detachedTerminalWindow.hostRoot.controller
         node: detachedTerminalWindow.visibleLayoutRoot || ({})
         zoomedPaneId: detachedTerminalWindow.zoomedPaneId
@@ -244,9 +322,8 @@ Window {
         middleClickBehavior: detachedTerminalWindow.hostRoot.controller.terminalMiddleClickBehavior
         wordDelimiters: detachedTerminalWindow.hostRoot.controller.terminalWordDelimiters
         scrollRowsPerWheel: detachedTerminalWindow.hostRoot.controller.terminalScrollRows
-        onDetachPaneRequested: paneId => detachedTerminalWindow.coordinator.reattachAll(detachedTerminalWindow)
+        onDetachPaneRequested: paneId => detachedTerminalWindow.coordinator.reattachPane(detachedTerminalWindow, paneId)
         onZoomPaneRequested: paneId => detachedTerminalWindow.hostRoot.toggleTerminalPaneZoom(paneId, detachedTerminalWindow.workspaceId)
-        onToggleWindowControlsRequested: detachedTerminalWindow.toggleWindowControls()
         onMultilinePasteConfirmationRequested: (viewport, lineCount) => {
             detachedTerminalWindow.pendingPasteViewport = viewport;
             detachedTerminalWindow.pendingPasteLineCount = lineCount;

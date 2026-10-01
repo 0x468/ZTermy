@@ -96,7 +96,9 @@ int resizeBorderForWindow(const HWND windowHandle) noexcept
 
 bool handleDetachedWindowFrameMessage(QQuickWindow &window, const MSG &message, qintptr *result)
 {
-    const bool captionVisible = window.property("windowControlsVisible").toBool();
+    const auto interactive = window.property("windowChromeInteractive");
+    const bool captionVisible =
+        interactive.isValid() ? interactive.toBool() : window.property("windowControlsVisible").toBool();
     if (!captionVisible)
     {
         window.setProperty("nativeMaximizeButtonHovered", false);
@@ -127,15 +129,23 @@ bool handleDetachedWindowFrameMessage(QQuickWindow &window, const MSG &message, 
         if (GetWindowRect(message.hwnd, &bounds) == FALSE)
             return false;
         constexpr qreal buttonWidth = 32.0;
-        constexpr qreal buttonHeight = 32.0;
+        const qreal stripHeight = window.property("titleTriggerHeight").toReal();
+        const qreal buttonHeight =
+            window.property("windowChromeHeight").isValid() ? window.property("windowChromeHeight").toReal() : 32.0;
         const qreal scale = window.devicePixelRatio();
         const int width = bounds.right - bounds.left;
-        const HitTestMetrics metrics{.resizeBorder = resizeBorderForWindow(message.hwnd),
-                                     .caption = {},
-                                     .maximizeButton = {.x = width - qRound(buttonWidth * 2 * scale),
-                                                        .y = 0,
-                                                        .width = captionVisible ? qRound(buttonWidth * scale) : 0,
-                                                        .height = captionVisible ? qRound(buttonHeight * scale) : 0}};
+        const HitTestMetrics metrics{
+            .resizeBorder = resizeBorderForWindow(message.hwnd),
+            .caption =
+                captionVisible
+                    ? Rect{.x = 0, .y = 0, .width = width - qRound(128 * scale), .height = qRound(buttonHeight * scale)}
+                    : Rect{},
+            .maximizeButton = {.x = width - qRound(buttonWidth * 2 * scale),
+                               .y = 0,
+                               .width = captionVisible ? qRound(buttonWidth * scale) : 0,
+                               .height = captionVisible ? qRound(buttonHeight * scale) : 0},
+            .topResizeBorder = stripHeight > 0 ? qRound(2 * scale) : -1,
+            .dragStripHeight = captionVisible ? 0 : qRound(stripHeight * scale)};
         *result = toNativeHitArea(classifyHitTest(
             {.x = GET_X_LPARAM(message.lParam) - bounds.left, .y = GET_Y_LPARAM(message.lParam) - bounds.top},
             {.width = width, .height = bounds.bottom - bounds.top}, metrics, IsZoomed(message.hwnd) != FALSE));

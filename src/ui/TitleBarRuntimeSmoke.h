@@ -123,7 +123,7 @@ inline bool verifyTitleBarInputShield(NativeWindow &window)
             acceptedButtons: Qt.AllButtons
             property int presses: 0
             property int wheels: 0
-            property bool motionActive: Motion.enabled
+            property bool motionActive: Motion.enabled && !Motion.reduced
             onPressed: presses++
             onWheel: wheel => { wheels++; wheel.accepted = true; }
         }
@@ -157,8 +157,21 @@ inline bool verifyTitleBarInputShield(NativeWindow &window)
     QCursor::setPos(window.mapToGlobal(QPoint{500, 6}));
     root->setProperty("titleBarRevealed", true);
     processWindowEventsFor(40ms);
-    const bool entering = !area->property("motionActive").toBool() || (bar->opacity() > 0 && bar->opacity() < 1);
+    const auto slidingWithoutFade = [&] {
+        const auto progress = bar->property("revealProgress").toReal();
+        const auto top = bar->mapToScene(QPointF{}).y();
+        return progress > 0 && progress < 1 && top < 0 && top > -bar->height() && bar->opacity() == 1;
+    };
+    const bool entering = !area->property("motionActive").toBool() || slidingWithoutFade();
+    const auto capture = [&](const QString &name) {
+        const auto arguments = QCoreApplication::arguments();
+        const auto data = arguments.indexOf(QStringLiteral("--data-dir"));
+        return data >= 0 && data + 1 < arguments.size()
+               && window.grabWindow().save(QDir(arguments[data + 1]).filePath(name));
+    };
+    const bool enterCaptured = capture(QStringLiteral("title-slide-enter.png"));
     processWindowEventsFor(210ms);
+    const bool flushTop = qAbs(bar->mapToScene(QPointF{}).y()) < 0.01 && bar->opacity() == 1;
     probe({720, 20});
     // Also exercise the unused edge of the left navigation target.
     probe({1, 20});
@@ -169,16 +182,26 @@ inline bool verifyTitleBarInputShield(NativeWindow &window)
     QCursor::setPos(window.mapToGlobal(QPoint{500, 250}));
     root->setProperty("titleBarRevealed", false);
     processWindowEventsFor(40ms);
-    const bool exiting = !area->property("motionActive").toBool() || (bar->opacity() > 0 && bar->opacity() < 1);
+    const bool exiting = !area->property("motionActive").toBool() || slidingWithoutFade();
     if (area->property("motionActive").toBool())
         probe({720, 20});
     const bool dismissalBlocked = area->property("presses").toInt() == 1 && area->property("wheels").toInt() == 1;
-    processWindowEventsFor(200ms);
+    const bool exitCaptured = capture(QStringLiteral("title-slide-exit.png"));
+    const bool hidden = processWindowEventsUntil(
+        [&] {
+            return !root->property("titleBarInteractive").toBool();
+        },
+        2s);
     probe({720, 20});
     const bool restored = area->property("presses").toInt() == 2 && area->property("wheels").toInt() == 2;
-    qInfo() << "Chrome shield: negative control, enter, blocked, exit, dismissal, restored:" << baseline << entering
-            << blocked << exiting << dismissalBlocked << restored;
-    return baseline && entering && blocked && exiting && dismissalBlocked && restored;
+    QVariant held;
+    QMetaObject::invokeMethod(root, "titleInteractionHeld", Q_RETURN_ARG(QVariant, held));
+    qInfo() << "Slide completion state:" << hidden << root->property("titleBarShown") << bar->property("revealProgress")
+            << held << area->property("presses") << area->property("wheels");
+    qInfo() << "Chrome slide/shield: negative control, enter, flush top, blocked, exit, dismissal, restored:"
+            << baseline << entering << flushTop << blocked << exiting << dismissalBlocked << restored;
+    return baseline && entering && enterCaptured && flushTop && blocked && exiting && exitCaptured && dismissalBlocked
+           && restored;
 }
 
 // Detect hover/focus regressions through real cursor position and live delegates.
@@ -302,7 +325,14 @@ inline bool verifyImmersiveTitleBar(NativeWindow &window, AppController &control
             passed =
                 controller.saveWindowInteractionSettings({{QStringLiteral("autoHideTitleBar"), automatic}}) && passed;
             QCursor::setPos(window.mapToGlobal(QPoint{500, trigger - 2}));
-            processWindowEventsFor(650ms);
+            passed = processWindowEventsUntil(
+                         [&] {
+                             auto *bar = quickItem(root, "mainTitleBar");
+                             return root->property("titleBarShown").toBool() && bar
+                                    && bar->property("revealProgress").toReal() == 1;
+                         },
+                         2s)
+                     && passed;
             const auto name = QStringLiteral("%1-%2.png")
                                   .arg(QLatin1StringView{palette},
                                        automatic ? QStringLiteral("overlay") : QStringLiteral("persistent"));
@@ -321,7 +351,14 @@ inline bool verifyImmersiveTitleBar(NativeWindow &window, AppController &control
                 root->setProperty("appearancePreviewActive", true);
                 QMetaObject::invokeMethod(root, "applyWindowAppearance");
                 QCursor::setPos(window.mapToGlobal(QPoint{500, trigger - 2}));
-                processWindowEventsFor(650ms);
+                passed = processWindowEventsUntil(
+                             [&] {
+                                 auto *bar = quickItem(root, "mainTitleBar");
+                                 return root->property("titleBarShown").toBool() && bar
+                                        && bar->property("revealProgress").toReal() == 1;
+                             },
+                             2s)
+                         && passed;
                 const auto scene = window.grabWindow();
                 if (scene.isNull())
                     return false;
@@ -340,6 +377,10 @@ inline bool verifyImmersiveTitleBar(NativeWindow &window, AppController &control
                 passed = scene.save(captures.filePath(name + QStringLiteral("-scene.png")))
                          && desktop.save(captures.filePath(name + QStringLiteral("-desktop.png"))) && passed;
                 qInfo() << "Title surface at zero opacity:" << name << inkBackground << surfaceValid;
+                if (!surfaceValid)
+                    qInfo() << "Missing overlay state:" << root->property("titleBarShown")
+                            << quickItem(root, "mainTitleBar")->property("revealProgress") << QCursor::pos()
+                            << window.titleBarPointerInside(trigger) << window.geometry();
             }
     root->setProperty("appearancePreviewActive", false);
     QMetaObject::invokeMethod(root, "applyWindowAppearance");

@@ -82,13 +82,32 @@ void WindowHitTestTests::immersiveStripPreservesDragResizeAndTerminalInput()
         const ztermy::windowing::Size size{.width = 1000 * scale, .height = 700 * scale};
         const ztermy::windowing::HitTestMetrics metrics{
             .resizeBorder = 8 * scale,
-            .caption = {.x = 0, .y = 0, .width = size.width, .height = 8 * scale},
+            .caption = {.x = 0, .y = 0, .width = size.width, .height = 12 * scale},
             .maximizeButton = {},
             .topResizeBorder = 2 * scale,
+            .dragStripHeight = 12 * scale,
         };
         QCOMPARE(classifyHitTest({500 * scale, scale}, size, metrics, false), Top);
         QCOMPARE(classifyHitTest({500 * scale, 5 * scale}, size, metrics, false), Caption);
-        QCOMPARE(classifyHitTest({500 * scale, 9 * scale}, size, metrics, false), Client);
+        QCOMPARE(classifyHitTest({500 * scale, 11 * scale}, size, metrics, false), Caption);
+        QCOMPARE(classifyHitTest({500 * scale, 13 * scale}, size, metrics, false), Client);
+        QCOMPARE(classifyHitTest({scale, 5 * scale}, size, metrics, false), TopLeft);
+        // Revealed chrome covers the trigger strip and is flush with the top.
+        // Its visible controls must replace that strip's hidden Caption hit.
+        auto revealed = metrics;
+        revealed.dragStripHeight = 0;
+        revealed.caption = {.x = 320 * scale, .y = 0, .width = 500 * scale, .height = 38 * scale};
+        revealed.maximizeButton = {.x = 908 * scale, .y = 0, .width = 46 * scale, .height = 38 * scale};
+        QCOMPARE(classifyHitTest({180 * scale, 5 * scale}, size, revealed, false), Client);
+        QCOMPARE(classifyHitTest({500 * scale, 5 * scale}, size, revealed, false), Caption);
+        QCOMPARE(classifyHitTest({930 * scale, 5 * scale}, size, revealed, false), MaximizeButton);
+        QCOMPARE(classifyHitTest({930 * scale, 24 * scale}, size, revealed, false), MaximizeButton);
+        // Slide-out exposes only the upper fragment of a moving button.
+        auto dismissing = revealed;
+        dismissing.caption.height = 9 * scale;
+        dismissing.maximizeButton.height = 9 * scale;
+        QCOMPARE(classifyHitTest({930 * scale, 5 * scale}, size, dismissing, false), MaximizeButton);
+        QCOMPARE(classifyHitTest({930 * scale, 24 * scale}, size, dismissing, false), Client);
         // The old caption's maximize location must not remain an invisible button.
         QCOMPARE(classifyHitTest({930 * scale, 24 * scale}, size, metrics, false), Client);
         QCOMPARE(classifyHitTest({500 * scale, scale}, size, metrics, true), Caption);

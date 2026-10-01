@@ -4,11 +4,11 @@ endif()
 
 file(GLOB icon_files LIST_DIRECTORIES FALSE "${ZTERMY_ICON_DIRECTORY}/*.svg")
 list(LENGTH icon_files icon_count)
-if(NOT icon_count EQUAL 90)
-    message(FATAL_ERROR "Expected 90 production interface icons, found ${icon_count}")
+if(NOT icon_count EQUAL 91)
+    message(FATAL_ERROR "Expected 91 production interface icons, found ${icon_count}")
 endif()
 
-foreach(required_icon IN ITEMS activity.svg ai.svg application.svg bookmark.svg chevron-left.svg close.svg cpu.svg disk.svg external-link.svg highlight.svg
+foreach(required_icon IN ITEMS activity.svg ai.svg application.svg bookmark.svg chevron-left.svg close.svg cpu.svg disk.svg external-link.svg grip.svg highlight.svg
                                key.svg memory.svg minus.svg network.svg new-file.svg pause.svg paste.svg pin.svg pin-tab.svg pin-window.svg security.svg select-visible.svg shortcuts.svg settings.svg
                                split-horizontal.svg split-vertical.svg user.svg warning.svg window-close.svg window-maximize.svg window-minimize.svg
                                window-restore.svg brand-archlinux.svg brand-powershell.svg brand-git.svg brand-linux.svg shell-cmd.svg shell-nushell.svg

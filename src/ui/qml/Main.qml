@@ -15,12 +15,13 @@ Rectangle {
     required property var windowChrome
     readonly property int titleBarHeight: Theme.titleBarHeight
     readonly property bool autoHideTitleBar: controller.windowInteractionSettings.autoHideTitleBar
-    readonly property int titleTriggerHeight: 8
+    readonly property int titleTriggerHeight: 12
     readonly property int reservedTitleHeight: autoHideTitleBar ? titleTriggerHeight : titleBarHeight
     property bool titleBarRevealed: false
     property int titleHoverElapsed: 0
     property int titleLeaveElapsed: 0
     readonly property bool titleBarShown: !autoHideTitleBar || titleBarRevealed
+    readonly property bool titleBarInteractive: titleBar.revealProgress > 0
     readonly property bool equalTerminalTabWidths: controller.windowInteractionSettings.tabWidthMode === "equal"
     onTitleBarShownChanged: scheduleTitleBarMetrics()
     onReservedTitleHeightChanged: scheduleTitleBarMetrics()
@@ -282,10 +283,10 @@ Rectangle {
     }
 
     function reportTitleBarMetrics() {
-        if (!titleBarShown)
-            root.windowChrome.setTitleBarMetrics(titleTriggerHeight, 0, width, width, 0);
+        if (!titleBarInteractive)
+            root.windowChrome.setTitleBarMetrics(titleTriggerHeight, 0, width, width, 0, titleTriggerHeight, autoHideTitleBar);
         else
-            root.windowChrome.setTitleBarMetrics(titleBarHeight, titleNavigation.width + 8, width - (captionButtonWidth * 3) - titleQuickActionsWidth - titleSecurityActionWidth, width - (captionButtonWidth * 2), captionButtonWidth);
+            root.windowChrome.setTitleBarMetrics(titleBarHeight * titleBar.revealProgress, titleNavigation.width + 8, width - (captionButtonWidth * 3) - titleQuickActionsWidth - titleSecurityActionWidth, width - (captionButtonWidth * 2), captionButtonWidth, 0, autoHideTitleBar);
     }
 
     function titleInteractionHeld() {
@@ -312,7 +313,7 @@ Rectangle {
         repeat: true
         running: root.autoHideTitleBar && root.visible && root.Window.window && root.Window.window.visibility !== Window.Minimized
         onTriggered: {
-            const inside = root.windowChrome.titleBarPointerInside(root.titleBarShown ? root.titleBarHeight : root.titleTriggerHeight);
+            const inside = root.windowChrome.titleBarPointerInside(Math.max(root.titleTriggerHeight, root.titleBarHeight * titleBar.revealProgress));
             if (inside || root.titleInteractionHeld()) {
                 root.titleLeaveElapsed = 0;
                 root.titleHoverElapsed += interval;
@@ -989,7 +990,31 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         height: root.reservedTitleHeight
-        color: root.chromeColor
+        // A zero-alpha strip can lose native pointer ownership at 0% opacity.
+        // Keep a visually negligible input surface, covered by expanded chrome.
+        color: root.autoHideTitleBar ? Qt.rgba(Theme.floatingBackground.r, Theme.floatingBackground.g, Theme.floatingBackground.b, 1 / 255) : root.chromeColor
+    }
+
+    // Keep the complete covered area shielded until the slide finishes.
+    // This stays in window coordinates while the visual chrome moves above it.
+    MouseArea {
+        objectName: "titleBarInputShield"
+        anchors.top: parent.top
+        width: parent.width
+        height: root.titleBarHeight
+        visible: root.titleBarInteractive
+        z: 90
+        hoverEnabled: true
+        acceptedButtons: Qt.AllButtons
+        onPressed: mouse => {
+            if (mouse.button === Qt.LeftButton)
+                root.windowChrome.beginSystemMove();
+        }
+        onDoubleClicked: mouse => {
+            if (mouse.button === Qt.LeftButton)
+                WindowControl.toggleMaximize(root.windowChrome);
+        }
+        onWheel: wheel => wheel.accepted = true
     }
 
     Rectangle {
@@ -1001,35 +1026,20 @@ Rectangle {
         height: root.titleBarHeight
         // A revealed overlay must mask terminal text even at zero material opacity.
         color: root.autoHideTitleBar ? Theme.floatingBackground : root.chromeColor
-        opacity: root.titleBarShown ? 1 : 0
-        visible: opacity > 0
+        property real revealProgress: root.titleBarShown ? 1 : 0
+        visible: revealProgress > 0
         enabled: visible
-        z: 90
+        z: 91
+        transform: Translate {
+            y: -titleBar.height * (1 - titleBar.revealProgress)
+        }
+        onRevealProgressChanged: root.reportTitleBarMetrics()
 
-        Behavior on opacity {
+        Behavior on revealProgress {
             NumberAnimation {
-                duration: root.titleBarShown ? Motion.enter : Motion.exit
+                duration: !root.autoHideTitleBar || Motion.reduced ? 0 : root.titleBarShown ? Motion.enter : Motion.exit
                 easing.type: root.titleBarShown ? Motion.enterEasing : Motion.exitEasing
             }
-        }
-
-        // A painted Rectangle does not accept input. Keep this shield under
-        // the controls, including during dismissal, so clicks and wheels
-        // cannot reach the covered host form or terminal telemetry.
-        MouseArea {
-            objectName: "titleBarInputShield"
-            anchors.fill: parent
-            hoverEnabled: true
-            acceptedButtons: Qt.AllButtons
-            onPressed: mouse => {
-                if (mouse.button === Qt.LeftButton)
-                    root.windowChrome.beginSystemMove();
-            }
-            onDoubleClicked: mouse => {
-                if (mouse.button === Qt.LeftButton)
-                    WindowControl.toggleMaximize(root.windowChrome);
-            }
-            onWheel: wheel => wheel.accepted = true
         }
 
         Row {

@@ -215,20 +215,21 @@ verifyHostProfileIconPicker(NativeWindow &window, const QString &captureName = Q
     auto *tabBar = detachedQuick
                        ? findWindowSmokeItem(detachedQuick->contentItem(), QStringLiteral("detachedWindowControls"))
                        : nullptr;
-    const bool hiddenByDefault = tabBar && !tabBar->isVisible() && tabBar->height() == 0;
+    const bool hiddenByDefault = tabBar && !tabBar->isVisible();
     const auto selectionBeforeToggle = detached ? detached->property("workspaceId") : QVariant{};
-    const bool toggled = detached && QMetaObject::invokeMethod(detached, "toggleWindowControls");
+    const bool toggled = detached && detached->setProperty("windowControlsVisible", true);
     processWindowEventsFor(100ms);
-    const bool shown = toggled && tabBar && tabBar->isVisible() && tabBar->height() == 32;
+    const bool shown = toggled && tabBar && tabBar->isVisible()
+                       && tabBar->height() == detached->property("windowControlsHeight").toReal();
     if (detached)
-        QMetaObject::invokeMethod(detached, "toggleWindowControls");
-    processWindowEventsFor(100ms);
-    const bool hiddenAgain = tabBar && !tabBar->isVisible() && tabBar->height() == 0
-                             && detached->property("workspaceId") == selectionBeforeToggle;
+        detached->setProperty("windowControlsVisible", false);
+    processWindowEventsFor(200ms);
+    const bool hiddenAgain =
+        tabBar && !tabBar->isVisible() && detached->property("workspaceId") == selectionBeforeToggle;
     qInfo() << "Detached tab chrome: hidden initially, shown, hidden without changing selection:" << hiddenByDefault
             << shown << hiddenAgain;
     if (detached)
-        QMetaObject::invokeMethod(detached, "toggleWindowControls");
+        detached->setProperty("windowControlsVisible", true);
     processWindowEventsFor(100ms);
     auto *mainTab = findWindowSmokeItem(window.contentItem(), QStringLiteral("workspaceTitle-main-check"));
     auto *detachedTab = detachedQuick ? findWindowSmokeItem(detachedQuick->contentItem(),

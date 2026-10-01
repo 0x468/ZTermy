@@ -134,6 +134,19 @@ inline bool verifyWholeTabMouseMerge(NativeWindow &window, AppController &contro
 inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppController &controller,
                                                  const QString &outputDirectory)
 {
+    const auto previousPointer = QCursor::pos();
+    const auto restorePointer = qScopeGuard([&] {
+        QCursor::setPos(previousPointer);
+    });
+    // Drop targeting rejects obscured windows. Expose only this owned fixture
+    // above the host app, rather than treating its occlusion as a failed drag.
+    const auto mainHandle = reinterpret_cast<HWND>(window.winId()); // NOLINT(performance-no-int-to-ptr)
+    const bool wasMainTopmost = (GetWindowLongPtrW(mainHandle, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+    const auto restoreMainZOrder = qScopeGuard([&] {
+        if (!wasMainTopmost)
+            SetWindowPos(mainHandle, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    });
+    SetWindowPos(mainHandle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
     auto *root = window.rootObject();
     if (!root)
         return false;
@@ -160,8 +173,7 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
     const auto layout = controller.activeTerminalWorkspace().value(QStringLiteral("root")).toMap();
     const QString firstId = layout.value(QStringLiteral("first")).toMap().value(QStringLiteral("id")).toString();
     const QString secondId = layout.value(QStringLiteral("second")).toMap().value(QStringLiteral("id")).toString();
-    auto *header =
-        visualQuickItem(root, (QStringLiteral("terminalPaneAction-headers-") + firstId).toLatin1().constData());
+    auto *header = visualQuickItem(root, (QStringLiteral("terminalPaneAction-drag-") + firstId).toLatin1().constData());
     auto *targetPane = window.findChild<TerminalItem *>(QStringLiteral("terminalViewport-") + secondId);
     if (targetPane)
     {
@@ -195,8 +207,7 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
             controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString() == firstId;
         qInfo() << "Pane drag handle click focuses pane:" << headerFocused;
         passed = passed && headerFocused;
-        header =
-            visualQuickItem(root, (QStringLiteral("terminalPaneAction-headers-") + secondId).toLatin1().constData());
+        header = visualQuickItem(root, (QStringLiteral("terminalPaneAction-drag-") + secondId).toLatin1().constData());
         targetPane = window.findChild<TerminalItem *>(QStringLiteral("terminalViewport-") + firstId);
         if (!header || !targetPane)
             return false;
@@ -231,7 +242,7 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
     settle();
     const QString singlePaneId = controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString();
     auto *singleHandle =
-        visualQuickItem(root, (QStringLiteral("terminalPaneAction-headers-") + singlePaneId).toLatin1().constData());
+        visualQuickItem(root, (QStringLiteral("terminalPaneAction-drag-") + singlePaneId).toLatin1().constData());
     if (singleHandle)
     {
         QPointF start = singleHandle->mapToScene({singleHandle->width() / 2, singleHandle->height() / 2});
@@ -284,9 +295,16 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
         qInfo() << "Detached tab bar is hidden by default:" << detachedHeaderHidden;
         passed = passed && detachedHeaderHidden;
         const auto handle = reinterpret_cast<HWND>(detached->winId()); // NOLINT(performance-no-int-to-ptr)
+        const bool wasDetachedTopmost = (GetWindowLongPtrW(handle, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+        const auto restoreDetachedZOrder = qScopeGuard([&] {
+            if (!wasDetachedTopmost)
+                SetWindowPos(handle, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        });
+        SetWindowPos(handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
         auto *actions = detached->findChild<QQuickItem *>(QStringLiteral("terminalPaneActions-") + paneId);
         const bool toolbarHidden = actions && actions->opacity() < 0.01;
-        QMetaObject::invokeMethod(detached, "toggleWindowControls");
+        QCursor::setPos(detached->mapToGlobal(QPoint{detached->width() / 2, 6}));
+        detached->setProperty("windowControlsVisible", true);
         settle();
         auto *maximizeAction = visualQuickItem(detached->contentItem(), "detachedWindowAction-maximize");
         bool nativeSnapHit = false;
@@ -300,20 +318,32 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
             const LPARAM position = MAKELPARAM(screen.x, screen.y);
             nativeSnapHit = SendMessageW(handle, WM_NCHITTEST, 0, position) == HTMAXBUTTON;
         }
+        QCursor::setPos(detached->mapToGlobal(QPoint{40, 200}));
+        const bool chromeDismissed = settleWindowUntil(
+            [&detached] {
+                return !detached->property("windowChromeInteractive").toBool();
+            },
+            std::chrono::seconds{2});
         const QPointF toolbarOrigin = actions ? actions->mapToScene(QPointF{}) : QPointF{-1, -1};
         sendMouse(*detached, toolbarOrigin + QPointF{12, 12}, Qt::NoButton, Qt::NoButton, QEvent::MouseMove);
-        processWindowEventsFor(std::chrono::milliseconds{120});
-        const bool toolbarRevealed = actions && actions->opacity() > 0.99;
+        const bool toolbarRevealed = settleWindowUntil(
+            [&actions] {
+                return actions && actions->opacity() > 0.99;
+            },
+            std::chrono::seconds{2});
         const auto *toolbarSurface = visualQuickItem(
             detached->contentItem(), (QStringLiteral("terminalPaneToolbarSurface-") + paneId).toLatin1().constData());
         const bool unifiedToolbarSurface = toolbarSurface && toolbarSurface->opacity() > 0.8;
         sendMouse(*detached, {40, 200}, Qt::NoButton, Qt::NoButton, QEvent::MouseMove);
-        processWindowEventsFor(std::chrono::milliseconds{120});
-        const bool toolbarHiddenAgain = actions && actions->opacity() < 0.01;
+        const bool toolbarHiddenAgain = settleWindowUntil(
+            [&actions] {
+                return actions && actions->opacity() < 0.01;
+            },
+            std::chrono::seconds{2});
         qInfo() << "Detached pane toolbar reveals only on hover:" << toolbarHidden << toolbarRevealed
                 << toolbarHiddenAgain << "surface=" << unifiedToolbarSurface << "snap=" << nativeSnapHit;
-        passed =
-            passed && toolbarHidden && toolbarRevealed && toolbarHiddenAgain && unifiedToolbarSurface && nativeSnapHit;
+        passed = passed && chromeDismissed && toolbarHidden && toolbarRevealed && toolbarHiddenAgain
+                 && unifiedToolbarSurface && nativeSnapHit;
         const QPointF captionOrigin = maximizeAction ? maximizeAction->mapToScene(QPointF{}) : QPointF{-1, -1};
         const bool controlsFlush = maximizeAction && qAbs(captionOrigin.y()) < 1
                                    && qAbs(captionOrigin.x() + 2 * maximizeAction->width() - detached->width()) < 1;

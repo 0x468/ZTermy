@@ -231,10 +231,9 @@ Space activate button-like controls once and ignore key auto-repeat.
 - `SessionStatusDot`: the session-state dot (accent while running, pulsing
   while connecting, subtle ink otherwise) shared by tabs, the tab overflow
   menu and pane headers.
-- `TerminalPaneHeader`: the strip above a terminal pane with the status dot,
-  the pane title and the divider hairline. It exposes `paneId`, `paneTitle`
-  and `dragAreaWidth` for the main-window drag capture and moves a detached
-  window by itself.
+- `TerminalPaneToolbar`: the hover-revealed Pane tools, with one dotted
+  layout-drag grip. Window dragging and whole-window return belong to window
+  chrome, not this toolbar; a multi-Pane return acts only on its owning Pane.
 - `PaneFocusEdges`: the active-pane mark in a split workspace. It paints a
   2 px accent only on the edges the pane shares with a sibling (bitmask from
   `TerminalSplitNode.innerEdges`); a single pane and the native window edge
@@ -297,8 +296,8 @@ duration to 0, so transitions become immediate without per-site guards.
 - Terminal rendering and cursor behavior are not driven by decorative QML
   animations.
 - New transient surfaces, including auto-hidden window chrome, must define
-  both enter and exit motion through shared roles. Opacity-only window chrome
-  transitions preserve native hit coordinates and terminal geometry. Keep
+  both enter and exit motion through shared roles. Sliding window chrome
+  updates native hits to match its visible portion without resizing terminals. Keep
   the input shield alive until the surface has fully disappeared; painted
   backgrounds alone do not prevent pointer or wheel events passing through.
 - Main and detached terminal windows paint exactly one workspace tint in the
@@ -322,10 +321,15 @@ duration to 0, so transitions become immediate without per-site guards.
   literals repeated in QML.
 - Terminal Tabs default to equal widths, shrinking together from titles to
   icons; active-title/other-icons remains an option. Hover/selection never
-  changes width. Auto-hide reserves a separate 8 px top strip and reveals an
-  overlay, never resizing the terminal. Pointer-held Tab switching keeps it
+  changes width. Auto-hide reserves a separate 12 logical-pixel top strip and reveals an
+  overlay flush with the window top, covering the reserved strip when expanded
+  and never resizing the terminal. Slide in/out vertically using Motion roles,
+  not opacity fades; reduced/off effects are immediate. Pointer-held Tab switching keeps it
   open. Detached windows contain one workspace with multiple Panes, no Tab
-  strip, and optional overlay window controls (ADR 0135).
+  strip, and default auto-hidden window chrome using the same reserved strip
+  (ADR 0135). Window chrome owns whole-window operations; Pane tools never
+  move or reattach sibling Panes. One dotted Pane handle replaces the former
+  pair of identical window/pane drag icons.
 - Only unused space in the terminal information strip is a secondary window
   drag target. Status/identity/telemetry text and action buttons keep their
   own hit regions. Dragging waits for the platform drag threshold; double-click

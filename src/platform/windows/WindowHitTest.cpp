@@ -41,11 +41,12 @@ HitArea classifyHitTest(const Point point, const Size windowSize, const HitTestM
         const bool onTop = point.y >= 0 && point.y < topBorder;
         const bool onBottom = point.y < windowSize.height && point.y >= windowSize.height - metrics.resizeBorder;
 
-        if (onTop && onLeft)
+        const bool onTopCorner = point.y >= 0 && point.y < metrics.resizeBorder;
+        if (onTopCorner && onLeft)
         {
             return HitArea::TopLeft;
         }
-        if (onTop && onRight)
+        if (onTopCorner && onRight)
         {
             return HitArea::TopRight;
         }
@@ -75,6 +76,10 @@ HitArea classifyHitTest(const Point point, const Size windowSize, const HitTestM
         }
     }
 
+    // The dedicated strip keeps its caption semantics even when controls
+    // appear below it. Native resize edges/corners still take precedence.
+    if (point.y >= 0 && point.y < metrics.dragStripHeight && point.x >= 0 && point.x < windowSize.width)
+        return HitArea::Caption;
     if (metrics.maximizeButton.contains(point))
     {
         return HitArea::MaximizeButton;

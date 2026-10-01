@@ -181,17 +181,25 @@ inline bool verifyDetachedSingleWorkspace(NativeWindow &window, AppController &c
             detached = qobject_cast<QQuickWindow *>(candidate);
     if (!detached)
         return false;
+    // Hover tests need this owned fixture exposed, including caption checks.
+    detached->setGeometry(100, 100, 940, 660);
+    detached->hide();
+    detached->show();
+    const auto fixtureHandle = reinterpret_cast<HWND>(detached->winId()); // NOLINT(performance-no-int-to-ptr)
+    SetWindowPos(fixtureHandle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    processWindowEventsFor(200ms);
     auto *view = detachedVisualQuickItem(detached->contentItem(), QStringLiteral("detachedWorkspaceViewport"));
-    if (!view || view->y() != 0 || detached->property("windowControlsVisible").toBool()
+    const int stripHeight = detached->property("titleTriggerHeight").toInt();
+    if (!view || view->y() != stripHeight || detached->property("windowControlsVisible").toBool()
         || detachedVisualQuickItem(detached->contentItem(), QStringLiteral("workspaceTitle-") + id))
         return false;
     const auto size = view->size();
     bool passed = verifyDetachedSharedTint(window, controller, *detached, outputDirectory);
-    if (!QMetaObject::invokeMethod(detached, "toggleWindowControls"))
+    if (!detached->setProperty("windowControlsVisible", true))
         return false;
     processWindowEventsFor(300ms);
-    passed = view->size() == size && view->y() == 0 && verifyDetachedCaptionStateRoundTrip(*detached, outputDirectory)
-             && passed;
+    passed = view->size() == size && view->y() == stripHeight
+             && verifyDetachedCaptionStateRoundTrip(*detached, outputDirectory) && passed;
     const auto tabCount = controller.terminalTabs().size();
     const int paneCount = controller.terminalWorkspace(id).value(QStringLiteral("paneCount")).toInt();
     const bool created = QMetaObject::invokeMethod(detached, "openLocalTab", Q_ARG(QVariant, QString{}),
@@ -218,6 +226,45 @@ inline bool verifyDetachedSingleWorkspace(NativeWindow &window, AppController &c
             SetWindowPos(detachedHandle, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     });
     SetWindowPos(detachedHandle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    const auto originalPointer = QCursor::pos();
+    const auto restorePointer = qScopeGuard([&] {
+        QCursor::setPos(originalPointer);
+    });
+    QCursor::setPos(detached->mapToGlobal(QPoint{detached->width() / 4, 200}));
+    processWindowEventsFor(550ms);
+    const auto settledSize = view->size();
+    const auto hit = [&](int y) {
+        POINT point{.x = qRound((detached->width() / 2.0) * detached->devicePixelRatio()),
+                    .y = qRound(y * detached->devicePixelRatio())};
+        ClientToScreen(detachedHandle, &point);
+        return SendMessageW(detachedHandle, WM_NCHITTEST, 0, MAKELPARAM(point.x, point.y));
+    };
+    const bool hiddenNativeDrag =
+        !detached->property("windowControlsVisible").toBool() && hit(5) == HTCAPTION && hit(1) == HTTOP;
+    QCursor::setPos(detached->mapToGlobal(QPoint{detached->width() / 2, 6}));
+    processWindowEventsFor(450ms);
+    auto *chrome = detachedVisualQuickItem(detached->contentItem(), QStringLiteral("detachedWindowControls"));
+    const bool revealedNativeDrag = detached->property("windowControlsVisible").toBool() && hit(5) == HTCAPTION
+                                    && chrome && qAbs(chrome->mapToScene(QPointF{}).y()) < 0.01
+                                    && view->size() == settledSize && view->y() == stripHeight;
+    QCursor::setPos(detached->mapToGlobal(QPoint{detached->width() / 2, stripHeight + 18}));
+    processWindowEventsFor(550ms);
+    const bool heldOpen = detached->property("windowControlsVisible").toBool();
+    const bool captured =
+        detached->grabWindow().save(QDir(outputDirectory).filePath(QStringLiteral("detached-chrome-revealed.png")));
+    QCursor::setPos(detached->mapToGlobal(QPoint{detached->width() / 4, 200}));
+    const bool dismissed = settleWindowUntil(
+        [&detached] {
+            return !detached->property("windowControlsVisible").toBool()
+                   && !detached->property("windowChromeInteractive").toBool();
+        },
+        2s);
+    const bool hiddenAgain =
+        dismissed && view->size() == settledSize
+        && detached->grabWindow().save(QDir(outputDirectory).filePath(QStringLiteral("detached-chrome-hidden.png")));
+    qInfo() << "Detached auto-hide: hidden/revealed native drag, held open, hidden unchanged:" << hiddenNativeDrag
+            << revealedNativeDrag << heldOpen << hiddenAgain;
+    passed = hiddenNativeDrag && revealedNativeDrag && heldOpen && hiddenAgain && captured && passed;
     passed = verifyDetachedDropOcclusion(window, *detached, pane) && passed;
     const auto incoming = controller.startLocalTerminalWithShell(QStringLiteral("commandPrompt"));
     const auto incomingPane = controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString();
@@ -238,27 +285,47 @@ inline bool verifyDetachedSingleWorkspace(NativeWindow &window, AppController &c
              && controller.terminalWorkspace(id).value(QStringLiteral("paneCount")).toInt() == paneCount + 1
              && detached->property("tabs").toList().size() == 1 && passed;
     qInfo() << "Detached: no Tabs, overlay controls, new Pane, incoming merge:" << passed;
-    if (!controller.activateTerminalPane(incomingPane) || !controller.closeActiveTerminalPane())
-        return false;
+    // Pane return must leave siblings alive in the original detached owner.
+    auto *paneToolbar = detached->findChild<QQuickItem *>(QStringLiteral("terminalPaneActions-") + incomingPane);
+    if (paneToolbar)
+        paneToolbar->setProperty("revealed", true);
     processWindowEventsFor(250ms);
+    passed = detached->grabWindow().save(QDir(outputDirectory).filePath(QStringLiteral("detached-pane-actions.png")))
+             && passed;
+    auto *paneReturn =
+        detachedVisualQuickItem(detached->contentItem(), QStringLiteral("terminalPaneAction-detach-") + incomingPane);
+    const bool paneClicked = paneReturn && QMetaObject::invokeMethod(paneReturn, "clicked");
+    processWindowEventsFor(400ms);
+    const auto paneTab = controller.activeTerminalTabId();
+    const bool onlyPaneReturned =
+        paneClicked && detached
+        && controller.terminalWorkspace(id).value(QStringLiteral("windowId")).toString() == owner
+        && controller.terminalWorkspace(id).value(QStringLiteral("paneCount")).toInt() == paneCount
+        && controller.terminalWorkspace(paneTab).value(QStringLiteral("windowId")).toString() == QStringLiteral("main")
+        && controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString() == incomingPane;
+    qInfo() << "Pane return keeps sibling sessions and detached window:" << onlyPaneReturned;
+    passed = onlyPaneReturned && passed;
+    if (!controller.closeTerminalTab(paneTab))
+        return false;
+    QCursor::setPos(detached->mapToGlobal(QPoint{detached->width() / 2, 6}));
     detached->setProperty("windowControlsVisible", true);
+    processWindowEventsFor(250ms);
     const auto layout = controller.terminalWorkspace(id).value(QStringLiteral("root"));
-    auto *returnButton =
-        detachedVisualQuickItem(detached->contentItem(), QStringLiteral("terminalPaneAction-detach-") + pane);
+    auto *returnButton = detachedVisualQuickItem(detached->contentItem(), QStringLiteral("detachedReattachAllButton"));
     passed =
         detached->grabWindow().save(QDir(outputDirectory).filePath(QStringLiteral("detached-single-workspace.png")))
         && returnButton
-        && returnButton->property("label").toString()
+        && returnButton->property("accessibleName").toString()
                == QCoreApplication::translate("DetachedTerminalWindow", "Reattach window to main window")
         && passed;
-    const bool clicked = returnButton && QMetaObject::invokeMethod(returnButton, "clicked");
+    const bool clicked = returnButton && QMetaObject::invokeMethod(returnButton, "activated");
     processWindowEventsFor(400ms);
     const auto returned = controller.terminalWorkspace(id);
     const bool reattached =
         clicked && detached.isNull() && returned.value(QStringLiteral("windowId")) == QStringLiteral("main")
         && returned.value(QStringLiteral("root")) == layout && controller.terminalTabs().size() == tabCount
         && window.rootObject()->property("mainWorkspaceId") == id;
-    qInfo() << "Pane toolbar returns whole window without creating another detached owner:" << reattached;
+    qInfo() << "Window chrome returns complete layout without creating another detached owner:" << reattached;
     passed = reattached && passed;
     qInfo() << "Detached single workspace lifecycle passed=" << passed;
     return passed;

@@ -37,6 +37,7 @@
     "file": "file",
     "folder": "folder",
     "follow": "link",
+    "grip": "grip-vertical",
     "highlight": "highlight",
     "history": "history",
     "home": "home",

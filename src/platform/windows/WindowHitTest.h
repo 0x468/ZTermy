@@ -36,6 +36,7 @@ struct HitTestMetrics
     Rect caption;
     Rect maximizeButton;
     int topResizeBorder = -1;
+    int dragStripHeight = 0;
 };
 
 [[nodiscard]] Rect constrainMaximizedClientRect(Rect proposedClientRect, Rect workArea) noexcept;

@@ -64,8 +64,8 @@ public:
     Q_INVOKABLE bool configureDetachedWindow(QQuickWindow *window);
     Q_INVOKABLE void requestRestart() { emit restartRequested(); }
     Q_INVOKABLE void setTitleBarMetrics(qreal titleHeight, qreal captionLeft, qreal controlsLeft, qreal maximizeLeft,
-                                        qreal maximizeWidth);
-    Q_INVOKABLE [[nodiscard]] bool titleBarPointerInside(qreal height) const;
+                                        qreal maximizeWidth, qreal dragStripHeight = 0, bool immersive = false);
+    Q_INVOKABLE [[nodiscard]] bool titleBarPointerInside(qreal height, QQuickWindow *target = nullptr) const;
 
 signals:
     void restartRequested();
@@ -111,6 +111,8 @@ private:
     qreal m_controlsLeft = 0.0;
     qreal m_maximizeLeft = 0.0;
     qreal m_maximizeWidth = 46.0;
+    qreal m_dragStripHeight = 0.0;
+    bool m_immersiveTitleBar = false;
     bool m_maximizeButtonHovered = false;
     bool m_maximizeButtonPressed = false;
     bool m_alwaysOnTop = false;

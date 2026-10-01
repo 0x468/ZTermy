@@ -36,8 +36,6 @@ MouseArea {
     property string paneId: ""
     property string paneTitle: ""
     property bool dragging: false
-    property bool windowMove: false
-    property bool windowMoveSource: false
     NativeDragPreview {
         visible: control.dragging
         globalPosition: control.mapToGlobal(control.pointerPoint.x, control.pointerPoint.y)
@@ -47,12 +45,11 @@ MouseArea {
     function dragSourceAt(global) {
         if (control.hostRoot.currentPage !== "terminal")
             return null;
-        const handle = control.coordinator.viewportAt(control.terminalArea, global, "terminalPaneAction-headers-") || control.coordinator.viewportAt(control.terminalArea, global, "terminalPaneAction-drag-");
+        const handle = control.coordinator.viewportAt(control.terminalArea, global, "terminalPaneAction-drag-");
         if (handle)
             return {
                 "paneId": handle.dragPaneId,
-                "paneTitle": handle.dragPaneTitle,
-                "dragWindow": handle.dragWindow
+                "paneTitle": handle.dragPaneTitle
             };
         return null;
     }
@@ -69,21 +66,13 @@ MouseArea {
         pressPoint = Qt.point(mouse.x, mouse.y);
         pointerPoint = pressPoint;
         dragging = false;
-        windowMove = false;
-        windowMoveSource = source.dragWindow;
         control.coordinator.draggedPaneId = paneId;
     }
     onPositionChanged: mouse => {
-        if (!pressed || !paneId.length || windowMove)
+        if (!pressed || !paneId.length)
             return;
         pointerPoint = Qt.point(mouse.x, mouse.y);
         if (!dragging && Math.hypot(mouse.x - pressPoint.x, mouse.y - pressPoint.y) >= 10) {
-            if (windowMoveSource) {
-                windowMove = true;
-                control.coordinator.draggedPaneId = "";
-                control.hostRoot.startSystemMove();
-                return;
-            }
             dragging = true;
         }
         if (dragging)
@@ -94,23 +83,17 @@ MouseArea {
             return;
         const id = paneId;
         paneId = "";
-        if (windowMove) {
-            windowMove = false;
-        } else if (dragging) {
+        if (dragging) {
             control.coordinator.finishPaneDrop(id, mouse.x < 0 || mouse.y < 0 || mouse.x > width || mouse.y > height);
         } else {
             control.coordinator.draggedPaneId = "";
-            if (windowMoveSource) {
-                control.hostRoot.toggleWindowControls();
-            } else if (control.hostRoot.controller.activateTerminalPane(id)) {
+            if (control.hostRoot.controller.activateTerminalPane(id)) {
                 control.hostRoot.focusTerminalAfterLayout();
             }
         }
         dragging = false;
-        windowMove = false;
     }
     function cancelDrag() {
-        windowMove = false;
         control.coordinator.clearTabPreviews();
         paneId = "";
         dragging = false;

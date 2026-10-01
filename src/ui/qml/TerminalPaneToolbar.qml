@@ -12,21 +12,19 @@ RowLayout {
     property int paneCount: 1
     readonly property var hostWindow: root.Window.window
     readonly property bool detachedWindow: hostWindow && hostWindow.windowControlsVisible !== undefined
-    readonly property bool windowControlsVisible: detachedWindow && hostWindow.windowControlsVisible
     property bool zoomed: false
-    property bool revealed: windowControlsVisible
+    property bool revealed: false
     readonly property bool interactionActive: hover.hovered || activeFocus || newPaneMenu.visible
     signal zoomRequested
     signal detachRequested
-    signal toggleWindowControlsRequested
     spacing: 2
     opacity: revealed ? 1 : 0
-    enabled: revealed
+    enabled: opacity > 0
 
     Behavior on opacity {
         NumberAnimation {
-            duration: Motion.enabled ? 70 : 0
-            easing.type: Easing.OutQuad
+            duration: root.revealed ? Motion.enter : Motion.exit
+            easing.type: root.revealed ? Motion.enterEasing : Motion.exitEasing
         }
     }
     HoverHandler {
@@ -39,21 +37,22 @@ RowLayout {
     }
 
     // The model only carries stable identity; labels and visibility are
-    // bound inside the delegate so toggling headers, zoom or pane count
+    // bound inside the delegate so toggling zoom or pane count
     // does not rebuild the array and re-create every button.
     Repeater {
-        model: ["headers", "drag", "zoom", "detach", "copy", "new", "close"]
+        model: ["drag", "zoom", "detach", "copy", "new", "close"]
         delegate: AppIconButton {
             id: button
             required property string modelData
             property string dragPaneId: root.paneId
             property string dragPaneTitle: root.paneTitle
-            property bool dragWindow: modelData === "headers" && root.detachedWindow
             objectName: "terminalPaneAction-" + modelData + "-" + root.paneId
             visible: {
                 switch (modelData) {
                 case "drag":
-                    return root.detachedWindow && root.paneCount > 1;
+                    return !root.detachedWindow || root.paneCount > 1;
+                case "detach":
+                    return !root.detachedWindow || root.paneCount > 1;
                 case "zoom":
                 case "close":
                     return root.paneCount > 1;
@@ -65,14 +64,12 @@ RowLayout {
             Layout.preferredHeight: 28
             label: {
                 switch (modelData) {
-                case "headers":
-                    return root.detachedWindow ? (root.windowControlsVisible ? qsTr("Hide window controls — drag to move window") : qsTr("Show window controls — drag to move window")) : qsTr("Drag pane");
                 case "drag":
                     return qsTr("Drag pane");
                 case "zoom":
                     return root.zoomed ? qsTr("Restore pane layout") : qsTr("Zoom this pane within its tab");
                 case "detach":
-                    return root.detachedWindow ? qsTranslate("DetachedTerminalWindow", "Reattach window to main window") : qsTr("Detach terminal pane");
+                    return root.detachedWindow ? qsTr("Return this pane to main window") : qsTr("Detach terminal pane");
                 case "copy":
                     return qsTr("Copy pane — new session, same profile or Shell");
                 case "new":
@@ -81,17 +78,13 @@ RowLayout {
                     return qsTr("Close this pane");
                 }
             }
-            iconName: modelData === "headers" || modelData === "drag" ? "list" : modelData === "zoom" ? "locate" : modelData === "detach" ? "external-link" : modelData === "copy" ? "copy" : modelData === "new" ? "plus" : "close"
-            selected: (modelData === "headers" && root.windowControlsVisible) || (modelData === "zoom" && root.zoomed)
+            iconName: modelData === "drag" ? "grip" : modelData === "zoom" ? "locate" : modelData === "detach" ? (root.detachedWindow ? "chevron-left" : "external-link") : modelData === "copy" ? "copy" : modelData === "new" ? "plus" : "close"
+            selected: modelData === "zoom" && root.zoomed
             onWorkspace: true
             iconColor: selected ? Theme.accent : Theme.workspaceText
             toolTipEnabled: !newPaneMenu.visible
             onClicked: {
                 switch (modelData) {
-                case "headers":
-                    if (root.detachedWindow)
-                        root.toggleWindowControlsRequested();
-                    break;
                 case "zoom":
                     root.zoomRequested();
                     break;

@@ -366,32 +366,39 @@ bool NativeWindow::applyAppearance(const QString &backdropPreference, const bool
 }
 
 void NativeWindow::setTitleBarMetrics(const qreal titleHeight, const qreal captionLeft, const qreal controlsLeft,
-                                      const qreal maximizeLeft, const qreal maximizeWidth)
+                                      const qreal maximizeLeft, const qreal maximizeWidth, const qreal dragStripHeight,
+                                      const bool immersive)
 {
     m_titleHeight = titleHeight;
     m_captionLeft = captionLeft;
     m_controlsLeft = controlsLeft;
     m_maximizeLeft = maximizeLeft;
     m_maximizeWidth = maximizeWidth;
+    m_dragStripHeight = dragStripHeight;
+    m_immersiveTitleBar = immersive;
     qCDebug(windowLog) << "title bar metrics"
                        << "height=" << m_titleHeight << "captionLeft=" << m_captionLeft
                        << "controlsLeft=" << m_controlsLeft << "maximizeLeft=" << m_maximizeLeft
                        << "maximizeWidth=" << m_maximizeWidth << "dpr=" << devicePixelRatio();
 }
 
-bool NativeWindow::titleBarPointerInside(const qreal height) const
+bool NativeWindow::titleBarPointerInside(const qreal height, QQuickWindow *target) const
 {
-    if (!isVisible() || visibility() == QWindow::Minimized)
+    const auto *window = target ? target : this;
+    if (!window->isVisible() || window->visibility() == QWindow::Minimized)
         return false;
-    const auto position = QCursor::pos();
-    const auto local = mapFromGlobal(position);
     POINT nativePosition{};
     if (!GetCursorPos(&nativePosition))
         return false;
     const HWND hovered = WindowFromPoint(nativePosition);
-    const auto handle = reinterpret_cast<HWND>(winId()); // NOLINT(performance-no-int-to-ptr)
-    return hovered != nullptr && GetAncestor(hovered, GA_ROOT) == handle && local.x() >= 0 && local.x() < width()
-           && local.y() >= 0 && local.y() < height;
+    const auto handle = reinterpret_cast<HWND>(window->winId()); // NOLINT(performance-no-int-to-ptr)
+    // Use one physical-pointer sample for ownership and bounds. Qt's cached
+    // cursor position may instead describe a delivered/synthesized event.
+    if (hovered == nullptr || GetAncestor(hovered, GA_ROOT) != handle || !ScreenToClient(handle, &nativePosition))
+        return false;
+    const auto scale = window->devicePixelRatio();
+    return nativePosition.x >= 0 && nativePosition.x < qRound(window->width() * scale) && nativePosition.y >= 0
+           && nativePosition.y < qRound(height * scale);
 }
 
 bool NativeWindow::event(QEvent *event)
@@ -672,7 +679,8 @@ LRESULT NativeWindow::nativeHitTest(const HWND windowHandle, const LPARAM lParam
                 .height = qRound(m_titleHeight * scale),
             },
         // Leave a usable caption below the resize edge in immersive mode.
-        .topResizeBorder = m_maximizeWidth == 0 && m_captionLeft == 0 ? qRound(2 * scale) : -1,
+        .topResizeBorder = m_immersiveTitleBar || m_dragStripHeight > 0 ? qRound(2 * scale) : -1,
+        .dragStripHeight = qRound(m_dragStripHeight * scale),
     };
 
     const auto area =

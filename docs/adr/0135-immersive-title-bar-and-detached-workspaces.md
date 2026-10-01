@@ -7,11 +7,13 @@
 ## Decision
 
 The main window supports a persistent title bar and an opt-in auto-hide mode.
-Auto-hide reserves a separate eight-logical-pixel strip above the terminal.
+Auto-hide reserves a separate twelve-logical-pixel strip above the terminal.
 Only that strip reveals the title bar; terminal hover does not. The top two
 logical pixels retain native resize hit testing, leaving the remainder usable
-for native window dragging. The expanded title bar overlays content instead
-of changing its geometry or terminal grid.
+for native window dragging while chrome is hidden. Corner resize targets retain
+their normal extent. Expanded chrome is flush with the window top, covering the
+reserved strip and overlaying content without changing its geometry or terminal
+grid. Visible controls replace hidden strip dragging at their locations.
 
 Hover reveals after 150 ms. Leaving starts a 300 ms dismissal delay. Switching
 Tabs never resets hover/reveal state. Pointer presence anywhere in the revealed
@@ -20,10 +22,12 @@ focus keeps it open. Hidden controls have no native maximize/Snap hit target.
 The overlay uses an opaque themed floating surface so terminal text cannot
 bleed through at zero material opacity. Persistent terminal chrome and selected
 Tabs do not stack another opaque background over the workspace material.
-Reveal/dismiss use shared Motion enter/exit fades without shifting native hit
-coordinates. The entire painted bar accepts pointer and wheel input, including
-gaps between controls and the fade-out interval; background gaps drag the
-window rather than activating the covered terminal or form.
+Reveal/dismiss slide down from and up past the window top using shared Motion
+enter/exit roles, without fading opacity. Reduced/off effects show or hide
+immediately. Native caption/Snap targets track the visible height, so exposed
+terminal rows cannot hit an offscreen button. A stationary input shield remains
+until dismissal finishes; background gaps drag the window rather than activating
+the covered terminal or form.
 
 Tab widths support equal-width titles that shrink together (default) and the
 previous active-title/other-icons policy. Equal widths range from 184 to 38
@@ -33,12 +37,16 @@ accent indicator rather than a bright opaque pill.
 
 A detached window owns one workspace/Tab with multiple Panes. It has no Tab
 strip or Tab insertion targets. New/duplicate actions create Panes. Incoming
-layouts merge into a target Pane. Window controls are an optional overlay;
-their handle always moves the whole window, without implicit reattachment.
-Multi-Pane detached windows have a separate layout-drag handle. Explicit
-reattach preserves the entire Pane layout as one main-window Tab.
-The Pane toolbar's transfer action is context-sensitive: detach in Main,
-return the entire workspace in a detached window. Both window types paint one
+layouts merge into a target Pane. Detached windows default to auto-hidden
+window chrome flush with the top over the same reserved strip, with shared enter/exit motion and
+input shielding through dismissal. Pointer-held chrome remains visible and
+never changes the terminal grid. Moving the window never implicitly reattaches it.
+Window chrome owns whole-window reattach, preserving the entire layout as one
+main-window Tab. Pane toolbars own only Pane operations: one dotted layout-drag
+handle, zoom, detach/return-this-Pane, copy, new and close. A detached single-Pane
+window suppresses redundant Pane drag/return actions. Returning one Pane from
+a multi-Pane window extracts a main-window Tab transactionally without restarting
+its session or moving siblings. Both window types paint one
 identical theme tint in the QML scene above the native material, not a tint in
 the native window clear colour that appearance configuration can overwrite.
 

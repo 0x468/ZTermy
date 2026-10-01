@@ -205,6 +205,22 @@ QtObject {
         WindowControl.present(hostRoot.windowChrome);
     }
 
+    function reattachPane(window, paneId) {
+        if (!hostRoot.findTerminalPane(window.workspace.root, paneId))
+            return;
+        if ((window.workspace.paneCount || 1) === 1) {
+            reattachAll(window);
+            return;
+        }
+        // Extract is transactional and preserves the existing session. The
+        // new single-Pane workspace belongs to Main; its siblings stay here.
+        const id = hostRoot.controller.extractTerminalPaneToTab(paneId);
+        if (id.length > 0) {
+            hostRoot.activateMainTerminal(id);
+            WindowControl.present(hostRoot.windowChrome);
+        }
+    }
+
     function clearTabPreviews(keepWindowId = "") {
     // Detached windows have one workspace; there is no Tab strip to preview.
     }
