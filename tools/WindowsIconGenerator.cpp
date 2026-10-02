@@ -45,9 +45,15 @@ void appendDword(std::vector<std::uint8_t> &bytes, const std::uint32_t value)
     appendWord(bytes, static_cast<std::uint16_t>((value >> 16U) & 0xffffU));
 }
 
-[[nodiscard]] QImage renderSvg(const QString &path, const std::uint32_t size)
+[[nodiscard]] QImage renderSvg(const QString &path, const std::uint32_t size, const QString &color)
 {
-    QSvgRenderer renderer(path);
+    QFile source(path);
+    if (!source.open(QIODevice::ReadOnly))
+        throw std::runtime_error("could not read SVG source");
+    auto svg = source.readAll();
+    if (!color.isEmpty())
+        svg.replace("currentColor", color.toUtf8());
+    QSvgRenderer renderer(svg);
     if (!renderer.isValid())
     {
         throw std::runtime_error(QStringLiteral("could not load SVG source: %1").arg(path).toStdString());
@@ -98,7 +104,7 @@ void writeFile(const QString &path, const std::vector<std::uint8_t> &contents)
 }
 
 [[nodiscard]] std::vector<IconImage> renderIconLayers(const QString &fullSource, const QString &smallSource,
-                                                      const QString &pngDirectory)
+                                                      const QString &pngDirectory, const QString &color)
 {
     if (!QDir().mkpath(pngDirectory))
     {
@@ -110,7 +116,7 @@ void writeFile(const QString &path, const std::vector<std::uint8_t> &contents)
     for (const std::uint32_t size : iconSizes)
     {
         const QString &source = size <= 20U ? smallSource : fullSource;
-        IconImage image{.size = size, .png = encodePng(renderSvg(source, size))};
+        IconImage image{.size = size, .png = encodePng(renderSvg(source, size, color))};
         writeFile(QDir(pngDirectory).filePath(QStringLiteral("ztermy-%1.png").arg(size)), image.png);
         images.push_back(std::move(image));
     }
@@ -167,7 +173,7 @@ int main(int argc, char *argv[]) noexcept
 {
     QCoreApplication application(argc, argv);
     const QStringList arguments = QCoreApplication::arguments();
-    if (arguments.size() != 5)
+    if (arguments.size() != 5 && arguments.size() != 6)
     {
         std::cerr << "usage: ztermy_windows_icon_generator <full.svg> <small.svg> <output.ico> <png-directory>\n";
         return 1;
@@ -185,7 +191,8 @@ int main(int argc, char *argv[]) noexcept
             throw std::runtime_error(
                 QStringLiteral("could not create %1").arg(outputInfo.absolutePath()).toStdString());
         }
-        const std::vector<IconImage> images = renderIconLayers(fullSource, smallSource, pngDirectory);
+        const QString color = arguments.size() == 6 ? arguments.at(5) : QString{};
+        const std::vector<IconImage> images = renderIconLayers(fullSource, smallSource, pngDirectory, color);
         writeFile(outputPath, createIcon(images));
     }
     catch (const std::exception &error)

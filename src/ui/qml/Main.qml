@@ -871,6 +871,11 @@ Rectangle {
         }
     }
 
+    LaunchAuthenticationDialog {
+        id: launchAuthenticationDialog
+        controller: root.controller
+    }
+
     Connections {
         target: root.controller
 
@@ -928,6 +933,24 @@ Rectangle {
 
         function onLocalDirectoryOpened(tabId) {
             root.activateMainTerminal(tabId);
+        }
+
+        function onLaunchOpened(workspaceId, detached) {
+            if (!detached)
+                root.activateMainTerminal(workspaceId);
+        }
+
+        function onLaunchAuthenticationRequested(details) {
+            WindowControl.present(root.windowChrome);
+            launchAuthenticationDialog.openFor(details);
+        }
+
+        function onLaunchFailed(message) {
+            WindowControl.present(root.windowChrome);
+            terminalActionToast.present({
+                title: qsTr("Terminal launch failed"),
+                message: message
+            });
         }
 
         function onTransferNotificationRequested(notification) {

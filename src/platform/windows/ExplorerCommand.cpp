@@ -92,10 +92,20 @@ public:
         try
         {
             std::wstring path;
-            const HRESULT result = executablePath(path);
+            HRESULT result = S_OK;
+            if (m_shell >= 0)
+            {
+                path.resize(32768);
+                const DWORD length = GetModuleFileNameW(moduleHandle, path.data(), static_cast<DWORD>(path.size()));
+                if (length == 0 || length >= path.size())
+                    return HRESULT_FROM_WIN32(ERROR_BAD_PATHNAME);
+                path.resize(length);
+            }
+            else
+                result = executablePath(path);
             if (FAILED(result))
                 return result;
-            path = L"\"" + path + L"\",0";
+            path = L"\"" + path + L"\"," + (m_shell < 0 ? L"0" : std::to_wstring(-101 - m_shell));
             return SHStrDupW(path.c_str(), icon);
         }
         catch (const std::bad_alloc &)

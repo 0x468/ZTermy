@@ -24,6 +24,7 @@
 #include "application/terminal/TerminalSessionState.h"
 #include "application/terminal/WindowsLocalShellCatalog.h"
 #include "application/workbench/LocalFileBrowserController.h"
+#include "core/config/ApplicationLaunchRequest.h"
 #include "core/config/ApplicationPaths.h"
 #include "core/config/ApplicationSettings.h"
 #include "core/config/TerminalThemeCatalog.h"
@@ -448,6 +449,8 @@ public:
 
     Q_INVOKABLE QString startLocalTerminal();
     [[nodiscard]] QString openLocalDirectory(const QString &directory, const QString &shellId = {});
+    [[nodiscard]] bool openLaunchRequest(const config::ApplicationLaunchRequest &request);
+    Q_INVOKABLE bool completeLaunchAuthentication(const QString &secret, const QString &proxySecret, bool cancelled);
     void setGlobalShortcutHandler(std::function<bool(const QString &, bool)> handler);
     Q_INVOKABLE QVariantMap terminalWindowState(const QString &id) const;
     Q_INVOKABLE bool rememberTerminalWindow(const QVariantMap &state);
@@ -745,6 +748,9 @@ signals:
     void actionRegistryChanged();
     void actionRequested(const QString &actionId);
     void localDirectoryOpened(const QString &tabId);
+    void launchAuthenticationRequested(const QVariantMap &details);
+    void launchFailed(const QString &message);
+    void launchOpened(const QString &workspaceId, bool detached);
     void activeTerminalTabChanged();
     void activeTerminalTabPinnedChanged();
     void terminalWorkspaceChanged();
@@ -937,6 +943,21 @@ private:
     [[nodiscard]] bool closeTerminalPane(const QString &paneId);
     void recordClosedTerminal(const QString &workspaceId);
     [[nodiscard]] bool startSshConnection(ssh::SshConnectionRequest request, QString sourceProfileId = {});
+    [[nodiscard]] bool startLaunchConnection(const config::ApplicationLaunchRequest &launch,
+                                             security::SensitiveByteArray secret, const QString &proxySecret = {});
+    void processNextLaunch();
+    void finishLaunchCredentialRead(const config::ApplicationLaunchRequest &launch,
+                                    const std::shared_ptr<security::SensitiveByteArray> &secret, bool readable);
+    Q_SIGNAL void launchCredentialReadCompleted(const config::ApplicationLaunchRequest &launch,
+                                                const std::shared_ptr<security::SensitiveByteArray> &secret,
+                                                bool readable);
+    QThreadPool m_launchWorker;
+    QList<config::ApplicationLaunchRequest> m_launchQueue;
+    std::optional<config::ApplicationLaunchRequest> m_pendingLaunch;
+    bool m_launchBusy = false;
+    [[nodiscard]] std::optional<ssh::SshConnectionRequest>
+    connectionRequestForProfileBytes(const ssh::SshProfile &profile, security::SensitiveByteArray secret,
+                                     const QString &proxySecret = {});
     [[nodiscard]] std::optional<ssh::SshConnectionRequest> connectionRequestForProfile(const ssh::SshProfile &profile,
                                                                                        const QString &secret = {},
                                                                                        const QString &proxySecret = {});

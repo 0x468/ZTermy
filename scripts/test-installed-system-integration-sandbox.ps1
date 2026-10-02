@@ -162,7 +162,14 @@ try {
     # Every run needs a clean settings/workspace store. Reusing a prior capture
     # directory restores its maximized window and invalidates the smoke's normal
     # initial-window precondition; captures are evidence, not an input fixture.
-    $smoke = Start-Process -FilePath $executable -ArgumentList @('--system-integration-smoke','--data-dir',$runtimeData) -WindowStyle Hidden -PassThru -Wait
+    # This is an interactive native-window acceptance test, not a background
+    # helper. Hidden startup changes Windows' first ShowWindow/foreground rules.
+    $smoke = Start-Process -FilePath $executable -ArgumentList @('--system-integration-smoke','--data-dir',$runtimeData) -WindowStyle Normal -RedirectStandardError (Join-Path $results 'installed-native-smoke.stderr.log') -PassThru
+    # Windows PowerShell 5.1 needs a retained process handle for a reliable
+    # ExitCode after WaitForExit; a missing code must never be treated as zero.
+    $null = $smoke.Handle
+    $smoke.WaitForExit()
+    if ($null -eq $smoke.ExitCode) { throw 'Installed native/UI smoke returned no process exit code.' }
     if ($smoke.ExitCode -ne 0) { throw "Installed native/UI integration smoke failed: $($smoke.ExitCode)" }
     Assert-ExplorerCommand
     $uninstall = Run-Setup @('uninstall','--install-root',$root,'--state-root',$state,'--silent')

@@ -2,31 +2,81 @@
 #include "core/config/WindowsIntegrationSettings.h"
 
 #include <QDir>
-#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <algorithm>
 
 namespace ztermy::config
 {
 namespace
 {
-[[nodiscard]] std::expected<QString, QString> existingDirectory(const QString &path)
+bool safeText(const QString &value, const qsizetype limit)
 {
-    if (path.isEmpty() || path.contains(QChar::Null) || path.contains(u'\n') || path.contains(u'\r'))
-        return std::unexpected(QStringLiteral("--open-directory requires an existing directory"));
-    const QFileInfo info(path);
-    if (!info.isDir())
-        return std::unexpected(QStringLiteral("The requested directory does not exist or is not accessible"));
-    return QDir::cleanPath(info.absoluteFilePath());
+    return value.size() <= limit && std::ranges::none_of(value, [](QChar c) {
+               return c.isNull() || c.category() == QChar::Other_Control;
+           });
+}
+bool safeFile(const QString &value)
+{
+    return value.isEmpty() || (safeText(value, 32768) && QDir::isAbsolutePath(value));
 }
 } // namespace
 
+bool ApplicationLaunchRequest::hasTarget() const noexcept
+{
+    return !directory.isEmpty() || !host.isEmpty() || !profileId.isEmpty();
+}
+
+bool ApplicationLaunchRequest::valid() const
+{
+    if ((windowMode != QStringLiteral("main") && windowMode != QStringLiteral("detached"))
+        || (!hasTarget() && windowMode != QStringLiteral("main")) || (hasTarget() && background) || !safeFile(directory)
+        || !safeFile(identityFile) || !safeFile(certificateFile) || !safeFile(passwordFile) || !safeText(profileId, 256)
+        || !safeText(host, 1024) || !safeText(username, 256) || !safeText(remoteDirectory, 4096) || port < 1
+        || port > 65535)
+        return false;
+    const bool ssh = !host.isEmpty() || !profileId.isEmpty();
+    if ((!directory.isEmpty() && ssh) || (!shellId.isEmpty() && (directory.isEmpty() || !validExplorerShellId(shellId)))
+        || (!host.isEmpty()
+            && (!profileId.isEmpty() || username.isEmpty() || host.contains(u' ') || username.contains(u' ')))
+        || (!profileId.isEmpty()
+            && (!username.isEmpty() || !authentication.isEmpty() || !identityFile.isEmpty()
+                || !certificateFile.isEmpty() || port != 22))
+        || (!ssh
+            && (!username.isEmpty() || !authentication.isEmpty() || !identityFile.isEmpty()
+                || !certificateFile.isEmpty() || !passwordFile.isEmpty() || !remoteDirectory.isEmpty() || port != 22)))
+        return false;
+    if (!host.isEmpty())
+    {
+        if (authentication != QStringLiteral("password") && authentication != QStringLiteral("private-key")
+            && authentication != QStringLiteral("agent"))
+            return false;
+        if ((authentication == QStringLiteral("private-key")) != !identityFile.isEmpty()
+            || (!certificateFile.isEmpty() && identityFile.isEmpty())
+            || (authentication == QStringLiteral("agent") && !passwordFile.isEmpty()))
+            return false;
+    }
+    // Credential files are local regular files, never devices, UNC paths or named pipes.
+    const auto credentialPath = QDir::fromNativeSeparators(passwordFile);
+    return !credentialPath.startsWith(QStringLiteral("//")) && credentialPath.indexOf(u':', 2) < 0;
+}
+
 QByteArray ApplicationLaunchRequest::toMessage() const
 {
-    return QJsonDocument(QJsonObject{{QStringLiteral("version"), 2},
+    return QJsonDocument(QJsonObject{{QStringLiteral("version"), 3},
                                      {QStringLiteral("directory"), directory},
                                      {QStringLiteral("background"), background},
-                                     {QStringLiteral("shellId"), shellId}})
+                                     {QStringLiteral("shellId"), shellId},
+                                     {QStringLiteral("windowMode"), windowMode},
+                                     {QStringLiteral("profileId"), profileId},
+                                     {QStringLiteral("host"), host},
+                                     {QStringLiteral("username"), username},
+                                     {QStringLiteral("port"), port},
+                                     {QStringLiteral("authentication"), authentication},
+                                     {QStringLiteral("identityFile"), identityFile},
+                                     {QStringLiteral("certificateFile"), certificateFile},
+                                     {QStringLiteral("passwordFile"), passwordFile},
+                                     {QStringLiteral("remoteDirectory"), remoteDirectory}})
                .toJson(QJsonDocument::Compact)
            + '\n';
 }
@@ -34,86 +84,50 @@ QByteArray ApplicationLaunchRequest::toMessage() const
 std::expected<ApplicationLaunchRequest, QString> ApplicationLaunchRequest::fromMessage(const QByteArray &message)
 {
     if (message == "activate\n")
-        return ApplicationLaunchRequest{}; // Previous launches remain readable.
+        return ApplicationLaunchRequest{};
     if (message.size() > 65536)
         return std::unexpected(QStringLiteral("Launch request is too large"));
     const auto document = QJsonDocument::fromJson(message);
     const auto json = document.object();
-    const bool legacy = json.value(QStringLiteral("version")) == QJsonValue(1);
-    if (!document.isObject() || json.size() != (legacy ? 3 : 4)
-        || (!legacy
-            && (json.value(QStringLiteral("version")) != QJsonValue(2)
-                || !json.value(QStringLiteral("shellId")).isString()))
-        || !json.value(QStringLiteral("directory")).isString() || !json.value(QStringLiteral("background")).isBool())
+    const int version = json.value(QStringLiteral("version")).toInt(-1);
+    if (!document.isObject() || json.value(QStringLiteral("version")).toDouble(-1) != version
+        || (version != 1 && version != 2 && version != 3)
+        || json.size()
+               != (version == 1   ? 3
+                   : version == 2 ? 4
+                                  : 14)
+        || !json.value(QStringLiteral("background")).isBool())
         return std::unexpected(QStringLiteral("Invalid launch request"));
-    ApplicationLaunchRequest result{.directory = json.value(QStringLiteral("directory")).toString(),
-                                    .background = json.value(QStringLiteral("background")).toBool(),
-                                    .shellId = legacy ? QString{} : json.value(QStringLiteral("shellId")).toString()};
-    if (!result.shellId.isEmpty() && (result.directory.isEmpty() || !validExplorerShellId(result.shellId)))
-        return std::unexpected(QStringLiteral("Invalid shell launch request"));
-    if (!result.directory.isEmpty())
-    {
-        if (!QDir::isAbsolutePath(result.directory) || result.background || result.directory.contains(QChar::Null)
-            || result.directory.contains(u'\n') || result.directory.contains(u'\r'))
-            return std::unexpected(QStringLiteral("Invalid directory launch request"));
-        // Do not stat paths (in particular UNC paths) on the receiving GUI thread.
-        result.directory = QDir::cleanPath(result.directory);
-    }
-    return result;
-}
-
-std::expected<ApplicationLaunchRequest, QString> ApplicationLaunchRequest::fromArguments(const QStringList &arguments)
-{
     ApplicationLaunchRequest result;
-    bool directorySpecified = false;
-    bool shellSpecified = false;
-    for (qsizetype index = 1; index < arguments.size(); ++index)
+    result.background = json.value(QStringLiteral("background")).toBool();
+    const auto read = [&](const QString &key, QString &output) {
+        const auto value = json.value(key);
+        if (!value.isString())
+            return false;
+        output = value.toString();
+        return true;
+    };
+    if (!read(QStringLiteral("directory"), result.directory)
+        || (version >= 2 && !read(QStringLiteral("shellId"), result.shellId)))
+        return std::unexpected(QStringLiteral("Invalid launch request"));
+    if (version == 3)
     {
-        const auto &argument = arguments[index];
-        if (argument == QStringLiteral("--background"))
-            result.background = true;
-        else if (argument == QStringLiteral("--local-shell") || argument.startsWith(QStringLiteral("--local-shell=")))
-        {
-            if (shellSpecified)
-                return std::unexpected(QStringLiteral("--local-shell may only be specified once"));
-            shellSpecified = true;
-            if (argument == QStringLiteral("--local-shell"))
-            {
-                if (++index >= arguments.size())
-                    return std::unexpected(QStringLiteral("--local-shell requires a built-in shell id"));
-                result.shellId = arguments[index];
-            }
-            else
-                result.shellId = argument.sliced(QStringLiteral("--local-shell=").size());
-            if (!validExplorerShellId(result.shellId))
-                return std::unexpected(QStringLiteral("Unknown built-in local shell"));
-        }
-        else if (argument == QStringLiteral("--open-directory")
-                 || argument.startsWith(QStringLiteral("--open-directory=")))
-        {
-            if (directorySpecified)
-                return std::unexpected(QStringLiteral("--open-directory may only be specified once"));
-            directorySpecified = true;
-            QString path;
-            if (argument == QStringLiteral("--open-directory"))
-            {
-                if (++index >= arguments.size())
-                    return std::unexpected(QStringLiteral("--open-directory requires a path"));
-                path = arguments[index];
-            }
-            else
-                path = argument.sliced(QStringLiteral("--open-directory=").size());
-            auto directory = existingDirectory(path);
-            if (!directory)
-                return std::unexpected(directory.error());
-            result.directory = *directory;
-        }
+        if (!read(QStringLiteral("windowMode"), result.windowMode)
+            || !read(QStringLiteral("profileId"), result.profileId) || !read(QStringLiteral("host"), result.host)
+            || !read(QStringLiteral("username"), result.username)
+            || !read(QStringLiteral("authentication"), result.authentication)
+            || !read(QStringLiteral("identityFile"), result.identityFile)
+            || !read(QStringLiteral("certificateFile"), result.certificateFile)
+            || !read(QStringLiteral("passwordFile"), result.passwordFile)
+            || !read(QStringLiteral("remoteDirectory"), result.remoteDirectory)
+            || !json.value(QStringLiteral("port")).isDouble())
+            return std::unexpected(QStringLiteral("Invalid launch request"));
+        result.port = json.value(QStringLiteral("port")).toInt(-1);
+        if (json.value(QStringLiteral("port")).toDouble() != result.port)
+            return std::unexpected(QStringLiteral("Invalid launch request"));
     }
-    // An explicit directory always takes precedence over login's hidden launch.
-    if (shellSpecified && !directorySpecified)
-        return std::unexpected(QStringLiteral("--local-shell requires --open-directory"));
-    if (directorySpecified)
-        result.background = false;
+    if (!result.valid())
+        return std::unexpected(QStringLiteral("Invalid launch request"));
     return result;
 }
 } // namespace ztermy::config

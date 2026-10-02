@@ -57,6 +57,15 @@
 
 ## Verification
 
+- Automated local-Shell tests must use `ZTERMY_TEST_ISOLATED_SHELLS=1`:
+  PowerShell `-NoProfile`, CMD `/D`, and clean Nushell/Bash startup. Never load
+  the developer's profile or CMD AutoRun/Clink as an incidental test dependency.
+  Keep normal user launches unchanged. Check Windows Application Popup events
+  after terminal runtime gates; new DLL-init failures fail acceptance. Do not
+  hide error dialogs or kill unrelated user Shell processes to make tests pass.
+  Build via `scripts/run_isolated_build.ps1` in an MSVC developer environment:
+  CMake/Ninja also generates CMD wrappers; they must use `/D /C`, not `/C`.
+  Use `scripts/run_isolated_shell_regression.ps1` for the native-event gate.
 - Configure and build through CMake presets.
 - Run formatting, static analysis, unit tests, and focused runtime checks before
   declaring work complete.

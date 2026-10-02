@@ -131,3 +131,45 @@ Setup 哈希：140 个受管文件哈希、传统 handler 注册、未授权身�
 快捷键与菜单设置 UI/native smoke、卸载全部通过。卸载保留用户未知文件和共享信任；
 只关闭本轮 Sandbox，未在宿主机实际安装。证据为
 `build/system-integration-sandbox/results/installed-integration-trust-result.json`。
+
+## 2026-10-02：Shell 图标与外部启动最终验收
+
+原生 Shell 子菜单使用各 Shell 的内置图标，一级入口保留应用图标；资源来自
+已接受的图标依赖。命令行支持目录/指定 Shell、SSH URL 或已保存主机、认证
+参数和主窗口/独立窗口启动，详见 `docs/COMMAND_LINE.md`。IPC 保留旧版本
+兼容性；不支持明文密码 argv，凭据文件有界异步读取，临时连接不写入主机库。
+
+本轮最终带界面 Setup 位于
+`build/setup-launch-final-20261002/setup/Ztermy-0.5.2/Ztermy-0.5.2-Setup.exe`，
+大小 47,533,701 字节，SHA-256 为
+`b50510a6b7de01b6852d0c52da02801e00c84b286de56a948e5739097e993b0a`。
+staging 的主 EXE 摘要与最终动态 Release 完全相同，未包含 PFX/P12、私钥、
+`.signing`、portable.flag 或用户数据。本包仍为 0.5.2 本地测试包，未发布。
+
+- 最终 Debug 全量 CTest 130/130，89.55 秒；静态 Release 130/130，75.61 秒。
+  归属及相邻六项测试也通过。两套最终矩阵顺序运行。
+- 全量静态 Release clang-tidy、C++ 格式、QML 质量、翻译/图标门禁通过；
+  运行时头文件最后增量改动后补跑 main 翻译单元分析、格式和打包检查。
+- 静态 portable ZIP 与 MSI 已重新生成，MSI 结构契约通过；WiX ICE 沿用
+  已有构建缓存的跳过配置，未将 ICE 验证计为通过。
+- 真实回环 SSH 验证密码、加密私钥、OpenSSH 用户证书、正常主机密钥确认、
+  远端目录字面量转义及独立窗口。Windows MCP 实际桌面启动的系统集成
+  smoke 通过，截图确认终端内容，避免把首帧空白当验收证据。
+- 最终 Sandbox 验收开始于 `2026-10-02T02:37:31.6974422Z`，结果匹配上述
+  Setup 哈希：140 文件哈希、传统菜单、未信任拒绝与回滚、授权后身份注册、
+  重装、真实版本变化升级、注入失败后恢复文件/ledger/注册、安装版原生
+  窗口/设置/IPC、真实 COM 和卸载全部通过；未知文件与共享信任保留。
+  证据：`build/setup-launch-final-20261002/sandbox-verified/results/installed-integration-trust-result.json`。
+  所有证书信任和系统注册操作仅在 VM 内执行。
+
+Clink 错误不能只依赖一次测试未复现：现已隔离测试 Shell 的 profile/AutoRun，
+并通过 `scripts/run_isolated_build.ps1` 规范化 CMake/Ninja 的 CMD wrapper 为
+`/D /C`。回归脚本将新增 Windows Shell DLL-init 错误判失败。自本轮构建入口
+隔离后，后续全量分析、编译、回归和实际桌面验收无新增 Clink `0xc0000142`。
+正常用户启动配置不变；具体复发经过及强制规则见 `docs/testing/SHELL_TEST_ISOLATION.md`。
+
+现存代码结构预算门禁仍失败：main 4900（基线 4898，但 HEAD 原为 4918，本轮
+减少 18 行）、TitleBarRuntimeSmoke 418、WorkbenchRuntimeSmoke 665、
+SettingsPane 3466。未扩大基线或绕过该门禁，不宣称所有结构检查已通过。
+WinSCP 配置模板基于官方调用契约，未计为 WinSCP GUI 实测；跨屏混合 DPI
+及长时间真实远端使用仍需要设备验收。

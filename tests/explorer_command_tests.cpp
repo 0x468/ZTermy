@@ -6,6 +6,7 @@
 #include "platform/windows/ExplorerMenuSnapshot.h"
 
 #include <windows.h>
+#include <shellapi.h>
 #include <shlobj.h>
 #include <wrl.h>
 
@@ -132,6 +133,10 @@ void ExplorerCommandTests::enumeratesOnlyConfiguredShellsAndRejectsMalformedSnap
     EXPCMDFLAGS flags{};
     QCOMPARE(root->GetFlags(&flags), S_OK);
     QCOMPARE(flags, ECF_HASSUBCOMMANDS);
+    PWSTR icon = nullptr;
+    QCOMPARE(root->GetIcon(nullptr, &icon), S_OK);
+    QVERIFY(QString::fromWCharArray(icon).endsWith(QStringLiteral("ztermy.exe\",0")));
+    CoTaskMemFree(icon);
     ComPtr<IEnumExplorerCommand> children;
     QCOMPARE(root->EnumSubCommands(&children), S_OK);
     ULONG fetched = 0;
@@ -142,6 +147,13 @@ void ExplorerCommandTests::enumeratesOnlyConfiguredShellsAndRejectsMalformedSnap
     QCOMPARE(child->GetTitle(nullptr, &title), S_OK);
     QCOMPARE(QString::fromWCharArray(title), QStringLiteral("Windows PowerShell"));
     CoTaskMemFree(title);
+    QCOMPARE(child->GetIcon(nullptr, &icon), S_OK);
+    QVERIFY(QString::fromWCharArray(icon).endsWith(QStringLiteral("ztermy-explorer-command.dll\",-103")));
+    CoTaskMemFree(icon);
+    HICON nativeIcon = nullptr;
+    QCOMPARE(ExtractIconExW(reinterpret_cast<LPCWSTR>(file.utf16()), -103, nullptr, &nativeIcon, 1), 1U);
+    QVERIFY(nativeIcon != nullptr);
+    QVERIFY(DestroyIcon(nativeIcon));
     QCOMPARE(child->GetFlags(&flags), S_OK);
     QCOMPARE(flags, ECF_DEFAULT);
     ComPtr<IEnumExplorerCommand> nested;
@@ -153,6 +165,16 @@ void ExplorerCommandTests::enumeratesOnlyConfiguredShellsAndRejectsMalformedSnap
     QCOMPARE(child->GetTitle(nullptr, &title), S_OK);
     QCOMPARE(QString::fromWCharArray(title), QStringLiteral("Command Prompt"));
     CoTaskMemFree(title);
+    QCOMPARE(child->GetIcon(nullptr, &icon), S_OK);
+    QVERIFY(QString::fromWCharArray(icon).endsWith(QStringLiteral("ztermy-explorer-command.dll\",-104")));
+    CoTaskMemFree(icon);
+    for (int resource = 101; resource <= 107; ++resource)
+    {
+        nativeIcon = nullptr;
+        QCOMPARE(ExtractIconExW(reinterpret_cast<LPCWSTR>(file.utf16()), -resource, nullptr, &nativeIcon, 1), 1U);
+        QVERIFY(nativeIcon);
+        QVERIFY(DestroyIcon(nativeIcon));
+    }
     child.Reset();
     QCOMPARE(clone->Next(1, &child, &fetched), S_FALSE);
     QCOMPARE(fetched, 0UL);

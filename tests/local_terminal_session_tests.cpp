@@ -1,3 +1,4 @@
+#include "application/terminal/LocalShellTestIsolation.h"
 #include "application/terminal/LocalTerminalSession.h"
 #include "application/terminal/PowerShellShellIntegration.h"
 #include "domain/terminal/GhosttyTerminalEngine.h"
@@ -5,6 +6,7 @@
 
 #include <QDebug>
 #include <QElapsedTimer>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QString>
@@ -115,6 +117,7 @@ class LocalTerminalSessionTests final : public QObject
     Q_OBJECT
 
 private slots:
+    void isolatesTestShellsWithoutChangingNormalLaunches();
     void buildsEphemeralPowerShellIntegrationCommand();
     void emitsPowerShell5CompatibleOscSequences();
     void recognizesLocalShellExit();
@@ -134,6 +137,42 @@ private slots:
     void processesLargeOutputWithoutStarvingEventLoop();
     void survivesSustainedInteractionWithoutLatencyGrowth();
 };
+
+void LocalTerminalSessionTests::isolatesTestShellsWithoutChangingNormalLaunches()
+{
+    using ztermy::terminal::isolatedShellArguments;
+    const QStringList original{QStringLiteral("/Q")};
+    QCOMPARE(isolatedShellArguments(QStringLiteral("C:/Windows/System32/cmd.exe"), original, false), original);
+    QCOMPARE(isolatedShellArguments(QStringLiteral("C:/Windows/System32/CMD.EXE"), original, true),
+             (QStringList{QStringLiteral("/D"), QStringLiteral("/Q")}));
+    const QStringList cmdFlags{QStringLiteral("/d"), QStringLiteral("/Q")};
+    QCOMPARE(isolatedShellArguments(QStringLiteral("cmd.exe"), cmdFlags, true), cmdFlags);
+    for (const QString &name : {QStringLiteral("pwsh.exe"), QStringLiteral("powershell.exe")})
+    {
+        QCOMPARE(isolatedShellArguments(name, {}, false), QStringList{});
+        QCOMPARE(isolatedShellArguments(name, {}, true), QStringList{QStringLiteral("-NoProfile")});
+    }
+    QCOMPARE(isolatedShellArguments(QStringLiteral("custom.exe"), original, true), original);
+    QCOMPARE(isolatedShellArguments(QStringLiteral("nu.exe"), {}, true),
+             (QStringList{QStringLiteral("--no-config-file"), QStringLiteral("--no-history")}));
+    QCOMPARE(isolatedShellArguments(QStringLiteral("bash.exe"), {}, true),
+             (QStringList{QStringLiteral("--noprofile"), QStringLiteral("--norc")}));
+    const QByteArray oldIsolation = qgetenv("ZTERMY_TEST_ISOLATED_SHELLS");
+    const QByteArray oldHistory = qgetenv("ZTERMY_TEST_SHELL_HISTORY");
+    const auto restore = qScopeGuard([&] {
+        oldIsolation.isNull() ? qunsetenv("ZTERMY_TEST_ISOLATED_SHELLS")
+                              : qputenv("ZTERMY_TEST_ISOLATED_SHELLS", oldIsolation);
+        oldHistory.isNull() ? qunsetenv("ZTERMY_TEST_SHELL_HISTORY") : qputenv("ZTERMY_TEST_SHELL_HISTORY", oldHistory);
+    });
+    qunsetenv("ZTERMY_TEST_SHELL_HISTORY");
+    constexpr std::string_view nonce = "12345678-abcd-4321-abcd-1234567890ab";
+    qputenv("ZTERMY_TEST_ISOLATED_SHELLS", "0");
+    const auto normal = ztermy::terminal::powerShellLaunchCommand(L"pwsh.exe", nonce);
+    QVERIFY(normal && normal->find(L" -NoProfile") == std::wstring::npos);
+    qputenv("ZTERMY_TEST_ISOLATED_SHELLS", "1");
+    const auto isolated = ztermy::terminal::powerShellLaunchCommand(L"pwsh.exe", nonce);
+    QVERIFY(isolated && isolated->find(L" -NoProfile") != std::wstring::npos);
+}
 
 void LocalTerminalSessionTests::buildsEphemeralPowerShellIntegrationCommand()
 {
@@ -963,6 +1002,7 @@ void LocalTerminalSessionTests::survivesSustainedInteractionWithoutLatencyGrowth
 
 int main(int argc, char **argv)
 {
+    qputenv("ZTERMY_TEST_ISOLATED_SHELLS", "1");
     if (argc == 2 && std::string_view(argv[1]) == "--query-cursor-position")
     {
         // Read VT bytes, not Console.ReadKey's translated keyboard events.

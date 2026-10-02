@@ -36,6 +36,7 @@ public:
 signals:
     void activationRequested();
     void directoryOpenRequested(const QString &directory, const QString &shellId);
+    void launchRequested(const ztermy::config::ApplicationLaunchRequest &request);
 
 private:
     QLocalServer m_server;

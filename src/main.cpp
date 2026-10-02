@@ -1,5 +1,6 @@
 #include "application/AppController.h"
 #include "application/ApplicationInstance.h"
+#include "application/ApplicationLaunchIntegration.h"
 #include "application/FontCatalog.h"
 #include "application/LocalizationManager.h"
 #include "application/ai/AiConversationModel.h"
@@ -11,7 +12,7 @@
 #include "infrastructure/terminal/ConPtyRuntime.h"
 #include "infrastructure/terminal/TerminalPngDecoder.h"
 #include "platform/windows/CrashDiagnostics.h"
-#include "platform/windows/ExplorerMenuSnapshot.h"
+#include "platform/windows/LaunchFeedback.h"
 #include "platform/windows/NativeWindow.h"
 #include "ui/AiMemoryDiagnostics.h"
 #include "ui/MemoryLifecycleRuntimeSmoke.h"
@@ -54,7 +55,6 @@
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
-#include <QSaveFile>
 #include <QScopeGuard>
 #include <QSet>
 #include <QStandardPaths>
@@ -62,7 +62,6 @@
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTextStream>
-#include <QThreadPool>
 #include <QTimer>
 #include <QUrl>
 #include <QUuid>
@@ -4510,6 +4509,7 @@ int main(int argc, char *argv[])
     const bool opaquePerformanceSurface =
         rawPerformanceBenchmark && requestedPerformanceBackdrop() == QStringLiteral("opaque");
     QGuiApplication application(argc, argv);
+    ztermy::prepareAutomatedLaunchEnvironment(QCoreApplication::arguments());
     if (conPtyError)
         qWarning() << "ConPTY runtime initialization failed:" << conPtyError.message();
     if (!ztermy::terminal::installTerminalPngDecoder())
@@ -4549,10 +4549,12 @@ int main(int argc, char *argv[])
     }
 
     ztermy::ApplicationInstance instance;
+    if (ztermy::showRequestedLaunchHelp(QCoreApplication::arguments()))
+        return EXIT_SUCCESS;
     const auto launchRequest = ztermy::config::ApplicationLaunchRequest::fromArguments(QCoreApplication::arguments());
     if (!launchRequest)
     {
-        qCritical().noquote() << launchRequest.error();
+        ztermy::windowing::showLaunchFeedback(launchRequest.error(), true);
         return EXIT_FAILURE;
     }
     const auto ownership = instance.claimConfigured(paths->dataDirectory, paths->settingsFile, *launchRequest);
@@ -4704,6 +4706,8 @@ int main(int argc, char *argv[])
         qCInfo(applicationLog) << "Shortcut settings runtime smoke passed=" << passed;
         return passed ? EXIT_SUCCESS : EXIT_FAILURE;
     }
+    if (QCoreApplication::arguments().contains(QStringLiteral("--launch-runtime-smoke")))
+        return ztermy::ui::runLaunchRuntimeSmoke(window, appController, instance, paths->dataDirectory);
     if (QCoreApplication::arguments().contains(QStringLiteral("--system-integration-smoke")))
     {
         const bool passed =
@@ -4876,36 +4880,14 @@ int main(int argc, char *argv[])
     // Startup goes through the window state owner too, so a state restored
     // before the window first appears (for example maximized) survives instead
     // of being reset the way the plain QWindow show helper would.
-    QObject::connect(&instance, &ztermy::ApplicationInstance::directoryOpenRequested, &appController,
-                     [&appController](const QString &directory, const QString &shellId) {
-                         (void)appController.openLocalDirectory(directory, shellId);
-                     });
-    QThreadPool explorerMenuWriter;
-    explorerMenuWriter.setMaxThreadCount(1);
-    const auto updateExplorerMenu = [&] {
-        if (paths->mode != ztermy::config::StorageMode::installed)
-            return;
-        const auto path =
-            QString::fromStdWString(ztermy::explorer::snapshotPath(application.applicationFilePath().toStdWString()));
-        const auto bytes = appController.explorerMenuConfiguration();
-        if (path.isEmpty())
-            return;
-        explorerMenuWriter.start([path, bytes] {
-            if (!QDir().mkpath(QFileInfo(path).absolutePath()))
-                return;
-            QSaveFile file(path);
-            if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit())
-                qCWarning(applicationLog) << "Unable to update Explorer menu preferences";
-        });
-    };
-    QObject::connect(&appController, &ztermy::AppController::applicationSettingsChanged, &application,
-                     updateExplorerMenu);
-    updateExplorerMenu();
-    if (!launchRequest->directory.isEmpty())
-        (void)appController.openLocalDirectory(launchRequest->directory, launchRequest->shellId);
+    ztermy::ApplicationLaunchIntegration launchIntegration(appController, instance, *paths,
+                                                           application.applicationFilePath());
+    if (launchRequest->hasTarget())
+        (void)appController.openLaunchRequest(*launchRequest);
     if (launchRequest->background)
         window.prepareBackgroundLaunch();
-    if (!launchRequest->background || !window.trayIconVisible())
+    if ((!launchRequest->background && launchRequest->windowMode != QStringLiteral("detached"))
+        || !window.trayIconVisible())
         ztermy::windowing::present(window);
     instance.setReady();
     const int exitCode = application.exec();

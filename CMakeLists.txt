@@ -177,6 +177,8 @@ set_property(
 )
 
 add_library(ztermy_core_config STATIC
+    src/core/config/ApplicationLaunchArguments.cpp
+    src/core/config/ApplicationLaunchArguments.cpp
     src/core/config/ApplicationLaunchRequest.cpp
     src/core/config/ApplicationLaunchRequest.h
     src/core/config/ApplicationPaths.cpp
@@ -780,6 +782,7 @@ add_library(ztermy_terminal_session STATIC
     src/application/terminal/LocalTerminalSession.cpp
     src/application/terminal/LocalTerminalPresentation.cpp
     src/application/terminal/LocalTerminalSession.h
+    src/application/terminal/LocalShellTestIsolation.h
     src/application/terminal/WindowsLocalShellCatalog.cpp
     src/application/terminal/WindowsLocalShellCatalog.h
     src/application/terminal/PowerShellShellIntegration.cpp
@@ -953,6 +956,8 @@ target_link_libraries(ztermy_icon_rendering
 )
 
 add_library(ztermy_application_controller STATIC
+    src/application/AppControllerLaunch.cpp
+    src/application/AppControllerLaunch.cpp
     src/application/AppController.cpp
     src/application/AppControllerThemes.cpp
     src/application/AppControllerDefaults.cpp
@@ -1013,6 +1018,27 @@ if(MSVC)
 endif()
 
 add_library(ztermy_explorer_command MODULE src/platform/windows/ExplorerCommand.cpp src/platform/windows/ExplorerCommand.def)
+set(ZTERMY_EXPLORER_ICON_NAMES terminal brand-powershell brand-powershell shell-cmd brand-git shell-nushell brand-linux)
+set(ZTERMY_EXPLORER_ICON_RESOURCES "#include <windows.h>\n")
+set(ZTERMY_EXPLORER_ICON_FILES)
+set(ZTERMY_EXPLORER_ICON_ID 101)
+foreach(icon_name IN LISTS ZTERMY_EXPLORER_ICON_NAMES)
+    set(icon_source "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/${icon_name}.svg")
+    set(icon_output "${ZTERMY_GENERATED_DIRECTORY}/explorer/${ZTERMY_EXPLORER_ICON_ID}.ico")
+    add_custom_command(OUTPUT "${icon_output}"
+        COMMAND "$<TARGET_FILE:ztermy_windows_icon_generator>" "${icon_source}" "${icon_source}"
+                "${icon_output}" "${ZTERMY_GENERATED_DIRECTORY}/explorer/${ZTERMY_EXPLORER_ICON_ID}" "#7651ac"
+        DEPENDS ztermy_windows_icon_generator "${icon_source}"
+        COMMENT "Generating native Explorer Shell icon ${icon_name}"
+        VERBATIM)
+    list(APPEND ZTERMY_EXPLORER_ICON_FILES "${icon_output}")
+    string(APPEND ZTERMY_EXPLORER_ICON_RESOURCES "${ZTERMY_EXPLORER_ICON_ID} ICON \"${icon_output}\"\n")
+    math(EXPR ZTERMY_EXPLORER_ICON_ID "${ZTERMY_EXPLORER_ICON_ID} + 1")
+endforeach()
+file(GENERATE OUTPUT "${ZTERMY_GENERATED_DIRECTORY}/explorer-icons.rc" CONTENT "${ZTERMY_EXPLORER_ICON_RESOURCES}")
+set_source_files_properties("${ZTERMY_GENERATED_DIRECTORY}/explorer-icons.rc"
+    PROPERTIES OBJECT_DEPENDS "${ZTERMY_EXPLORER_ICON_FILES}")
+target_sources(ztermy_explorer_command PRIVATE "${ZTERMY_GENERATED_DIRECTORY}/explorer-icons.rc")
 target_include_directories(ztermy_explorer_command PRIVATE src)
 target_compile_features(ztermy_explorer_command PRIVATE cxx_std_23)
 target_compile_definitions(ztermy_explorer_command PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
@@ -1390,6 +1416,8 @@ set_source_files_properties(
     src/ui/qml/TerminalRenameDialog.qml
     PROPERTIES QT_RESOURCE_ALIAS TerminalRenameDialog.qml
 )
+set_source_files_properties(src/ui/qml/LaunchAuthenticationDialog.qml
+    PROPERTIES QT_RESOURCE_ALIAS LaunchAuthenticationDialog.qml)
 set_source_files_properties(
     src/ui/qml/TerminalSearchBar.qml
     PROPERTIES QT_RESOURCE_ALIAS TerminalSearchBar.qml
@@ -1547,6 +1575,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/StatusMessage.qml
         src/ui/qml/TerminalTabAction.qml
         src/ui/qml/TerminalRenameDialog.qml
+        src/ui/qml/LaunchAuthenticationDialog.qml
         src/ui/qml/HostProfileNameField.qml
         src/ui/qml/TerminalSearchBar.qml
         src/ui/qml/TitleTabOverflow.qml
@@ -5436,6 +5465,13 @@ if(BUILD_TESTING)
 endif()
 
 unset(ZTERMY_FORMAT_SOURCES)
+if(BUILD_TESTING)
+    # Append rather than replacing per-test Qt/environment settings.
+    get_property(ZTERMY_ISOLATED_TESTS DIRECTORY PROPERTY TESTS)
+    set_property(TEST ${ZTERMY_ISOLATED_TESTS} APPEND PROPERTY
+        ENVIRONMENT "ZTERMY_TEST_ISOLATED_SHELLS=1")
+    unset(ZTERMY_ISOLATED_TESTS)
+endif()
 unset(ZTERMY_TIDY_SOURCES)
 unset(ZTERMY_TIDY_TEST_SOURCES)
 unset(ZTERMY_TIDY_TOOL_SOURCES)

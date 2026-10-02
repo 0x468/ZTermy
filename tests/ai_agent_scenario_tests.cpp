@@ -123,6 +123,7 @@ class AiAgentScenarioTests final : public QObject
     Q_OBJECT
 
 private slots:
+    void initTestCase() { qputenv("ZTERMY_TEST_ISOLATED_SHELLS", "1"); }
     void executesLocalAgentLifecycleAcrossModes();
     void appliesSshProfileMutationModeMatrix();
 };

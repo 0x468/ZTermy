@@ -1,5 +1,6 @@
 #include "application/terminal/LocalTerminalSession.h"
 
+#include "application/terminal/LocalShellTestIsolation.h"
 #include "application/terminal/PowerShellShellIntegration.h"
 
 #include "domain/terminal/GhosttyTerminalEngine.h"
@@ -39,7 +40,8 @@ namespace
     const std::wstring executable = quotedExecutable(spec.executable);
     if (spec.powerShellIntegration)
     {
-        return powerShellLaunchCommand(executable, nonce).value_or(executable + L" -NoLogo");
+        return powerShellLaunchCommand(executable, nonce)
+            .value_or(executable + (isolatedShellTestsEnabled() ? L" -NoLogo -NoProfile" : L" -NoLogo"));
     }
     std::wstring command = executable;
     for (const QString &argument : spec.arguments)
@@ -106,6 +108,8 @@ std::error_code LocalTerminalSession::start(const TerminalGeometry geometry)
     {
         return std::make_error_code(std::errc::no_such_file_or_directory);
     }
+    launchSpec.arguments =
+        isolatedShellArguments(launchSpec.executable, launchSpec.arguments, isolatedShellTestsEnabled());
     const QString workingDirectory = launchSpec.workingDirectory.isEmpty()
                                          ? QStandardPaths::writableLocation(QStandardPaths::HomeLocation)
                                          : launchSpec.workingDirectory;

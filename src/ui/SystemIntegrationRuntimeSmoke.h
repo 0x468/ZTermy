@@ -4,6 +4,7 @@
 #include "application/ApplicationInstance.h"
 #include "core/windowing/WindowPresenter.h"
 #include "platform/windows/NativeWindow.h"
+#include "ui/LaunchRuntimeSmoke.h"
 #include "ui/RuntimeSmokeItems.h"
 #include "ui/WindowStateRuntimeSmoke.h"
 
@@ -167,17 +168,24 @@ namespace ztermy::ui
     const auto release = qScopeGuard([&main] {
         (void)main.configureGlobalShortcut({}, false);
     });
-    QWindow peer;
+    QQuickWindow peer;
+    peer.setColor(QColor{Qt::darkGray});
     peer.setTitle(QStringLiteral("ztermy summon acceptance peer"));
     peer.setGeometry(50, 50, 500, 360);
+    showForRuntimeSmoke(peer);
+    processWindowEventsFor(100ms);
     windowing::present(peer);
+    const auto peerHandle = reinterpret_cast<HWND>(peer.winId()); // NOLINT(performance-no-int-to-ptr)
     if (!settleWindowUntil(
-            [&peer] {
-                return GetForegroundWindow()
-                       == reinterpret_cast<HWND>(peer.winId()); // NOLINT(performance-no-int-to-ptr)
+            [peerHandle] {
+                return GetForegroundWindow() == peerHandle;
             },
             3s))
+    {
+        qWarning() << "Acceptance peer did not become foreground: visible=" << peer.isVisible()
+                   << "nativeVisible=" << IsWindowVisible(peerHandle) << "active=" << peer.isActive();
         return false;
+    }
     processWindowEventsFor(100ms);
     const QRect peerGeometry = peer.geometry();
     const auto peerStates = peer.windowStates();
@@ -236,9 +244,9 @@ namespace ztermy::ui
     const auto directory = captures.filePath(QStringLiteral("中文 space & % !"));
     if (!QDir().mkpath(directory))
         return false;
-    QObject::connect(&instance, &ApplicationInstance::directoryOpenRequested, &controller,
-                     [&controller](const QString &path, const QString &shellId) {
-                         (void)controller.openLocalDirectory(path, shellId);
+    QObject::connect(&instance, &ApplicationInstance::launchRequested, &controller,
+                     [&controller](const config::ApplicationLaunchRequest &request) {
+                         (void)controller.openLaunchRequest(request);
                      });
     instance.setReady();
     const auto tabsBefore = controller.terminalTabs().size();
@@ -275,6 +283,8 @@ namespace ztermy::ui
         << "System integration: native hotkey hide/wake/maximize/minimize, peer unchanged, second-process directory:"
         << capture;
     return capture && verifyGlobalShortcutSettingsRuntime(main, controller, peer, captures)
-           && verifyExplorerMenuSettingsRuntime(main, controller, captures);
+           && verifyExplorerMenuSettingsRuntime(main, controller, captures)
+           && verifyLaunchRuntime(main, controller, captures, dataDir)
+           && verifySshLaunchRuntime(main, controller, captures, dataDir);
 }
 } // namespace ztermy::ui

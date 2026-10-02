@@ -2562,6 +2562,8 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
 
 void AppController::initializeRuntime()
 {
+    QObject::connect(this, &AppController::launchCredentialReadCompleted, this,
+                     &AppController::finishLaunchCredentialRead, Qt::QueuedConnection);
     if (!m_localSessionFactory)
     {
         m_localSessionFactory = [] {
@@ -2739,6 +2741,10 @@ void AppController::shutdown() noexcept
     }
     emit terminalWindowStateRequested();
     m_shutdownStarted = true;
+    m_launchWorker.clear();
+    m_launchWorker.waitForDone();
+    m_launchQueue.clear();
+    m_pendingLaunch.reset();
     try
     {
         static_cast<void>(persistTerminalWorkspaces());
@@ -8906,16 +8912,20 @@ std::optional<ssh::SshConnectionRequest> AppController::connectionRequestForProf
                                                                                     const QString &secret,
                                                                                     const QString &proxySecret)
 {
+    return connectionRequestForProfileBytes(profile, security::SensitiveByteArray(secret.toUtf8()), proxySecret);
+}
+
+std::optional<ssh::SshConnectionRequest> AppController::connectionRequestForProfileBytes(
+    const ssh::SshProfile &profile, security::SensitiveByteArray connectionSecret, const QString &proxySecret)
+{
     const auto resolvedProfile = ssh::resolveSshIdentity(profile, m_keychain);
     if (!resolvedProfile)
     {
         setCredentialOperationError(tr("The identity selected by this host is missing or incomplete."));
         return std::nullopt;
     }
-    security::SensitiveByteArray connectionSecret =
-        resolvedProfile->authentication == ssh::SshAuthenticationMethod::Agent
-            ? security::SensitiveByteArray{}
-            : security::SensitiveByteArray(secret.toUtf8());
+    if (resolvedProfile->authentication == ssh::SshAuthenticationMethod::Agent)
+        connectionSecret.clear();
     if (connectionSecret.empty() && resolvedProfile->credentialReference)
     {
         auto stored = m_credentialVaults->active().read({.profileId = *resolvedProfile->credentialReference,

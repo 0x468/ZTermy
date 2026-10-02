@@ -1,4 +1,5 @@
 #include "application/terminal/PowerShellShellIntegration.h"
+#include "application/terminal/LocalShellTestIsolation.h"
 
 #include <QByteArray>
 #include <QString>
@@ -74,6 +75,8 @@ try {
     Import-Module PSReadLine -ErrorAction Stop
     if ($env:ZTERMY_TEST_SHELL_HISTORY) {
         Set-PSReadLineOption -HistorySavePath $env:ZTERMY_TEST_SHELL_HISTORY -HistorySaveStyle SaveNothing
+    } elseif ($env:ZTERMY_TEST_ISOLATED_SHELLS -eq '1') {
+        Set-PSReadLineOption -HistorySaveStyle SaveNothing
     }
     Set-PSReadLineKeyHandler -Chord Enter -ScriptBlock {
         param($key, $arg)
@@ -109,7 +112,7 @@ std::optional<std::wstring> powerShellLaunchCommand(const std::wstring_view exec
     const QByteArray encoded = utf16LittleEndian(integrationScript(nonce)).toBase64();
     std::wstring command(executable);
     command.append(L" -NoLogo");
-    if (!qEnvironmentVariableIsEmpty("ZTERMY_TEST_SHELL_HISTORY"))
+    if (isolatedShellTestsEnabled() || !qEnvironmentVariableIsEmpty("ZTERMY_TEST_SHELL_HISTORY"))
         command.append(L" -NoProfile");
     command.append(L" -NoExit -EncodedCommand ");
     command.append(QString::fromLatin1(encoded).toStdWString());

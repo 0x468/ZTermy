@@ -264,6 +264,8 @@ private slots:
     void managesActionShortcutsAndDispatchContext();
     void preservesShortcutsWhenGlobalRegistrationFails();
     void configuresExplorerShellsAndPreservesLiteralDirectories();
+    void launchRequestsDetachLocalAndQueueCredentialPrompts();
+    void credentialFileLaunchRejectsMalformedAndMissingFiles();
     void retranslatesPreviouslyReadActions();
     void restoresCompleteAgentPresentationFromHistory();
     void exposesProviderFailureRecoveryActions();
@@ -4306,6 +4308,73 @@ void AppControllerTests::closesMultipleWorkspacesWithReentrantObservers()
     QTest::qWait(40);
     controller.shutdown();
     QCOMPARE(state->stops, 16);
+}
+
+void AppControllerTests::launchRequestsDetachLocalAndQueueCredentialPrompts()
+{
+    QTemporaryDir directory;
+    const auto state = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")),
+                                     directory.filePath(QStringLiteral("settings.json")), [state] {
+                                         return std::make_unique<FakeLocalTerminalSession>(state);
+                                     });
+    QSignalSpy opened(&controller, &ztermy::AppController::launchOpened);
+    QSignalSpy prompts(&controller, &ztermy::AppController::launchAuthenticationRequested);
+    const auto local = ztermy::config::ApplicationLaunchRequest::fromArguments(
+        {QStringLiteral("ztermy"), QStringLiteral("--open-directory"), directory.path(),
+         QStringLiteral("--local-shell=commandPrompt"), QStringLiteral("--window=detached")});
+    QVERIFY(local);
+    QVERIFY(controller.openLaunchRequest(*local));
+    QCOMPARE(opened.count(), 1);
+    QCOMPARE(opened.first().at(1).toBool(), true);
+    QVERIFY(controller.activeTerminalWorkspace().value(QStringLiteral("windowId")) != QStringLiteral("main"));
+    QCOMPARE(state->launchSpecs.back().id, QStringLiteral("commandPrompt"));
+    QCOMPARE(state->launchSpecs.back().workingDirectory, directory.path());
+    const auto ssh = ztermy::config::ApplicationLaunchRequest::fromArguments(
+        {QStringLiteral("ztermy"), QStringLiteral("--ssh=user@127.0.0.1:1")});
+    QVERIFY(ssh);
+    QVERIFY(controller.openLaunchRequest(*ssh));
+    QVERIFY(controller.openLaunchRequest(*ssh));
+    QTRY_COMPARE(prompts.count(), 1);
+    QCOMPARE(controller.terminalTabs().size(), 1); // No throwaway session before authentication.
+    QVERIFY(controller.completeLaunchAuthentication({}, {}, true));
+    QTRY_COMPARE(prompts.count(), 2);
+    QVERIFY(controller.completeLaunchAuthentication({}, {}, true));
+    QVERIFY(controller.hostProfiles().isEmpty());
+    QVERIFY(!controller.completeLaunchAuthentication({}, {}, true));
+}
+
+void AppControllerTests::credentialFileLaunchRejectsMalformedAndMissingFiles()
+{
+    QTemporaryDir directory;
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")));
+    QSignalSpy failures(&controller, &ztermy::AppController::launchFailed);
+    QSignalSpy prompts(&controller, &ztermy::AppController::launchAuthenticationRequested);
+    for (const auto &bytes :
+         {QByteArray{}, QByteArrayLiteral("first\nsecond"), QByteArray(4097, 'x'), QByteArray("a\0b", 3)})
+    {
+        QFile file(directory.filePath(QStringLiteral("credential.txt")));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QCOMPARE(file.write(bytes), bytes.size());
+        file.close();
+        const auto request = ztermy::config::ApplicationLaunchRequest::fromArguments(
+            {QStringLiteral("ztermy"), QStringLiteral("--ssh=user@127.0.0.1:1"), QStringLiteral("--password-file"),
+             file.fileName()});
+        QVERIFY(request);
+        const auto before = failures.count();
+        QVERIFY(controller.openLaunchRequest(*request));
+        QTRY_COMPARE(failures.count(), before + 1);
+    }
+    const auto missing = ztermy::config::ApplicationLaunchRequest::fromArguments(
+        {QStringLiteral("ztermy"), QStringLiteral("--ssh=user@127.0.0.1:1"), QStringLiteral("--password-file"),
+         directory.filePath(QStringLiteral("missing.txt"))});
+    QVERIFY(missing);
+    QVERIFY(controller.openLaunchRequest(*missing));
+    QTRY_COMPARE(failures.count(), 5);
+    QCOMPARE(prompts.count(), 0);
+    QVERIFY(controller.terminalTabs().isEmpty());
+    QVERIFY(controller.hostProfiles().isEmpty());
 }
 
 QTEST_GUILESS_MAIN(AppControllerTests)
