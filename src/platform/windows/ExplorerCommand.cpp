@@ -3,10 +3,12 @@
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <wrl.h>
+#include "ExplorerMenuSnapshot.h"
 
 #include <atomic>
 #include <new>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -48,10 +50,36 @@ class OpenHereCommand final
     : public RuntimeClass<RuntimeClassFlags<Microsoft::WRL::ClassicCom>, IExplorerCommand, IObjectWithSite>
 {
 public:
+    explicit OpenHereCommand(int shell = -1,
+                             ztermy::explorer::MenuSnapshot snapshot = ztermy::explorer::defaultSnapshot)
+        : m_shell(shell), m_menu(snapshot)
+    {
+        if (shell < 0)
+        {
+            std::wstring executable;
+            if (SUCCEEDED(executablePath(executable)))
+                m_menu = ztermy::explorer::readSnapshot(executable);
+        }
+    }
     IFACEMETHODIMP GetTitle(IShellItemArray *, PWSTR *title) override
     {
         if (title == nullptr)
             return E_POINTER;
+        if (m_shell >= 0)
+        {
+            if (m_shell == 0)
+                return SHStrDupW(PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_CHINESE ? L"默认 Shell"
+                                                                                           : L"Default shell",
+                                 title);
+            static constexpr std::array names{
+                L"Default shell", L"PowerShell 7", L"Windows PowerShell", L"Command Prompt", L"Git Bash",
+                L"Nushell",       L"WSL"};
+            return SHStrDupW(names[static_cast<std::size_t>(m_shell)], title);
+        }
+        if (m_menu[8] == 1)
+            return SHStrDupW(PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_CHINESE ? L"在 Ztermy 中打开"
+                                                                                       : L"Open in Ztermy",
+                             title);
         return SHStrDupW(PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_CHINESE ? L"在此处打开 Ztermy"
                                                                                    : L"Open in Ztermy",
                          title);
@@ -87,22 +115,18 @@ public:
         if (name == nullptr)
             return E_POINTER;
         *name = commandId;
+        if (m_shell >= 0)
+            name->Data4[7] += static_cast<unsigned char>(m_shell + 1);
         return S_OK;
     }
     IFACEMETHODIMP GetFlags(EXPCMDFLAGS *flags) override
     {
         if (flags == nullptr)
             return E_POINTER;
-        *flags = ECF_DEFAULT;
+        *flags = m_shell < 0 && m_menu[8] == 1 ? ECF_HASSUBCOMMANDS : ECF_DEFAULT;
         return S_OK;
     }
-    IFACEMETHODIMP EnumSubCommands(IEnumExplorerCommand **commands) override
-    {
-        if (commands == nullptr)
-            return E_POINTER;
-        *commands = nullptr;
-        return E_NOTIMPL;
-    }
+    IFACEMETHODIMP EnumSubCommands(IEnumExplorerCommand **commands) override;
     IFACEMETHODIMP SetSite(IUnknown *site) override
     {
         m_site = site;
@@ -127,6 +151,8 @@ public:
     }
     IFACEMETHODIMP Invoke(IShellItemArray *items, IBindCtx *) override
     {
+        if (m_shell < 0 && m_menu[8] == 1)
+            return E_NOTIMPL;
         ComPtr<IShellItem> item;
         HRESULT result = directoryItem(items, item);
         if (FAILED(result))
@@ -150,6 +176,10 @@ public:
                 return result;
             // The suffix also prevents a drive-root backslash escaping a quote.
             std::wstring command = L"\"" + executable + L"\" --open-directory \"" + directory + L"\\.\"";
+            const auto shell = m_shell < 0 ? m_menu[9] : static_cast<std::uint8_t>(m_shell);
+            const auto token = ztermy::explorer::shellIds[shell];
+            command += L" --local-shell ";
+            command.append(token.begin(), token.end());
             STARTUPINFOW startup{.cb = sizeof(STARTUPINFOW)};
             PROCESS_INFORMATION process{};
             if (!CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr,
@@ -216,7 +246,94 @@ private:
     }
     Lifetime m_lifetime;
     ComPtr<IUnknown> m_site;
+    int m_shell = -1;
+    ztermy::explorer::MenuSnapshot m_menu;
 };
+
+class CommandEnumerator final : public RuntimeClass<RuntimeClassFlags<Microsoft::WRL::ClassicCom>, IEnumExplorerCommand>
+{
+public:
+    explicit CommandEnumerator(std::vector<ComPtr<IExplorerCommand>> commands, std::size_t index = 0)
+        : m_commands(std::move(commands)), m_index(index)
+    {
+    }
+    IFACEMETHODIMP Next(ULONG count, IExplorerCommand **commands, ULONG *fetched) override
+    {
+        if (fetched)
+            *fetched = 0;
+        if (!commands || (!fetched && count != 1))
+            return E_POINTER;
+        ULONG copied = 0;
+        while (copied < count && m_index < m_commands.size())
+        {
+            commands[copied] = m_commands[m_index++].Get();
+            commands[copied++]->AddRef();
+        }
+        if (fetched)
+            *fetched = copied;
+        return copied == count ? S_OK : S_FALSE;
+    }
+    IFACEMETHODIMP Skip(ULONG count) override
+    {
+        const auto remaining = m_commands.size() - m_index;
+        m_index += (std::min)(remaining, static_cast<std::size_t>(count));
+        return count <= remaining ? S_OK : S_FALSE;
+    }
+    IFACEMETHODIMP Reset() override
+    {
+        m_index = 0;
+        return S_OK;
+    }
+    IFACEMETHODIMP Clone(IEnumExplorerCommand **copy) override
+    {
+        if (!copy)
+            return E_POINTER;
+        *copy = nullptr;
+        try
+        {
+            const auto clone = Make<CommandEnumerator>(m_commands, m_index);
+            return clone ? clone->QueryInterface(IID_PPV_ARGS(copy)) : E_OUTOFMEMORY;
+        }
+        catch (const std::bad_alloc &)
+        {
+            return E_OUTOFMEMORY;
+        }
+    }
+
+private:
+    Lifetime m_lifetime;
+    std::vector<ComPtr<IExplorerCommand>> m_commands;
+    std::size_t m_index = 0;
+};
+
+HRESULT OpenHereCommand::EnumSubCommands(IEnumExplorerCommand **commands)
+{
+    if (!commands)
+        return E_POINTER;
+    *commands = nullptr;
+    if (m_shell >= 0 || m_menu[8] != 1)
+        return E_NOTIMPL;
+    try
+    {
+        std::vector<ComPtr<IExplorerCommand>> children;
+        for (int shell = 0; std::cmp_less(shell, ztermy::explorer::shellIds.size()); ++shell)
+        {
+            if ((m_menu[10] & (1U << shell)) == 0)
+                continue;
+            const auto child = Make<OpenHereCommand>(shell, m_menu);
+            if (!child)
+                return E_OUTOFMEMORY;
+            child->SetSite(m_site.Get());
+            children.emplace_back(child);
+        }
+        const auto enumerator = Make<CommandEnumerator>(std::move(children));
+        return enumerator ? enumerator->QueryInterface(IID_PPV_ARGS(commands)) : E_OUTOFMEMORY;
+    }
+    catch (const std::bad_alloc &)
+    {
+        return E_OUTOFMEMORY;
+    }
+}
 
 class CommandFactory final : public RuntimeClass<RuntimeClassFlags<Microsoft::WRL::ClassicCom>, IClassFactory>
 {
@@ -228,8 +345,15 @@ public:
         *object = nullptr;
         if (outer != nullptr)
             return CLASS_E_NOAGGREGATION;
-        auto command = Make<OpenHereCommand>();
-        return command ? command->QueryInterface(iid, object) : E_OUTOFMEMORY;
+        try
+        {
+            auto command = Make<OpenHereCommand>();
+            return command ? command->QueryInterface(iid, object) : E_OUTOFMEMORY;
+        }
+        catch (const std::bad_alloc &)
+        {
+            return E_OUTOFMEMORY;
+        }
     }
     IFACEMETHODIMP LockServer(BOOL lock) override
     {

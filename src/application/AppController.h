@@ -188,6 +188,7 @@ class AppController final : public QObject
     Q_PROPERTY(bool reopenLocalSessions READ reopenLocalSessions NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool reconnectRemoteSessions READ reconnectRemoteSessions NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QVariantMap windowInteractionSettings READ windowInteractionSettings NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QVariantMap windowsIntegrationSettings READ windowsIntegrationSettings NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool performanceMode READ performanceMode NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString languagePreference READ languagePreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiProviderPreference READ aiProviderPreference NOTIFY applicationSettingsChanged)
@@ -362,6 +363,9 @@ public:
                                                   bool reconnectRemote);
     [[nodiscard]] QVariantMap windowInteractionSettings() const;
     Q_INVOKABLE bool saveWindowInteractionSettings(const QVariantMap &changes);
+    [[nodiscard]] QVariantMap windowsIntegrationSettings() const;
+    Q_INVOKABLE bool saveWindowsIntegrationSettings(const QVariantMap &values);
+    [[nodiscard]] QByteArray explorerMenuConfiguration() const;
     [[nodiscard]] bool performanceMode() const noexcept;
     [[nodiscard]] QString languagePreference() const;
     [[nodiscard]] QString aiProviderPreference() const;
@@ -443,7 +447,7 @@ public:
     [[nodiscard]] QObject *localFiles() const noexcept;
 
     Q_INVOKABLE QString startLocalTerminal();
-    [[nodiscard]] QString openLocalDirectory(const QString &directory);
+    [[nodiscard]] QString openLocalDirectory(const QString &directory, const QString &shellId = {});
     void setGlobalShortcutHandler(std::function<bool(const QString &, bool)> handler);
     Q_INVOKABLE QVariantMap terminalWindowState(const QString &id) const;
     Q_INVOKABLE bool rememberTerminalWindow(const QVariantMap &state);

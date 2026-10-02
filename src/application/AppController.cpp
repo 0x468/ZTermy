@@ -4757,14 +4757,65 @@ QString AppController::startLocalTerminal()
     return startLocalTerminalAt({});
 }
 
-QString AppController::openLocalDirectory(const QString &directory)
+QString AppController::openLocalDirectory(const QString &directory, const QString &shellId)
 {
-    if (!QDir::isAbsolutePath(directory) || directory.contains(QChar::Null))
+    if (!QDir::isAbsolutePath(directory) || directory.contains(QChar::Null)
+        || (!shellId.isEmpty() && !config::validExplorerShellId(shellId)))
         return {};
-    const QString tabId = startLocalTerminalAt(directory);
+    const QString selected = shellId.isEmpty() ? m_settings.windowsIntegration.singleShell : shellId;
+    if (selected != QStringLiteral("automatic"))
+    {
+        const bool available = std::ranges::any_of(m_localShellProfiles, [&](const auto &shell) {
+            return shell.id == selected && shell.available;
+        });
+        if (!available)
+            return {}; // An explicit shell choice must never silently open a different shell.
+    }
+    const QString tabId =
+        startLocalTerminalAt(directory, {}, selected == QStringLiteral("automatic") ? QString{} : selected);
     if (!tabId.isEmpty())
         emit localDirectoryOpened(tabId);
     return tabId;
+}
+
+QVariantMap AppController::windowsIntegrationSettings() const
+{
+    return m_settings.windowsIntegration.toJson().toVariantMap();
+}
+
+bool AppController::saveWindowsIntegrationSettings(const QVariantMap &values)
+{
+    if (values.size() != 3)
+        return false;
+    const auto integration = config::WindowsIntegrationSettings::fromJson(QJsonObject::fromVariantMap(values));
+    if (!integration)
+        return false;
+    auto updated = m_settings;
+    updated.windowsIntegration = *integration;
+    return persistApplicationSettings(updated);
+}
+
+QByteArray AppController::explorerMenuConfiguration() const
+{
+    auto bytes = explorer::defaultSnapshot;
+    const auto &settings = m_settings.windowsIntegration;
+    bytes[8] = settings.menuMode == QStringLiteral("submenu") ? 1 : 0;
+    bytes[10] = 1; // Keep a usable default entry even when a selected shell has been uninstalled.
+    for (std::size_t i = 1; i < explorer::shellIds.size(); ++i)
+    {
+        const auto token = explorer::shellIds[i];
+        const auto id = QString::fromLatin1(token.data(), static_cast<qsizetype>(token.size()));
+        const bool available = std::ranges::any_of(m_localShellProfiles, [&](const auto &shell) {
+            return shell.id == id && shell.available;
+        });
+        if (available && settings.singleShell == id)
+            bytes[9] = static_cast<std::uint8_t>(i);
+        if (available && settings.submenuShells.contains(id))
+            bytes[10] |= static_cast<std::uint8_t>(1U << i);
+    }
+    if (!settings.submenuShells.contains(QStringLiteral("automatic")) && bytes[10] != 1)
+        bytes[10] &= static_cast<std::uint8_t>(~1U);
+    return {reinterpret_cast<const char *>(bytes.data()), static_cast<qsizetype>(bytes.size())};
 }
 
 void AppController::setGlobalShortcutHandler(std::function<bool(const QString &, bool)> handler)

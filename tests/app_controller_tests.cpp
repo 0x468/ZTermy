@@ -263,6 +263,7 @@ private slots:
     void managesMcpServerConfiguration();
     void managesActionShortcutsAndDispatchContext();
     void preservesShortcutsWhenGlobalRegistrationFails();
+    void configuresExplorerShellsAndPreservesLiteralDirectories();
     void retranslatesPreviouslyReadActions();
     void restoresCompleteAgentPresentationFromHistory();
     void exposesProviderFailureRecoveryActions();
@@ -1357,6 +1358,54 @@ void AppControllerTests::managesActionShortcutsAndDispatchContext()
     }
 }
 
+void AppControllerTests::configuresExplorerShellsAndPreservesLiteralDirectories()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const auto state = std::make_shared<FakeLocalSessionState>();
+    const auto factory = [state] {
+        return std::make_unique<FakeLocalTerminalSession>(state);
+    };
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")),
+                                     directory.filePath(QStringLiteral("settings.json")), factory);
+    auto choices = controller.windowsIntegrationSettings();
+    choices[QStringLiteral("menuMode")] = QStringLiteral("submenu");
+    choices[QStringLiteral("singleShell")] = QStringLiteral("commandPrompt");
+    choices[QStringLiteral("submenuShells")] =
+        QVariantList{QStringLiteral("automatic"), QStringLiteral("commandPrompt")};
+    QVERIFY(controller.saveWindowsIntegrationSettings(choices));
+    const auto snapshot = controller.explorerMenuConfiguration();
+    QCOMPARE(snapshot.size(), 16);
+    QCOMPARE(static_cast<unsigned char>(snapshot[8]), 1);
+    QCOMPARE(static_cast<unsigned char>(snapshot[9]), 3);
+    QCOMPARE(static_cast<unsigned char>(snapshot[10]), (1U << 0) | (1U << 3));
+    const auto path = directory.filePath(QStringLiteral("中文 space & % !"));
+    QVERIFY(QDir().mkpath(path));
+    QVERIFY(!controller.openLocalDirectory(path, QStringLiteral("commandPrompt")).isEmpty());
+    QVERIFY(!state->launchSpecs.empty());
+    QCOMPARE(state->launchSpecs.back().id, QStringLiteral("commandPrompt"));
+    QCOMPARE(state->launchSpecs.back().workingDirectory, path);
+    QVERIFY(!state->launchSpecs.back().arguments.contains(path));
+    const auto starts = state->starts;
+    QVERIFY(controller.openLocalDirectory(path, QStringLiteral("arbitrary.exe")).isEmpty());
+    QCOMPARE(state->starts, starts);
+    auto invalid = choices;
+    invalid[QStringLiteral("submenuShells")] = QStringList{QStringLiteral("evil.exe")};
+    QVERIFY(!controller.saveWindowsIntegrationSettings(invalid));
+    QCOMPARE(controller.windowsIntegrationSettings(), choices);
+    ztermy::AppController reloaded(directory.filePath(QStringLiteral("profiles.json")),
+                                   directory.filePath(QStringLiteral("known_hosts.json")),
+                                   directory.filePath(QStringLiteral("settings.json")), factory);
+    QCOMPARE(reloaded.windowsIntegrationSettings(), choices);
+    for (const auto &entry : controller.availableLocalShells())
+    {
+        const auto shell = entry.toMap();
+        if (!shell.value(QStringLiteral("available")).toBool())
+            QVERIFY(controller.openLocalDirectory(path, shell.value(QStringLiteral("id")).toString()).isEmpty());
+    }
+}
+
 void AppControllerTests::preservesShortcutsWhenGlobalRegistrationFails()
 {
     QTemporaryDir directory;
@@ -2077,7 +2126,9 @@ void AppControllerTests::persistsConnectionHistorySwitchWithoutStoppingSessions(
         QCOMPARE(reopened.terminalThemeId(), QStringLiteral("ztermy-dark"));
         // Per-row reset (UI V2 chapter 5) compares drafts against these tokens.
         const QVariantMap defaults = reopened.applicationSettingsDefaults();
-        QCOMPARE(defaults.size(), 32);
+        QCOMPARE(defaults.size(), 33);
+        QCOMPARE(defaults.value(QStringLiteral("windowsIntegration")).toMap(),
+                 ztermy::config::WindowsIntegrationSettings{}.toJson().toVariantMap());
         QCOMPARE(defaults.value(QStringLiteral("terminalTheme")).toString(), QStringLiteral("ztermy-dark"));
         QCOMPARE(defaults.value(QStringLiteral("theme")).toString(), reopened.themePreference());
         QCOMPARE(defaults.value(QStringLiteral("effectsTier")).toString(), QStringLiteral("full"));

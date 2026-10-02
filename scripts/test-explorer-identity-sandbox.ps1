@@ -73,17 +73,63 @@ public interface ExplorerCommand {
     [PreserveSig] int GetFlags(out uint flags);
     [PreserveSig] int EnumSubCommands(out IntPtr commands);
 }
+[ComImport, Guid("a88826f8-186f-4987-aade-ea0cef8fbfe8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface ExplorerCommands {
+    [PreserveSig] int Next(uint count, out IntPtr command, out uint fetched);
+    [PreserveSig] int Skip(uint count);
+    [PreserveSig] int Reset();
+    [PreserveSig] int Clone(out IntPtr commands);
+}
 public static class NativeCommandAcceptance {
     [DllImport("ole32.dll")] static extern int CoCreateInstance(ref Guid clsid, IntPtr outer, uint context, ref Guid iid, out IntPtr result);
     [DllImport("shell32.dll", CharSet=CharSet.Unicode)] static extern int SHCreateItemFromParsingName(string path, IntPtr context, ref Guid iid, out IntPtr item);
     [DllImport("shell32.dll")] static extern int SHCreateShellItemArrayFromShellItem(IntPtr item, ref Guid iid, out IntPtr items);
-    public static string InvokeDirectory(string path) {
+    public static void ConfigureSubmenu(string external) {
+        ulong hash = 14695981039346656037UL;
+        foreach (char ch in external.Replace('/', '\\').ToLowerInvariant())
+            hash = unchecked((hash ^ ch) * 1099511628211UL);
+        string folder = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Ztermy", "Explorer");
+        System.IO.Directory.CreateDirectory(folder);
+        byte[] value = new byte[16];
+        byte[] magic = System.Text.Encoding.ASCII.GetBytes("ZTMENU1");
+        Array.Copy(magic, value, magic.Length);
+        value[8] = 1;
+        value[10] = 8; // Exactly Command Prompt; no default or unavailable shell.
+        System.IO.File.WriteAllBytes(System.IO.Path.Combine(folder, hash.ToString() + ".bin"), value);
+    }
+    public static string InvokeDirectory(string path, bool submenu) {
         Guid clsid = new Guid("9C0C02C2-441D-44E9-B880-68D6647B2B31"), iid = typeof(ExplorerCommand).GUID;
         IntPtr commandPointer = IntPtr.Zero, item = IntPtr.Zero, items = IntPtr.Zero, title = IntPtr.Zero;
         ExplorerCommand command = null;
         try {
             Marshal.ThrowExceptionForHR(CoCreateInstance(ref clsid, IntPtr.Zero, 4, ref iid, out commandPointer));
             command = (ExplorerCommand)Marshal.GetTypedObjectForIUnknown(commandPointer, typeof(ExplorerCommand));
+            uint flags;
+            Marshal.ThrowExceptionForHR(command.GetFlags(out flags));
+            if (flags != (submenu ? 1u : 0u)) throw new Exception("Unexpected submenu flags");
+            if (submenu) {
+                IntPtr enumeratorPointer;
+                Marshal.ThrowExceptionForHR(command.EnumSubCommands(out enumeratorPointer));
+                ExplorerCommands enumerator = null;
+                IntPtr child = IntPtr.Zero;
+                try {
+                    enumerator = (ExplorerCommands)Marshal.GetTypedObjectForIUnknown(enumeratorPointer, typeof(ExplorerCommands));
+                    uint fetched;
+                    Marshal.ThrowExceptionForHR(enumerator.Next(1, out child, out fetched));
+                    if (fetched != 1) throw new Exception("Missing configured child");
+                    Marshal.ReleaseComObject(command);
+                    command = (ExplorerCommand)Marshal.GetTypedObjectForIUnknown(child, typeof(ExplorerCommand));
+                    IntPtr extra;
+                    if (enumerator.Next(1, out extra, out fetched) != 1 || fetched != 0) {
+                        if (extra != IntPtr.Zero) Marshal.Release(extra);
+                        throw new Exception("Unexpected unselected child");
+                    }
+                } finally {
+                    if (child != IntPtr.Zero) Marshal.Release(child);
+                    if (enumerator != null) Marshal.ReleaseComObject(enumerator);
+                    Marshal.Release(enumeratorPointer);
+                }
+            }
             Marshal.ThrowExceptionForHR(command.GetTitle(IntPtr.Zero, out title));
             string label = Marshal.PtrToStringUni(title);
             Guid itemId = new Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe");
@@ -108,20 +154,32 @@ public static class NativeCommandAcceptance {
     # Windows PowerShell 5.1 parses BOM-less scripts as ANSI. Keep this source ASCII.
     $directory = Join-Path $root ([string][char]0x4E2D + [char]0x6587 + ' space & % !')
     New-Item -ItemType Directory -Path $directory | Out-Null
-    $label = [NativeCommandAcceptance]::InvokeDirectory($directory)
+    $label = [NativeCommandAcceptance]::InvokeDirectory($directory, $false)
     $argvFile = Join-Path $external 'received-argv.txt'
     $deadline = [DateTime]::UtcNow.AddSeconds(10)
     while (!(Test-Path -LiteralPath $argvFile) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 50 }
     $arguments = @([IO.File]::ReadAllLines($argvFile, [Text.Encoding]::UTF8))
     $arguments | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $results 'identity-argv.json') -Encoding UTF8
-    if ($arguments.Count -ne 2 -or $arguments[0] -ne '--open-directory' -or [IO.Path]::GetFullPath($arguments[1]) -ne $directory) {
+    if ($arguments.Count -ne 4 -or $arguments[0] -ne '--open-directory' -or [IO.Path]::GetFullPath($arguments[1]) -ne $directory -or
+        $arguments[2] -ne '--local-shell' -or $arguments[3] -ne 'automatic') {
         throw 'Native command did not preserve the directory as one literal argv value.'
+    }
+    Remove-Item -LiteralPath $argvFile
+    [NativeCommandAcceptance]::ConfigureSubmenu($external)
+    $childLabel = [NativeCommandAcceptance]::InvokeDirectory($directory, $true)
+    $deadline = [DateTime]::UtcNow.AddSeconds(10)
+    while (!(Test-Path -LiteralPath $argvFile) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 50 }
+    $arguments = @([IO.File]::ReadAllLines($argvFile, [Text.Encoding]::UTF8))
+    $arguments | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $results 'identity-submenu-argv.json') -Encoding UTF8
+    if ($arguments.Count -ne 4 -or $arguments[0] -ne '--open-directory' -or [IO.Path]::GetFullPath($arguments[1]) -ne $directory -or
+        $arguments[2] -ne '--local-shell' -or $arguments[3] -ne 'commandPrompt' -or $childLabel -ne 'Command Prompt') {
+        throw 'Configured submenu did not preserve the selected shell and literal directory.'
     }
     Remove-AppxPackage -Package $installed.PackageFullName -ErrorAction Stop
     if (Get-AppxPackage -Name ZSeries.Ztermy.Explorer) { throw 'Identity uninstall left a registered package.' }
     $actualTrustPath = 'Cert:\' + $trustStore.Replace('/', '\') + '\' + $cert.Thumbprint
     if (!(Test-Path -LiteralPath $actualTrustPath)) { throw 'Uninstall removed shared certificate trust.' }
-    [ordered]@{ phase = 'signed-identity'; passed = $true; untrustedRejected = $rejected; trustStore = $trustStore; nativeComActivation = $true; literalDirectory = $true; title = $label; uninstall = $true; sharedTrustRetained = $true } |
+    [ordered]@{ phase = 'signed-identity'; passed = $true; untrustedRejected = $rejected; trustStore = $trustStore; nativeComActivation = $true; literalDirectory = $true; configuredSubmenu = $true; childTitle = $childLabel; title = $label; uninstall = $true; sharedTrustRetained = $true } |
         ConvertTo-Json | Set-Content -LiteralPath (Join-Path $results 'identity-result.json') -Encoding UTF8
 } catch {
     $_.ToString() | Set-Content -LiteralPath (Join-Path $results 'identity-error.txt') -Encoding UTF8

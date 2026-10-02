@@ -20,6 +20,7 @@ private slots:
     void activationShowsHiddenWindowWithoutLosingMaximizedState();
     void directoryRequestsPreserveLiteralPathsAndRejectMissingArguments();
     void directoryRequestIsDeliveredOnceAfterStartupIsReady();
+    void shellChoiceSurvivesArgumentsAndPeerDelivery();
     void malformedPeerCannotOpenDirectoryOrActivateWindow();
 };
 
@@ -110,10 +111,51 @@ void ApplicationInstanceTests::directoryRequestIsDeliveredOnceAfterStartupIsRead
     instance.setReady();
     QCOMPARE(opened.count(), 1);
     QCOMPARE(opened.at(0).at(0).toString(), directory.path());
+    QCOMPARE(opened.at(0).at(1).toString(), QString{});
     QCOMPARE(activated.count(), 1);
     instance.setReady();
     QCOMPARE(opened.count(), 1);
     QCOMPARE(activated.count(), 1);
+}
+
+void ApplicationInstanceTests::shellChoiceSurvivesArgumentsAndPeerDelivery()
+{
+    QTemporaryDir directory;
+    const auto request = ztermy::config::ApplicationLaunchRequest::fromArguments(
+        {QStringLiteral("ztermy"), QStringLiteral("--local-shell=commandPrompt"), QStringLiteral("--open-directory"),
+         directory.path()});
+    QVERIFY(request);
+    QCOMPARE(request->shellId, QStringLiteral("commandPrompt"));
+    const auto message = ztermy::config::ApplicationLaunchRequest::fromMessage(request->toMessage());
+    QVERIFY(message);
+    QCOMPARE(message->shellId, request->shellId);
+    QVERIFY(ztermy::config::ApplicationLaunchRequest::fromMessage(
+        QByteArrayLiteral("{\"version\":1,\"directory\":\"C:/\",\"background\":false}\n")));
+    for (const auto &arguments :
+         {QStringList{QStringLiteral("ztermy"), QStringLiteral("--local-shell")},
+          QStringList{QStringLiteral("ztermy"), QStringLiteral("--local-shell=arbitrary.exe"),
+                      QStringLiteral("--open-directory"), directory.path()},
+          QStringList{QStringLiteral("ztermy"), QStringLiteral("--local-shell=commandPrompt")},
+          QStringList{QStringLiteral("ztermy"), QStringLiteral("--local-shell=commandPrompt"),
+                      QStringLiteral("--local-shell=gitBash"), QStringLiteral("--open-directory"), directory.path()}})
+        QVERIFY(!ztermy::config::ApplicationLaunchRequest::fromArguments(arguments));
+    QVERIFY(!ztermy::config::ApplicationLaunchRequest::fromMessage(
+        QByteArrayLiteral("{\"version\":2,\"directory\":\"C:/\",\"background\":false,\"shellId\":\"evil.exe\"}")));
+    QVERIFY(!ztermy::config::ApplicationLaunchRequest::fromMessage(
+        QByteArrayLiteral("{\"version\":2,\"directory\":\"\",\"background\":false,\"shellId\":\"commandPrompt\"}")));
+    ztermy::ApplicationInstance instance;
+    QCOMPARE(instance.claim(directory.path()), ztermy::ApplicationInstance::Result::Primary);
+    QSignalSpy opened(&instance, &ztermy::ApplicationInstance::directoryOpenRequested);
+    QLocalSocket peer;
+    peer.connectToServer(endpointFor(directory.path()));
+    QTRY_COMPARE(peer.state(), QLocalSocket::ConnectedState);
+    peer.write(request->toMessage());
+    QTRY_VERIFY(peer.bytesAvailable() > 0);
+    QCOMPARE(peer.readAll(), QByteArrayLiteral("ok\n"));
+    QCOMPARE(opened.count(), 0);
+    instance.setReady();
+    QCOMPARE(opened.count(), 1);
+    QCOMPARE(opened.first().at(1).toString(), request->shellId);
 }
 
 void ApplicationInstanceTests::malformedPeerCannotOpenDirectoryOrActivateWindow()

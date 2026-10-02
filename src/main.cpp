@@ -11,6 +11,7 @@
 #include "infrastructure/terminal/ConPtyRuntime.h"
 #include "infrastructure/terminal/TerminalPngDecoder.h"
 #include "platform/windows/CrashDiagnostics.h"
+#include "platform/windows/ExplorerMenuSnapshot.h"
 #include "platform/windows/NativeWindow.h"
 #include "ui/AiMemoryDiagnostics.h"
 #include "ui/MemoryLifecycleRuntimeSmoke.h"
@@ -61,6 +62,7 @@
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTextStream>
+#include <QThreadPool>
 #include <QTimer>
 #include <QUrl>
 #include <QUuid>
@@ -4875,11 +4877,32 @@ int main(int argc, char *argv[])
     // before the window first appears (for example maximized) survives instead
     // of being reset the way the plain QWindow show helper would.
     QObject::connect(&instance, &ztermy::ApplicationInstance::directoryOpenRequested, &appController,
-                     [&appController](const QString &directory) {
-                         (void)appController.openLocalDirectory(directory);
+                     [&appController](const QString &directory, const QString &shellId) {
+                         (void)appController.openLocalDirectory(directory, shellId);
                      });
+    QThreadPool explorerMenuWriter;
+    explorerMenuWriter.setMaxThreadCount(1);
+    const auto updateExplorerMenu = [&] {
+        if (paths->mode != ztermy::config::StorageMode::installed)
+            return;
+        const auto path =
+            QString::fromStdWString(ztermy::explorer::snapshotPath(application.applicationFilePath().toStdWString()));
+        const auto bytes = appController.explorerMenuConfiguration();
+        if (path.isEmpty())
+            return;
+        explorerMenuWriter.start([path, bytes] {
+            if (!QDir().mkpath(QFileInfo(path).absolutePath()))
+                return;
+            QSaveFile file(path);
+            if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit())
+                qCWarning(applicationLog) << "Unable to update Explorer menu preferences";
+        });
+    };
+    QObject::connect(&appController, &ztermy::AppController::applicationSettingsChanged, &application,
+                     updateExplorerMenu);
+    updateExplorerMenu();
     if (!launchRequest->directory.isEmpty())
-        (void)appController.openLocalDirectory(launchRequest->directory);
+        (void)appController.openLocalDirectory(launchRequest->directory, launchRequest->shellId);
     if (launchRequest->background)
         window.prepareBackgroundLaunch();
     if (!launchRequest->background || !window.trayIconVisible())

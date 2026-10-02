@@ -79,7 +79,8 @@ constexpr qint64 terminalTitleSchemaVersion = 39;
 constexpr qint64 detachedWindowsSchemaVersion = 40;
 constexpr qint64 immersiveTitleBarSchemaVersion = 41;
 constexpr qint64 globalShortcutSchemaVersion = 42;
-constexpr qint64 currentSchemaVersion = globalShortcutSchemaVersion;
+constexpr qint64 explorerMenuSchemaVersion = 43;
+constexpr qint64 currentSchemaVersion = explorerMenuSchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -153,7 +154,7 @@ using ztermy::config::ThemePreference;
 
 [[nodiscard]] bool validSettings(const ApplicationSettings &settings)
 {
-    if (!settings.windowInteraction.valid())
+    if (!settings.windowInteraction.valid() || !settings.windowsIntegration.valid())
         return false;
     const QString fontFamily = settings.terminalFontFamily.trimmed();
     const QString uiFontFamily = settings.uiFontFamily.trimmed();
@@ -552,6 +553,14 @@ using ztermy::config::ThemePreference;
             return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
         settings.windowInteraction = *window;
     }
+    if (version >= explorerMenuSchemaVersion)
+    {
+        const auto integration = ztermy::config::WindowsIntegrationSettings::fromJson(
+            root.value(QStringLiteral("windowsIntegration")).toObject());
+        if (!integration)
+            return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+        settings.windowsIntegration = *integration;
+    }
     if (!validSettings(settings))
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
@@ -672,6 +681,7 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("reconnectRemoteSessions"), settings.reconnectRemoteSessions},
         {QStringLiteral("allowTerminalTitleChanges"), settings.allowTerminalTitleChanges},
         {QStringLiteral("windowInteraction"), settings.windowInteraction.toJson()},
+        {QStringLiteral("windowsIntegration"), settings.windowsIntegration.toJson()},
         {QStringLiteral("theme"), themePreferenceToken(settings.theme)},
         {QStringLiteral("backdropOpacity"), settings.backdropOpacity},
         {QStringLiteral("backdrop"), backdropPreferenceToken(settings.backdrop)},

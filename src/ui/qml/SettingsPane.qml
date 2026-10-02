@@ -567,6 +567,7 @@ Rectangle {
         windowBehavior.reopenLocalSessions = controller.reopenLocalSessions;
         windowBehavior.reconnectRemoteSessions = controller.reconnectRemoteSessions;
         windowBehavior.loadInteraction(controller.windowInteractionSettings);
+        windowsIntegration.load(controller.windowsIntegrationSettings);
         performanceModeDraft = controller.performanceMode;
         windowBehavior.performanceMode = performanceModeDraft;
         languageDraft = controller.languagePreference;
@@ -593,6 +594,11 @@ Rectangle {
     }
 
     function applyDraft() {
+        if (currentCategory === "windows") {
+            const saved = controller.saveWindowsIntegrationSettings(windowsIntegration.values());
+            presentStatus(saved ? qsTr("Settings saved and applied.") : qsTr("Windows integration settings could not be saved."), !saved, saved);
+            return;
+        }
         if (customAccentSelected && !customAccentField.acceptableInput) {
             presentStatus(qsTr("Custom accent must use the #RRGGBB format."), true, false);
             return;
@@ -605,7 +611,8 @@ Rectangle {
         const shellSaved = terminalThemeSaved && controller.saveLocalShellPreference(localShellTokens[Math.max(0, localShellBox.currentIndex)] || "automatic");
         const selectionSaved = shellSaved && controller.saveTerminalSelectionPopupSettings(selectionPopupSwitch.checked, selectionActionDraftValues());
         const lifecycleSaved = selectionSaved && controller.saveSessionLifecycleSettings(windowBehavior.closePaneOnSessionEnd, windowBehavior.preserveTerminalSessions, windowBehavior.reopenLocalSessions, windowBehavior.reconnectRemoteSessions);
-        const saved = lifecycleSaved && controller.saveWindowInteractionSettings(windowBehavior.interactionValues());
+        const windowSaved = lifecycleSaved && controller.saveWindowInteractionSettings(windowBehavior.interactionValues());
+        const saved = windowSaved && controller.saveWindowsIntegrationSettings(windowsIntegration.values());
         presentStatus(saved ? restartRequired ? qsTr("Settings saved. Restart ztermy to apply the rendering mode.") : qsTr("Settings saved and applied.") : windowChrome.globalShortcutError || qsTr("These settings could not be saved. Check the font and numeric ranges."), !saved, saved);
         if (!saved) {
             loadDraft();
@@ -836,6 +843,13 @@ Rectangle {
                 Layout.fillWidth: true
                 visible: pane.currentCategory === "application"
                 onPerformanceModeEdited: enabled => pane.performanceModeDraft = enabled
+            }
+
+            WindowsIntegrationSettings {
+                id: windowsIntegration
+                Layout.fillWidth: true
+                visible: pane.currentCategory === "windows"
+                controller: pane.controller
             }
 
             SectionCard {
@@ -3327,7 +3341,7 @@ Rectangle {
 
             GridLayout {
                 Layout.fillWidth: true
-                visible: pane.currentCategory === "application" || pane.currentCategory === "appearance" || pane.currentCategory === "terminal" || pane.currentCategory === "sftp"
+                visible: pane.currentCategory === "application" || pane.currentCategory === "appearance" || pane.currentCategory === "terminal" || pane.currentCategory === "sftp" || pane.currentCategory === "windows"
                 columns: pane.compactLayout ? 1 : 4
                 columnSpacing: Theme.spacingControl
                 rowSpacing: Theme.spacingControl
@@ -3336,8 +3350,13 @@ Rectangle {
                     objectName: "settingsReset"
                     Layout.fillWidth: pane.compactLayout
                     text: qsTr("Reset defaults")
-                    accessibleName: qsTr("Reset all application settings")
+                    accessibleName: pane.currentCategory === "windows" ? qsTr("Reset Windows integration settings") : qsTr("Reset all application settings")
                     onClicked: {
+                        if (pane.currentCategory === "windows") {
+                            windowsIntegration.load(pane.defaults.windowsIntegration);
+                            pane.presentStatus(qsTr("Defaults restored to the draft. Apply to save."), false, true);
+                            return;
+                        }
                         const reset = pane.controller.resetApplicationSettings();
                         pane.presentStatus(reset ? qsTr("Default settings restored.") : qsTr("Default settings could not be restored."), !reset, reset);
                         pane.loadDraft();
@@ -3354,8 +3373,12 @@ Rectangle {
                     Layout.fillWidth: pane.compactLayout
                     text: qsTr("Discard changes")
                     accessibleName: qsTr("Discard unsaved setting changes")
+                    enabled: pane.currentCategory !== "windows" || windowsIntegration.hasUnsavedChanges
                     onClicked: {
-                        pane.loadDraft();
+                        if (pane.currentCategory === "windows")
+                            windowsIntegration.load(pane.controller.windowsIntegrationSettings);
+                        else
+                            pane.loadDraft();
                         pane.presentStatus(qsTr("Unsaved changes discarded."), false, true);
                     }
                 }
@@ -3367,7 +3390,7 @@ Rectangle {
                     text: qsTr("Apply")
                     accessibleName: qsTr("Apply application settings")
                     variant: "primary"
-                    enabled: !pane.customAccentSelected || customAccentField.acceptableInput
+                    enabled: pane.currentCategory === "windows" ? windowsIntegration.hasUnsavedChanges : !pane.customAccentSelected || customAccentField.acceptableInput
                     onClicked: pane.applyDraft()
                 }
             }

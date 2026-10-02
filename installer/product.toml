@@ -1,4 +1,4 @@
-schema_version = 4
+schema_version = 5
 
 [product]
 id = "z-series.ztermy"
@@ -101,7 +101,7 @@ id = "open-here"
 label = "传统右键菜单：在此处打开 Ztermy"
 target = "ztermy.exe"
 contexts = ["directory", "directory-background", "drive"]
-arguments_before_path = ["--open-directory"]
+handler = { class_id = "{9C0C02C2-441D-44E9-B880-68D6647B2B31}", server = "ztermy-explorer-command.dll" }
 selection = "default-on"
 
 [[identity_packages]]

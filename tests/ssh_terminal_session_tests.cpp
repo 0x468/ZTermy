@@ -243,6 +243,7 @@ class SshTerminalSessionTests final : public QObject
 
 private slots:
     void synchronizesOutputOverLoopbackSsh();
+    void retainsViewportSizeDuringConnectionAndReconnect();
     void coalescesImagesOverLoopbackSshWhileGuiIsStalled();
     void deliversFinalSynchronizedFrameBeforeDisconnect();
     void rejectsInvalidStartupConfiguration();
@@ -264,6 +265,67 @@ private slots:
     void measuresInteractiveInputQueueLatency();
     void survivesRepeatedConnectDisconnectCycles();
 };
+
+void SshTerminalSessionTests::retainsViewportSizeDuringConnectionAndReconnect()
+{
+    const QString python = qEnvironmentVariable("ZTERMY_TEST_SSH_FIXTURE_PYTHON");
+    if (python.isEmpty())
+        QSKIP("Set ZTERMY_TEST_SSH_FIXTURE_PYTHON to a Python environment with Paramiko");
+    ztermy::ssh::SshTerminalSession session;
+    QSignalSpy hostKey(&session, &ztermy::ssh::SshTerminalSession::hostKeyConfirmationRequired);
+    QSignalSpy running(&session, &ztermy::ssh::SshTerminalSession::runningChanged);
+    ztermy::terminal::TerminalSnapshotPtr latest;
+    connect(&session, &ztermy::ssh::SshTerminalSession::snapshotReady, this,
+            [&](ztermy::terminal::TerminalSnapshotPtr snapshot) {
+                latest = std::move(snapshot);
+            });
+    for (int cycle = 0; cycle < 2; ++cycle)
+    {
+        QProcess server;
+        server.start(python, {QFINDTESTDATA("fixtures/synchronized_ssh_server.py")});
+        QVERIFY(server.waitForStarted(5000));
+        QByteArray events;
+        connect(&server, &QProcess::readyReadStandardOutput, this, [&] {
+            events += server.readAllStandardOutput();
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(events.contains('\n'), 10000);
+        bool validPort = false;
+        const auto port = events.split('\n').first().toUShort(&validPort);
+        QVERIFY(validPort && port != 0);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        latest.reset();
+        hostKey.clear();
+        running.clear();
+        session.requestResize(77, 11, 8, 16); // A disconnected request must not leak into the next session.
+        ztermy::ssh::SshConnectionRequest request{
+            .host = QStringLiteral("127.0.0.1"),
+            .port = port,
+            .username = QStringLiteral("fixture"),
+            .authentication = ztermy::ssh::SshAuthenticationMethod::Password,
+            .secret = ztermy::security::SensitiveByteArray(QByteArrayLiteral("fixture-only")),
+            .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json")),
+        };
+        QVERIFY(!session.start(std::move(request), {.columns = 100, .rows = 30}));
+        QTRY_COMPARE_WITH_TIMEOUT(hostKey.count(), 1, 10000);
+        QCOMPARE(running.count(), 0);
+        session.requestResize(150, 40, 8, 16);
+        const auto columns = static_cast<quint16>(180 + cycle * 20);
+        session.requestResize(columns, 45, 8, 16);
+        session.requestResize(0, 0, 8, 16); // Invalid geometry must not replace the latest valid size.
+        session.confirmHostKey(false);
+        const QByteArray expectedPty = "PTY " + QByteArray::number(columns) + " 45";
+        QTRY_VERIFY_WITH_TIMEOUT(events.contains(expectedPty), 10000);
+        QTRY_VERIFY_WITH_TIMEOUT(latest && latest->columns == columns && latest->rows == 45, 10000);
+        QTRY_VERIFY_WITH_TIMEOUT(!running.isEmpty() && running.last().first().toBool(), 5000);
+        // There was no resize after readiness: both the remote PTY and first viewport already agree.
+        server.write(QByteArrayLiteral("exit\n"));
+        QTRY_VERIFY_WITH_TIMEOUT(!running.isEmpty() && !running.last().first().toBool(), 5000);
+        session.stop();
+        QVERIFY(server.waitForFinished(5000) || server.state() == QProcess::NotRunning);
+        QCOMPARE(server.exitCode(), 0);
+    }
+}
 
 void SshTerminalSessionTests::synchronizesOutputOverLoopbackSsh()
 {

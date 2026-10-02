@@ -28,6 +28,7 @@ class Server(paramiko.ServerInterface):
 
     def check_channel_pty_request(self, channel, term, width, height,
                                   pixelwidth, pixelheight, modes):
+        print(f"PTY {width} {height}", flush=True)
         return True
 
     def check_channel_shell_request(self, channel):
@@ -36,7 +37,7 @@ class Server(paramiko.ServerInterface):
 
     def check_channel_window_change_request(self, channel, width, height,
                                             pixelwidth, pixelheight):
-        print("RESIZE", flush=True)
+        print(f"RESIZE {width} {height}", flush=True)
         return True
 
 

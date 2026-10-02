@@ -11,6 +11,7 @@ struct ApplicationLaunchRequest final
 {
     QString directory;
     bool background = false;
+    QString shellId;
 
     [[nodiscard]] QByteArray toMessage() const;
     [[nodiscard]] static std::expected<ApplicationLaunchRequest, QString> fromMessage(const QByteArray &message);

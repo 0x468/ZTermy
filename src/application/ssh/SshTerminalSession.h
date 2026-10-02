@@ -231,6 +231,9 @@ private:
 
     std::mutex m_commandMutex;
     std::deque<Command> m_commands;
+    // Resize is meaningful during bootstrap too; ordinary terminal input is not.
+    bool m_acceptingResize = false;
+    terminal::TerminalGeometry m_requestedGeometry;
     std::size_t m_queuedInputBytes = 0;
     WindowsWaitEvent m_commandWakeEvent;
 

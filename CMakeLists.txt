@@ -1013,6 +1013,7 @@ if(MSVC)
 endif()
 
 add_library(ztermy_explorer_command MODULE src/platform/windows/ExplorerCommand.cpp src/platform/windows/ExplorerCommand.def)
+target_include_directories(ztermy_explorer_command PRIVATE src)
 target_compile_features(ztermy_explorer_command PRIVATE cxx_std_23)
 target_compile_definitions(ztermy_explorer_command PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_link_libraries(ztermy_explorer_command PRIVATE shell32 shlwapi ole32 uuid user32)
@@ -1467,6 +1468,8 @@ set_source_files_properties(src/ui/qml/PaneFocusEdges.qml PROPERTIES QT_RESOURCE
 set_source_files_properties(src/ui/qml/DetachedTerminalWindow.qml PROPERTIES QT_RESOURCE_ALIAS DetachedTerminalWindow.qml)
 set_source_files_properties(src/ui/qml/TerminalWindowCoordinator.qml PROPERTIES QT_RESOURCE_ALIAS TerminalWindowCoordinator.qml)
 set_source_files_properties(src/ui/qml/WindowBehaviorSettings.qml PROPERTIES QT_RESOURCE_ALIAS WindowBehaviorSettings.qml)
+set_source_files_properties(src/ui/qml/WindowsIntegrationSettings.qml PROPERTIES QT_RESOURCE_ALIAS WindowsIntegrationSettings.qml)
+set_source_files_properties(src/ui/qml/WindowsIntegrationSettings.qml PROPERTIES QT_RESOURCE_ALIAS WindowsIntegrationSettings.qml)
 set_source_files_properties(src/ui/qml/TitleWindowActions.qml PROPERTIES QT_RESOURCE_ALIAS TitleWindowActions.qml)
 set_source_files_properties(src/ui/qml/TitleTab.qml PROPERTIES QT_RESOURCE_ALIAS TitleTab.qml)
 set_source_files_properties(src/ui/qml/TitleChromeAction.qml PROPERTIES QT_RESOURCE_ALIAS TitleChromeAction.qml)
@@ -1558,6 +1561,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/DetachedTerminalWindow.qml
         src/ui/qml/TerminalWindowCoordinator.qml
         src/ui/qml/WindowBehaviorSettings.qml
+        src/ui/qml/WindowsIntegrationSettings.qml
         src/ui/qml/TitleWindowActions.qml
         src/ui/qml/TitleTab.qml
         src/ui/qml/TitleChromeAction.qml
@@ -4750,6 +4754,7 @@ if(BUILD_TESTING)
     target_link_libraries(ztermy_windows_global_shortcut_tests PRIVATE Qt6::Gui Qt6::Test user32)
     add_test(NAME windows-global-shortcut COMMAND ztermy_windows_global_shortcut_tests)
     qt_add_executable(ztermy_explorer_command_tests tests/explorer_command_tests.cpp)
+    target_include_directories(ztermy_explorer_command_tests PRIVATE src)
     target_compile_features(ztermy_explorer_command_tests PRIVATE cxx_std_23)
     target_compile_definitions(ztermy_explorer_command_tests PRIVATE NOMINMAX UNICODE WIN32_LEAN_AND_MEAN _UNICODE)
     target_link_libraries(ztermy_explorer_command_tests PRIVATE Qt6::Test shell32 ole32 uuid)

@@ -123,7 +123,7 @@ void ApplicationInstance::setWindow(QWindow *window)
 void ApplicationInstance::dispatch(const config::ApplicationLaunchRequest &request)
 {
     if (!request.directory.isEmpty())
-        emit directoryOpenRequested(request.directory);
+        emit directoryOpenRequested(request.directory, request.shellId);
     if (!request.background)
         emit activationRequested();
 }

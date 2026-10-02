@@ -35,7 +35,7 @@ public:
     void release();
 signals:
     void activationRequested();
-    void directoryOpenRequested(const QString &directory);
+    void directoryOpenRequested(const QString &directory, const QString &shellId);
 
 private:
     QLocalServer m_server;

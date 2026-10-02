@@ -92,3 +92,42 @@ Explorer 中验收了选中文件夹与文件夹背景两种新菜单：菜单�
 当前 Sandbox build 26100 上 CurrentUser/TrustedPeople 不足以完成 Appx 部署，
 LocalMachine/TrustedPeople 才通过。安装器必须明确显示所需信任范围和权限，
 不能自动提升到 Trusted Root，也不能把默认开启新菜单当成证书信任同意。
+
+## 2026-10-02：可配置 Shell 菜单
+
+应用设置的「Windows 集成」提供单一入口或一级 Shell 子菜单，只展示本机检测到的
+可用 Shell，可选择单项入口使用的 Shell 或子菜单成员；未保存的设置草稿不会应用。
+传统菜单与 Windows 11 菜单共享原生 `IExplorerCommand` DLL，设置只更新当前用户、
+当前安装目录的有界快照，不改注册表或证书。开发/便携/自定义数据目录运行不覆盖安装版菜单。
+
+产品 descriptor、manifest 和 ledger 采用 schema 5；旧 1–4 可读。新增 typed handler
+声明由安装器管理 CLSID/InprocServer32 与三个目录菜单位置，沿用归属检查、回滚及卸载。
+SDK 固定到 `97074544270bfdb0833de832b249d1985ced7ab596a882049b6326d909636a0d`。
+Win11 的签名 sparse identity 仍是安装器的独立可选集成；仅改变菜单样式无需重新安装。
+
+本轮 owning-module Rust 测试 73 项、Clippy、SDK 校验通过；新的 Windows Sandbox 验证
+传统菜单旧版升级、失败回滚、卸载，以及真实签名身份/COM 子菜单枚举与调用。
+只枚举配置的 Command Prompt，目录含中文、空格和 `& % !` 仍为一个字面参数，
+`--local-shell commandPrompt` 原样传递。沙箱测试结果见
+`build/system-integration-sandbox/results/menu-transaction-20261002.txt` 和 `identity-result.json`。
+Qt 设置页键盘切换、草稿恢复、保存及截图验证见
+`build/system-integration-settings-smoke-verified-20261002/`。
+以上扩展协议阶段尚未生成新的完整 Setup；扩展协议测试不等同整包安装验收。
+
+2026-10-02 整包验收补充：带安装界面的测试包为
+`build/setup-shell-menu-20261002/setup/Ztermy-0.5.2/Ztermy-0.5.2-Setup.exe`，
+大小 47,407,743 字节，SHA-256 为
+`2f6d9078ec7cad1379a65449bc00093b4f639f92d6b5ba01a915f48fb7dc9e03`。
+该包包含当前工作区代码，版本仍为 0.5.2，不是正式发布，也未上传 GitHub。
+Debug 和静态 Release 各 130 项 CTest、全量静态 Release clang-tidy、格式/QML、
+翻译和资产门禁通过。Debug 标题栏测试起初被旧测试状态拖慢而超时；保留并移走其
+专用历史数据后，全量重跑通过，未放宽超时或绕过断言。
+
+新鲜动态 Release 部署补齐 x64 CRT，以 Windows-only PATH 启动验证通过；
+菜单身份包使用已有开发身份签名，只将公开 CER 放入 payload，未修改宿主机信任。
+干净 Sandbox 整包验收从 `2026-10-01T23:59:00.1333742Z` 开始，结果摘要匹配上述
+Setup 哈希：140 个受管文件哈希、传统 handler 注册、未授权身份拒绝与回滚、
+授权后新菜单注册、重装、版本升级、注入失败后旧文件/ledger/身份恢复、安装版
+快捷键与菜单设置 UI/native smoke、卸载全部通过。卸载保留用户未知文件和共享信任；
+只关闭本轮 Sandbox，未在宿主机实际安装。证据为
+`build/system-integration-sandbox/results/installed-integration-trust-result.json`。

@@ -1,7 +1,9 @@
 #include <QDir>
 #include <QFile>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QTest>
+#include "platform/windows/ExplorerMenuSnapshot.h"
 
 #include <windows.h>
 #include <shlobj.h>
@@ -12,6 +14,7 @@ class ExplorerCommandTests final : public QObject
     Q_OBJECT
 private slots:
     void nativeComLifetimeAndSelectionContract();
+    void enumeratesOnlyConfiguredShellsAndRejectsMalformedSnapshots();
 };
 
 void ExplorerCommandTests::nativeComLifetimeAndSelectionContract()
@@ -80,6 +83,92 @@ void ExplorerCommandTests::nativeComLifetimeAndSelectionContract()
     item.Reset();
     QVERIFY(FreeLibrary(module));
     CoUninitialize();
+}
+
+void ExplorerCommandTests::enumeratesOnlyConfiguredShellsAndRejectsMalformedSnapshots()
+{
+    using Microsoft::WRL::ComPtr;
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const auto previousLocal = qgetenv("LOCALAPPDATA");
+    qputenv("LOCALAPPDATA", directory.path().toUtf8());
+    const auto restoreEnvironment = qScopeGuard([&] {
+        qputenv("LOCALAPPDATA", previousLocal);
+    });
+    QVERIFY(SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)));
+    const auto uninitialize = qScopeGuard([] {
+        CoUninitialize();
+    });
+    const auto file =
+        QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("ztermy-explorer-command.dll"));
+    const auto executable = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("ztermy.exe"));
+    const auto path = QString::fromStdWString(ztermy::explorer::snapshotPath(executable.toStdWString()));
+    QVERIFY(QDir().mkpath(QFileInfo(path).absolutePath()));
+    const auto writeSnapshot = [&](const QByteArray &bytes) {
+        QFile snapshot(path);
+        return snapshot.open(QIODevice::WriteOnly) && snapshot.write(bytes) == bytes.size();
+    };
+    const auto module = LoadLibraryExW(reinterpret_cast<LPCWSTR>(file.utf16()), nullptr,
+                                       LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32);
+    QVERIFY(module);
+    const auto unload = qScopeGuard([&] {
+        FreeLibrary(module);
+    });
+    using GetClass = HRESULT(WINAPI *)(REFCLSID, REFIID, void **);
+    const auto getClass = reinterpret_cast<GetClass>(GetProcAddress(module, "DllGetClassObject"));
+    QVERIFY(getClass);
+    constexpr CLSID id{.Data1 = 0x9c0c02c2,
+                       .Data2 = 0x441d,
+                       .Data3 = 0x44e9,
+                       .Data4 = {0xb8, 0x80, 0x68, 0xd6, 0x64, 0x7b, 0x2b, 0x31}};
+    ComPtr<IClassFactory> factory;
+    QCOMPARE(getClass(id, IID_PPV_ARGS(&factory)), S_OK);
+    auto bytes = ztermy::explorer::defaultSnapshot;
+    bytes[8] = 1;
+    bytes[10] = (1U << 2) | (1U << 3); // Exactly Windows PowerShell and Command Prompt.
+    QVERIFY(writeSnapshot(QByteArray(reinterpret_cast<const char *>(bytes.data()), bytes.size())));
+    ComPtr<IExplorerCommand> root;
+    QCOMPARE(factory->CreateInstance(nullptr, IID_PPV_ARGS(&root)), S_OK);
+    EXPCMDFLAGS flags{};
+    QCOMPARE(root->GetFlags(&flags), S_OK);
+    QCOMPARE(flags, ECF_HASSUBCOMMANDS);
+    ComPtr<IEnumExplorerCommand> children;
+    QCOMPARE(root->EnumSubCommands(&children), S_OK);
+    ULONG fetched = 0;
+    ComPtr<IExplorerCommand> child;
+    QCOMPARE(children->Next(1, &child, &fetched), S_OK);
+    QCOMPARE(fetched, 1UL);
+    PWSTR title = nullptr;
+    QCOMPARE(child->GetTitle(nullptr, &title), S_OK);
+    QCOMPARE(QString::fromWCharArray(title), QStringLiteral("Windows PowerShell"));
+    CoTaskMemFree(title);
+    QCOMPARE(child->GetFlags(&flags), S_OK);
+    QCOMPARE(flags, ECF_DEFAULT);
+    ComPtr<IEnumExplorerCommand> nested;
+    QCOMPARE(child->EnumSubCommands(&nested), E_NOTIMPL);
+    child.Reset();
+    ComPtr<IEnumExplorerCommand> clone;
+    QCOMPARE(children->Clone(&clone), S_OK);
+    QCOMPARE(clone->Next(1, &child, &fetched), S_OK);
+    QCOMPARE(child->GetTitle(nullptr, &title), S_OK);
+    QCOMPARE(QString::fromWCharArray(title), QStringLiteral("Command Prompt"));
+    CoTaskMemFree(title);
+    child.Reset();
+    QCOMPARE(clone->Next(1, &child, &fetched), S_FALSE);
+    QCOMPARE(fetched, 0UL);
+    QCOMPARE(children->Reset(), S_OK);
+    QCOMPARE(children->Skip(2), S_OK);
+    QCOMPARE(children->Next(1, &child, &fetched), S_FALSE);
+    root.Reset();
+    for (const auto &malformed : {QByteArray("bad"), QByteArray(17, 'x'), QByteArray(16, '\0')})
+    {
+        QVERIFY(writeSnapshot(malformed));
+        QCOMPARE(factory->CreateInstance(nullptr, IID_PPV_ARGS(&root)), S_OK);
+        QCOMPARE(root->GetFlags(&flags), S_OK);
+        QCOMPARE(flags, ECF_DEFAULT);
+        QCOMPARE(root->EnumSubCommands(&nested), E_NOTIMPL);
+        root.Reset();
+    }
 }
 
 QTEST_GUILESS_MAIN(ExplorerCommandTests)

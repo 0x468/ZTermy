@@ -1,5 +1,6 @@
 #pragma once
 #include "core/config/WindowInteractionSettings.h"
+#include "core/config/WindowsIntegrationSettings.h"
 
 #include <QMap>
 #include <QString>
@@ -196,6 +197,7 @@ struct ApplicationSettings final
     AiReasoningPreference aiReasoning = AiReasoningPreference::automatic;
     AiProxyPreference aiProxy = AiProxyPreference::system;
     WindowInteractionSettings windowInteraction;
+    WindowsIntegrationSettings windowsIntegration;
 
     [[nodiscard]] friend bool operator==(const ApplicationSettings &, const ApplicationSettings &) = default;
 };

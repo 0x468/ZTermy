@@ -272,6 +272,12 @@ std::error_code SshTerminalSession::start(SshConnectionRequest request, const te
     postPhase(SshConnectionPhase::Resolving);
     postStatus(tr("Resolving SSH host"));
 
+    {
+        std::scoped_lock lock(m_commandMutex);
+        m_requestedGeometry = geometry;
+        m_acceptingResize = true;
+    }
+
     m_worker = std::jthread([this, request = std::move(request), geometry](const std::stop_token &stopToken) mutable {
         try
         {
@@ -287,6 +293,10 @@ std::error_code SshTerminalSession::start(SshConnectionRequest request, const te
 
 void SshTerminalSession::requestStop()
 {
+    {
+        std::scoped_lock lock(m_commandMutex);
+        m_acceptingResize = false;
+    }
     if (m_stopThread.joinable())
         return;
     m_snapshotDeliveryTimer.stop();
@@ -303,6 +313,10 @@ void SshTerminalSession::requestStop()
 
 void SshTerminalSession::stop() noexcept
 {
+    {
+        std::scoped_lock lock(m_commandMutex);
+        m_acceptingResize = false;
+    }
     if (m_stopThread.joinable())
         m_stopThread.join();
     else if (m_worker.joinable())
@@ -489,12 +503,15 @@ void SshTerminalSession::requestResize(const quint16 columns, const quint16 rows
         .cellWidthPixels = cellWidthPixels,
         .cellHeightPixels = cellHeightPixels,
     };
-    if (!geometry.valid() || !m_running.load())
+    if (!geometry.valid())
     {
         return;
     }
 
     std::scoped_lock lock(m_commandMutex);
+    if (!m_acceptingResize)
+        return;
+    m_requestedGeometry = geometry;
     if (!m_commands.empty() && std::holds_alternative<terminal::TerminalGeometry>(m_commands.back()))
     {
         m_commands.back() = geometry;
@@ -803,9 +820,19 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     tracePhase(state.phase());
     postPhase(state.phase());
     postStatus(tr("Opening SSH terminal"));
+    auto openingGeometry = geometry;
+    {
+        std::scoped_lock lock(m_commandMutex);
+        openingGeometry = m_requestedGeometry;
+    }
+    if (const std::error_code error = m_engine->resize(openingGeometry))
+    {
+        finishFailure(SshFailureKind::ProtocolError, tr("SSH terminal state resize failed"));
+        return;
+    }
     auto open = session->openTerminal(
-        *transport, geometry.columns, geometry.rows, request.sessionOptions.terminalType, terminalEnvironment,
-        std::chrono::seconds(request.sessionOptions.terminalOpenTimeoutSeconds), stopToken);
+        *transport, openingGeometry.columns, openingGeometry.rows, request.sessionOptions.terminalType,
+        terminalEnvironment, std::chrono::seconds(request.sessionOptions.terminalOpenTimeoutSeconds), stopToken);
     if (!open)
     {
         const SshFailureKind failure = sshFailureFromTransport(open.error(), true);
@@ -1584,6 +1611,10 @@ void SshTerminalSession::postRemoteTelemetryState(const QString &state)
 
 void SshTerminalSession::finishWorker(const QString &status, const SshConnectionPhase phase)
 {
+    {
+        std::scoped_lock lock(m_commandMutex);
+        m_acceptingResize = false;
+    }
     logMetrics();
     // Last output before the disconnect may only be a dirty flag; the engine
     // is still owned by this worker, so build the final frame here.

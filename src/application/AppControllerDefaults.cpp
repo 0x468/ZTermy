@@ -46,6 +46,7 @@ QVariantMap AppController::applicationSettingsDefaults() const
         {QStringLiteral("preserveTerminalSessions"), defaults.preserveTerminalSessions},
         {QStringLiteral("reopenLocalSessions"), defaults.reopenLocalSessions},
         {QStringLiteral("reconnectRemoteSessions"), defaults.reconnectRemoteSessions},
+        {QStringLiteral("windowsIntegration"), defaults.windowsIntegration.toJson().toVariantMap()},
     };
 }
 

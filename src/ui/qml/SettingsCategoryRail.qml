@@ -17,6 +17,7 @@ Rectangle {
             "appearance": qsTr("Appearance"),
             "terminal": qsTr("Terminal"),
             "shortcuts": qsTr("Shortcuts"),
+            "windows": qsTr("Windows integration"),
             "sftp": qsTr("SFTP"),
             "security": qsTr("Security"),
             "ai": qsTr("AI"),
@@ -47,7 +48,7 @@ Rectangle {
     function searchMatches(text) {
         const needle = text.trim().toLocaleLowerCase();
         const hits = [];
-        for (const entry of index) {
+        for (const entry of index.concat([["", "windows", qsTr("Windows integration"), "explorer shell context menu powershell cmd git bash nushell wsl"]])) {
             const haystack = (entry[2] + " " + entry[3] + " " + categoryTitle(entry[1])).toLocaleLowerCase();
             if (haystack.indexOf(needle) >= 0) {
                 hits.push(entry);
@@ -64,7 +65,7 @@ Rectangle {
     }
 
     function focusCategory(category) {
-        const buttons = [applicationCategory, appearanceCategory, terminalCategory, shortcutsCategory, sftpCategory, securityCategory, aiCategory, aboutCategory];
+        const buttons = [applicationCategory, appearanceCategory, terminalCategory, shortcutsCategory, windowsCategory, sftpCategory, securityCategory, aiCategory, aboutCategory];
         for (const button of buttons) {
             if (button.category === category) {
                 button.focusAction();
@@ -252,6 +253,18 @@ Rectangle {
                 visible: !rail.searching
                 selected: rail.currentCategory === "shortcuts"
                 onActivated: rail.categoryActivated("shortcuts")
+            }
+
+            SettingsCategoryButton {
+                id: windowsCategory
+                Layout.fillWidth: true
+                category: "windows"
+                title: rail.categoryTitle("windows")
+                iconName: "brand-windows"
+                actionObjectName: "settingsWindowsCategory"
+                visible: !rail.searching
+                selected: rail.currentCategory === "windows"
+                onActivated: rail.categoryActivated("windows")
             }
 
             RailHeading {

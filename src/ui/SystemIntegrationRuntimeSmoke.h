@@ -85,6 +85,78 @@ namespace ztermy::ui
     return SendInput(static_cast<UINT>(input.size()), input.data(), sizeof(INPUT)) == input.size();
 }
 
+[[nodiscard]] inline bool verifyExplorerMenuSettingsRuntime(NativeWindow &main, AppController &controller,
+                                                            const QDir &captures)
+{
+    using namespace std::chrono_literals;
+    auto *root = main.rootObject();
+    auto *category = quickItem(root, "settingsWindowsCategory");
+    if (!focusItem(main, category, QStringLiteral("settingsWindowsCategory")))
+        return false;
+    sendKey(main, Qt::Key_Space);
+    processWindowEventsFor(100ms);
+    auto *settings = quickItem(root, "settingsPane");
+    auto *card = quickItem(root, "settingsWindowsIntegrationCard");
+    auto *mode = quickItem(root, "settingsExplorerMenuMode");
+    auto *apply = quickItem(root, "settingsApply");
+    auto *discard = quickItem(root, "settingsDiscard");
+    auto *reset = quickItem(root, "settingsReset");
+    if (!settings || !card || !card->isVisible() || !mode || !apply || !apply->isVisible() || apply->isEnabled()
+        || !discard || !discard->isVisible() || discard->isEnabled() || !reset || !reset->isVisible()
+        || settings->property("currentCategory").toString() != QStringLiteral("windows"))
+        return false;
+    const auto original = controller.windowsIntegrationSettings();
+    const auto activate = [&](QQuickItem *button) {
+        if (!focusItem(main, button, button->objectName()))
+            return false;
+        sendKey(main, Qt::Key_Space);
+        processWindowEventsFor(100ms);
+        return true;
+    };
+    const auto selectSubmenu = [&] {
+        if (!focusItem(main, mode, QStringLiteral("settingsExplorerMenuMode")))
+            return false;
+        sendKey(main, Qt::Key_Space);
+        sendKey(main, Qt::Key_End);
+        sendKey(main, Qt::Key_Return);
+        processWindowEventsFor(350ms); // Wait for popup exit motion and input shielding.
+        return card->property("menuMode").toString() == QStringLiteral("submenu");
+    };
+    if (!main.grabWindow().save(captures.filePath(QStringLiteral("explorer-settings-single.png"))) || !selectSubmenu())
+        return false;
+    if (controller.windowsIntegrationSettings() != original || !apply->isEnabled() || !discard->isEnabled())
+        return false;
+    if (!main.grabWindow().save(captures.filePath(QStringLiteral("explorer-settings-submenu-draft.png")))
+        || !activate(discard)
+        || card->property("menuMode").toString() != original.value(QStringLiteral("menuMode")).toString()
+        || apply->isEnabled() || discard->isEnabled() || !selectSubmenu())
+        return false;
+    // Windows-page actions must not commit or discard another category's draft.
+    const auto fontBefore = controller.terminalFontFamily();
+    const auto fontDraft = QStringLiteral("Unsaved unrelated font draft");
+    if (!settings->setProperty("terminalFontDraft", fontDraft) || !activate(apply))
+        return false;
+    const auto saved = controller.windowsIntegrationSettings();
+    if (saved.value(QStringLiteral("menuMode")) != QStringLiteral("submenu") || apply->isEnabled()
+        || controller.terminalFontFamily() != fontBefore || settings->property("terminalFontDraft") != fontDraft
+        || !main.grabWindow().save(captures.filePath(QStringLiteral("explorer-settings-saved.png")))
+        || !activate(reset))
+        return false;
+    const auto defaults = controller.applicationSettingsDefaults().value(QStringLiteral("windowsIntegration")).toMap();
+    if (card->property("menuMode") != defaults.value(QStringLiteral("menuMode"))
+        || controller.windowsIntegrationSettings() != saved || !apply->isEnabled()
+        || !main.grabWindow().save(captures.filePath(QStringLiteral("explorer-settings-default-draft.png")))
+        || !activate(discard) || controller.windowsIntegrationSettings() != saved || apply->isEnabled()
+        || !activate(reset) || !activate(apply) || controller.windowsIntegrationSettings() != defaults
+        || controller.terminalFontFamily() != fontBefore || settings->property("terminalFontDraft") != fontDraft
+        || apply->isEnabled() || discard->isEnabled())
+        return false;
+    settings->setProperty("terminalFontDraft", fontBefore);
+    qInfo() << "Explorer settings: visible action buttons, keyboard discard/apply, draft-only defaults, isolated save: "
+               "true";
+    return main.grabWindow().save(captures.filePath(QStringLiteral("explorer-settings-defaults.png")));
+}
+
 [[nodiscard]] inline bool runSystemIntegrationRuntimeSmoke(NativeWindow &main, AppController &controller,
                                                            ApplicationInstance &instance, const QString &dataDir)
 {
@@ -165,15 +237,16 @@ namespace ztermy::ui
     if (!QDir().mkpath(directory))
         return false;
     QObject::connect(&instance, &ApplicationInstance::directoryOpenRequested, &controller,
-                     [&controller](const QString &path) {
-                         (void)controller.openLocalDirectory(path);
+                     [&controller](const QString &path, const QString &shellId) {
+                         (void)controller.openLocalDirectory(path, shellId);
                      });
     instance.setReady();
     const auto tabsBefore = controller.terminalTabs().size();
     qInfo() << "System integration smoke: directory IPC";
     QProcess launcher;
     launcher.start(QCoreApplication::applicationFilePath(),
-                   {QStringLiteral("--data-dir"), dataDir, QStringLiteral("--open-directory"), directory});
+                   {QStringLiteral("--data-dir"), dataDir, QStringLiteral("--open-directory"), directory,
+                    QStringLiteral("--local-shell=commandPrompt")});
     const auto stop = qScopeGuard([&launcher] {
         if (launcher.state() != QProcess::NotRunning)
         {
@@ -201,6 +274,7 @@ namespace ztermy::ui
     qInfo()
         << "System integration: native hotkey hide/wake/maximize/minimize, peer unchanged, second-process directory:"
         << capture;
-    return capture && verifyGlobalShortcutSettingsRuntime(main, controller, peer, captures);
+    return capture && verifyGlobalShortcutSettingsRuntime(main, controller, peer, captures)
+           && verifyExplorerMenuSettingsRuntime(main, controller, captures);
 }
 } // namespace ztermy::ui

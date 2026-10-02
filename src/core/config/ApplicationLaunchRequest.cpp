@@ -1,4 +1,5 @@
 #include "core/config/ApplicationLaunchRequest.h"
+#include "core/config/WindowsIntegrationSettings.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -22,9 +23,10 @@ namespace
 
 QByteArray ApplicationLaunchRequest::toMessage() const
 {
-    return QJsonDocument(QJsonObject{{QStringLiteral("version"), 1},
+    return QJsonDocument(QJsonObject{{QStringLiteral("version"), 2},
                                      {QStringLiteral("directory"), directory},
-                                     {QStringLiteral("background"), background}})
+                                     {QStringLiteral("background"), background},
+                                     {QStringLiteral("shellId"), shellId}})
                .toJson(QJsonDocument::Compact)
            + '\n';
 }
@@ -37,11 +39,18 @@ std::expected<ApplicationLaunchRequest, QString> ApplicationLaunchRequest::fromM
         return std::unexpected(QStringLiteral("Launch request is too large"));
     const auto document = QJsonDocument::fromJson(message);
     const auto json = document.object();
-    if (!document.isObject() || json.size() != 3 || json.value(QStringLiteral("version")) != QJsonValue(1)
+    const bool legacy = json.value(QStringLiteral("version")) == QJsonValue(1);
+    if (!document.isObject() || json.size() != (legacy ? 3 : 4)
+        || (!legacy
+            && (json.value(QStringLiteral("version")) != QJsonValue(2)
+                || !json.value(QStringLiteral("shellId")).isString()))
         || !json.value(QStringLiteral("directory")).isString() || !json.value(QStringLiteral("background")).isBool())
         return std::unexpected(QStringLiteral("Invalid launch request"));
     ApplicationLaunchRequest result{.directory = json.value(QStringLiteral("directory")).toString(),
-                                    .background = json.value(QStringLiteral("background")).toBool()};
+                                    .background = json.value(QStringLiteral("background")).toBool(),
+                                    .shellId = legacy ? QString{} : json.value(QStringLiteral("shellId")).toString()};
+    if (!result.shellId.isEmpty() && (result.directory.isEmpty() || !validExplorerShellId(result.shellId)))
+        return std::unexpected(QStringLiteral("Invalid shell launch request"));
     if (!result.directory.isEmpty())
     {
         if (!QDir::isAbsolutePath(result.directory) || result.background || result.directory.contains(QChar::Null)
@@ -57,11 +66,28 @@ std::expected<ApplicationLaunchRequest, QString> ApplicationLaunchRequest::fromA
 {
     ApplicationLaunchRequest result;
     bool directorySpecified = false;
+    bool shellSpecified = false;
     for (qsizetype index = 1; index < arguments.size(); ++index)
     {
         const auto &argument = arguments[index];
         if (argument == QStringLiteral("--background"))
             result.background = true;
+        else if (argument == QStringLiteral("--local-shell") || argument.startsWith(QStringLiteral("--local-shell=")))
+        {
+            if (shellSpecified)
+                return std::unexpected(QStringLiteral("--local-shell may only be specified once"));
+            shellSpecified = true;
+            if (argument == QStringLiteral("--local-shell"))
+            {
+                if (++index >= arguments.size())
+                    return std::unexpected(QStringLiteral("--local-shell requires a built-in shell id"));
+                result.shellId = arguments[index];
+            }
+            else
+                result.shellId = argument.sliced(QStringLiteral("--local-shell=").size());
+            if (!validExplorerShellId(result.shellId))
+                return std::unexpected(QStringLiteral("Unknown built-in local shell"));
+        }
         else if (argument == QStringLiteral("--open-directory")
                  || argument.startsWith(QStringLiteral("--open-directory=")))
         {
@@ -84,6 +110,8 @@ std::expected<ApplicationLaunchRequest, QString> ApplicationLaunchRequest::fromA
         }
     }
     // An explicit directory always takes precedence over login's hidden launch.
+    if (shellSpecified && !directorySpecified)
+        return std::unexpected(QStringLiteral("--local-shell requires --open-directory"));
     if (directorySpecified)
         result.background = false;
     return result;

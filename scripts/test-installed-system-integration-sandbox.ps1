@@ -87,8 +87,14 @@ try {
     $keys = @('Directory','Directory\Background','Drive') | ForEach-Object { "HKCU:\Software\Classes\$_\shell\ZInstaller.z-series.ztermy.open-here" }
     foreach ($key in $keys) {
         if (!(Test-Path -LiteralPath $key)) { throw "Traditional menu missing: $key" }
-        $command = (Get-Item -LiteralPath ($key + '\command')).GetValue('')
-        if (!$command.Contains($executable) -or !$command.Contains('--open-directory')) { throw 'Menu command is not bound to the installed executable.' }
+        $handler = (Get-Item -LiteralPath $key).GetValue('ExplorerCommandHandler')
+        if ($handler -ne '{9C0C02C2-441D-44E9-B880-68D6647B2B31}' -or (Test-Path -LiteralPath ($key + '\command'))) {
+            throw 'Traditional menu is not bound exclusively to the shared Explorer handler.'
+        }
+        $server = "HKCU:\Software\Classes\CLSID\$handler\InprocServer32"
+        if (!(Test-Path -LiteralPath $server) -or (Get-Item -LiteralPath $server).GetValue('') -ne (Join-Path $root 'ztermy-explorer-command.dll')) {
+            throw 'Explorer handler is not bound to the installed native DLL.'
+        }
     }
     # Deployment on a clean system must reject an untrusted identity and restore
     # the existing installation, without importing a certificate as a side effect.
