@@ -134,6 +134,10 @@ Setup 哈希：140 个受管文件哈希、传统 handler 注册、未授权身�
 
 ## 2026-10-02：Shell 图标与外部启动最终验收
 
+验收范围更正（2026-10-03）：下述 10-02 包的 Silent/后台安装和安装后产品 UI
+验收通过，但当时没有验收最终 Setup 的默认安装界面启动。Owner 随后报告的
+启动失败证实这是一项遗漏，不能将上述证据表述为安装器前端已通过。
+
 原生 Shell 子菜单使用各 Shell 的内置图标，一级入口保留应用图标；资源来自
 已接受的图标依赖。命令行支持目录/指定 Shell、SSH URL 或已保存主机、认证
 参数和主窗口/独立窗口启动，详见 `docs/COMMAND_LINE.md`。IPC 保留旧版本
@@ -173,3 +177,51 @@ Clink 错误不能只依赖一次测试未复现：现已隔离测试 Shell 的 
 SettingsPane 3466。未扩大基线或绕过该门禁，不宣称所有结构检查已通过。
 WinSCP 配置模板基于官方调用契约，未计为 WinSCP GUI 实测；跨屏混合 DPI
 及长时间真实远端使用仍需要设备验收。
+
+## 2026-10-03：安装界面与占用扩展更新修复
+
+Owner 的启动失败来自此前重装的第 279 个零基操作：
+`ztermy-explorer-command.dll` 提交、回滚均拒绝访问。不是显卡或材质配置错误；
+旧安装器在创建界面前强制恢复该事务，使硬件/软件 child 都退出 1，根因日志又
+没有被带入启动诊断。
+
+更新安装器 SDK 锁并修复上游：打开选项页不修改安装和 journal；显式开始安装
+才进入既有恢复门禁。同字节恢复跳过替换；已加载的旧 EXE/DLL 可改名至带
+ownership marker 的事务目录，提交新文件；释放后再次清理。无强制结束 Explorer、
+宿主机证书/注册表变更或删除失败 journal。跨卷和不可改名锁仍按真实错误失败，
+不会伪造安装成功。旧 Explorer 对象可继续使用旧映射，直到自然卸载。
+
+新本地测试包（仍为 0.5.2，未发布）：
+`build/setup-mapped-images-20261003/setup/Ztermy-0.5.2/Ztermy-0.5.2-Setup.exe`，
+47,543,681 字节，SHA-256
+`1e0fd904b4f14d1306ed3c532baf756c3511f707bdcf7eec76d51b2d29a2b9d2`。
+Qt 主程序代码和 EXE 未改变，摘要仍为
+`c0856676b435bbd55021697ff3bcc09604d5f6b1ab3f2db78f017113076ead91`，
+沿用上一轮同代码的 Debug/静态 Release 130/130 与全量静态分析证据；本轮
+不将其描述为重跑。安装器 workspace 134 项通过、3 项跳过，Debug/Release
+clippy 全目标、格式检查通过。包校验、锁校验和 headless smoke 通过。
+
+已在 Owner 桌面实际打开最终 EXE 的默认选项页并截图：没有点击安装，两份
+失败 journal 哈希不变。Sandbox 实际加载产品扩展并添加有效 PE overlay，
+重现旧包退出 30、rollback-failed/recovery-required；新包实际界面就绪且
+journal 不变，恢复安装 0、140 文件哈希一致、重装 0、释放后退休文件清理和
+卸载 0。证据置于该包的 `sandbox/results-recovery-passed/`。前两轮测试脚本
+因轻量 bootstrapper/监督器 PID 匹配、PS 5.1 无 BOM 中文正则误判 ready，
+保留失败记录，改为新日志范围的 ASCII ready 检测。完整矩阵第一次因少复制
+`package.toml` 夹具停止，保留错误，不计作产品验收通过。
+
+复现入口：`scripts/test-installer-ui-recovery-sandbox.ps1`（仅 WDAG 用户且存在
+专用 `probe.ps1` 映射）。输入目录需要旧失败包 `Old-Setup.exe`、新
+`Ztermy-0.5.2-Setup.exe`、新 `package.toml`、本脚本与既有完整集成脚本。
+先 `-Phase Prepare`，实际观察安装界面，再 `-Phase Finish`，最后运行完整
+`test-installed-system-integration-sandbox.ps1`；结果仅写 VM 的专用映射。
+
+最终自包含脚本复跑的 `sandbox/results/installer-ui-recovery-result.json`
+亦通过。完整矩阵开始于 `2026-10-03T02:49:25.8474492Z`，结果摘要匹配新包：
+首装/重装/升级/安装版原生 UI/卸载均退出 0，未信任拒绝与注入升级失败均
+退出 30，原文件/ledger/菜单身份恢复、140 文件校验、未知用户文件和共享
+信任保留通过。证据为 `sandbox/results/installed-integration-trust-result.json`；
+证书与系统注册均仅在 VM 中修改，宿主机无新增 Clink/DLL-init 弹窗事件。
+卸载后的干净 VM 另以 `--renderer software` 打开最终 EXE，ready 和真实
+安装选项页截图通过，见 `sandbox/results/software-ui-ready.json`。上游修复
+提交为 `a92b459`，未推送；本轮未改变版本号或发布 Release。
