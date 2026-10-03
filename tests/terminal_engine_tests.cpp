@@ -133,6 +133,9 @@ private slots:
     void encodesKeysFromLiveTerminalModes();
     void doesNotScrollWhenNushellClearsToViewportBottom();
     void encodesMouseAndFocusEventsFromLiveTerminalModes();
+    void stopsHoverReportsAfterTrackingReset_data();
+    void stopsHoverReportsAfterTrackingReset();
+    void keepsMouseModesIndependentOfAlternateScreenAndPrompt();
     void reportsAlternateScrollMode();
     void exposesShellWorkingDirectorySequences();
     void preservesTransientTitlesAcrossFragmentedOutput();
@@ -2428,6 +2431,109 @@ void TerminalEngineTests::encodesMouseAndFocusEventsFromLiveTerminalModes()
     focus = engine.encodeFocus(false);
     QVERIFY(focus);
     QCOMPARE(std::string(reinterpret_cast<const char *>(focus->data()), focus->size()), "\x1b[O");
+}
+
+void TerminalEngineTests::stopsHoverReportsAfterTrackingReset_data()
+{
+    QTest::addColumn<QByteArray>("reset");
+    QTest::addColumn<bool>("fragmented");
+    const std::array<std::pair<const char *, QByteArray>, 4> resets{{
+        {"tracking-only", "\x1b[?1003l"},
+        {"combined", "\x1b[?1000;1002;1003;1006l"},
+        {"separate", "\x1b[?1006l\x1b[?1003l\x1b[?1002l\x1b[?1000l"},
+        {"extended", "\x1b[?1016l\x1b[?1015l\x1b[?1006l\x1b[?1005l\x1b[?1003l"
+                     "\x1b[?1002l\x1b[?1001l\x1b[?1000l\x1b[?9l\x1b[?1004l\x1b[?2004l\x1b[?1049l"},
+    }};
+    for (const auto &[name, reset] : resets)
+    {
+        QTest::newRow(name) << reset << false;
+        const QByteArray splitName = QByteArray(name) + "-bytewise";
+        QTest::newRow(splitName.constData()) << reset << true;
+    }
+}
+
+void TerminalEngineTests::stopsHoverReportsAfterTrackingReset()
+{
+    QFETCH(QByteArray, reset);
+    QFETCH(bool, fragmented);
+    for (const bool splitEnable : {false, true})
+    {
+        auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 140, .rows = 60});
+        QVERIFY(result);
+        auto &engine = **result;
+        const auto feed = [&](const QByteArray &bytes, const bool split) {
+            const auto span = std::as_bytes(std::span(bytes.constData(), static_cast<std::size_t>(bytes.size())));
+            if (!split)
+            {
+                QVERIFY(!engine.feed(span));
+                return;
+            }
+            for (std::size_t i = 0; i < span.size(); ++i)
+                QVERIFY(!engine.feed(span.subspan(i, 1)));
+        };
+        // A single-mode reset is only required to turn off the mode it names.
+        const QByteArray enable = reset == QByteArray("\x1b[?1003l") ? "\x1b[?1049h\x1b[?1003;1006h"
+                                                                     : "\x1b[?1049h\x1b[?1000;1002;1003;1006h";
+        feed(enable, splitEnable);
+        auto snapshot = engine.snapshot();
+        QVERIFY(snapshot);
+        QVERIFY(snapshot->mouseTrackingActive);
+        ztermy::terminal::TerminalMouseEvent mouse{
+            .action = ztermy::terminal::TerminalMouseAction::motion,
+            .button = ztermy::terminal::TerminalMouseButton::none,
+            .positionX = 1100.0,
+            .positionY = 1000.0,
+            .screenWidthPixels = 1400,
+            .screenHeightPixels = 1200,
+            .cellWidthPixels = 10,
+            .cellHeightPixels = 20,
+        };
+        auto encoded = engine.encodeMouse(mouse);
+        QVERIFY(encoded);
+        QCOMPARE(std::string(reinterpret_cast<const char *>(encoded->data()), encoded->size()), "\x1b[<35;111;51M");
+
+        feed(reset, fragmented);
+        snapshot = engine.snapshot();
+        QVERIFY(snapshot);
+        QVERIFY(!snapshot->mouseTrackingActive);
+        // Move to another cell so duplicate-cell coalescing cannot hide a leaked report.
+        mouse.positionX += 10;
+        encoded = engine.encodeMouse(mouse);
+        QVERIFY(encoded);
+        QVERIFY(encoded->empty());
+        mouse.action = ztermy::terminal::TerminalMouseAction::press;
+        mouse.button = ztermy::terminal::TerminalMouseButton::left;
+        mouse.anyButtonPressed = true;
+        encoded = engine.encodeMouse(mouse);
+        QVERIFY(encoded);
+        QVERIFY(encoded->empty());
+    }
+}
+
+void TerminalEngineTests::keepsMouseModesIndependentOfAlternateScreenAndPrompt()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 140, .rows = 60});
+    QVERIFY(result);
+    auto &engine = **result;
+    constexpr std::string_view enable = "\x1b[?1049h\x1b[?1003;1006h";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(enable))));
+    constexpr std::string_view returnToShell = "\x1b[?1049l\r\nroot@host:~# ";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(returnToShell))));
+    const auto snapshot = engine.snapshot();
+    QVERIFY(snapshot);
+    QVERIFY(snapshot->mouseTrackingActive);
+    const auto encoded = engine.encodeMouse({
+        .action = ztermy::terminal::TerminalMouseAction::motion,
+        .button = ztermy::terminal::TerminalMouseButton::none,
+        .positionX = 1100.0,
+        .positionY = 1000.0,
+        .screenWidthPixels = 1400,
+        .screenHeightPixels = 1200,
+        .cellWidthPixels = 10,
+        .cellHeightPixels = 20,
+    });
+    QVERIFY(encoded);
+    QCOMPARE(std::string(reinterpret_cast<const char *>(encoded->data()), encoded->size()), "\x1b[<35;111;51M");
 }
 
 void TerminalEngineTests::reportsAlternateScrollMode()

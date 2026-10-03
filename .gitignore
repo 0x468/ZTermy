@@ -43,6 +43,7 @@ qmlcache/
 /data/
 /logs/
 /portable-data/
+/TODO.local.md
 
 # Windows artifacts
 Thumbs.db
