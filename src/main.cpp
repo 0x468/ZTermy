@@ -21,6 +21,7 @@
 #include "ui/SystemIntegrationRuntimeSmoke.h"
 #include "ui/TerminalLifecycleRuntimeSmoke.h"
 #include "ui/ThemeSettingsRuntimeSmoke.h"
+#include "ui/WindowSettingsLayoutRuntimeSmoke.h"
 #include "ui/WindowStateRuntimeSmoke.h"
 #include "ui/WorkbenchRuntimeSmoke.h"
 #include "ui/icons/SvgIconImageProvider.h"
@@ -630,7 +631,8 @@ struct ResizeHitRuntimeCase
                              && closeToTray != nullptr && closeToTray->property("visible").toBool()
                              && settingsReset != nullptr && settingsReset->property("visible").toBool()
                              && settingsDiscard != nullptr && settingsDiscard->property("visible").toBool()
-                             && settingsApply != nullptr && settingsApply->property("visible").toBool();
+                             && settingsApply != nullptr && settingsApply->property("visible").toBool()
+                             && ztermy::ui::runtime::verifyWindowSettingsLayout(*rootObject);
         settingsPane->setProperty("currentCategory", QStringLiteral("about"));
         processWindowEventsFor(std::chrono::milliseconds{500});
         auto *brandLockup = rootObject->findChild<QObject *>(QStringLiteral("settingsApplicationBrandLockup"));

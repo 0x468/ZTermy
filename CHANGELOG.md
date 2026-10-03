@@ -8,6 +8,8 @@ Release assets are published through GitHub Releases.
 
 ## 0.5.3 — 2026-10-03
 
+- Remove explanatory small print from window settings and keep startup-restore
+  children together, separate from the SSH reconnect history switch.
 - Keep ended terminal output scrollable, searchable and copyable. Replace
   modal exit prompts with a dismissible bottom status area, and add a
   configurable SSH reconnect shortcut (Ctrl+R by default) that only applies

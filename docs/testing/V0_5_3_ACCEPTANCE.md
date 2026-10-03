@@ -82,3 +82,32 @@ or remote-Shell correctness. Runtime screenshots use synthetic non-secret data.
 
 Do not infer a new Sandbox installation test from MSI extraction or payload
 launch. No tag, push or GitHub Release is part of this version update.
+
+## Owner-requested settings polish and GitHub release
+
+After the initial milestone, the owner requested removing explanatory small
+print and keeping startup-restore children directly below their parent. The
+window settings now have no muted explanatory paragraphs. Reconnect text
+history is an independent root-level switch after the three restore children;
+its default and persistence are unchanged. The concise-settings rule is also
+recorded in repository guidance.
+
+The UI layout fixture now asserts visual order, shared parent, root/child
+padding, and dependent enabled states with startup restore on and off. The
+independent history switch remains enabled in both cases. Dynamic and static
+Release rebuilt successfully. QML quality (100 files), translations (2388),
+format checks and focused static Release clang-tidy for main.cpp passed.
+The native layout fixture completed successfully, with application-settings
+captures reviewed at regular and compact widths. The native event gate found
+no new Shell DLL-init errors, and the code structure gate also passed.
+The initial launcher stopped waiting at 55 seconds, without killing the
+process; its subsequent completion is recorded by the fixture's success log.
+Evidence: `build/settings-layout-0.5.3-final/`.
+
+Per the owner's instruction, this follow-up did not repeat the full CTest,
+full clang-tidy, MSI/ZIP, or Sandbox installation matrices. The GUI Setup was
+rebuilt from the refreshed dynamic EXE, existing deployed dependencies and
+0.5.3 signed Explorer identity; no host trust or installation was changed.
+The owner explicitly requested committing, tagging 0.5.3 and uploading the
+new Setup and static EXE to GitHub. No pre-existing 0.5.3 tag or release was
+found; older release tags and unrelated preview drafts remain untouched.

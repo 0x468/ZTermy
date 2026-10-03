@@ -70,15 +70,6 @@ SectionCard {
             accessibleName: text
         }
 
-        Text {
-            Layout.fillWidth: true
-            text: qsTr("The tray menu can show or hide the window and exit ztermy completely.")
-            color: Theme.textMuted
-            wrapMode: Text.WordWrap
-            font.family: Theme.uiFont
-            font.pixelSize: Theme.textLabel
-        }
-
         AppSwitch {
             id: closePaneOnSessionEndSwitch
 
@@ -95,21 +86,6 @@ SectionCard {
             Layout.fillWidth: true
             text: qsTr("Restore terminal tabs and pane layouts on the next launch")
             accessibleName: text
-        }
-
-        AppSwitch {
-            id: reconnectHistorySwitch
-            objectName: "settingsRetainHistoryOnReconnectSwitch"
-            Layout.fillWidth: true
-            text: qsTr("Keep previous output when reconnecting SSH")
-            accessibleName: text
-        }
-        Text {
-            Layout.fillWidth: true
-            text: qsTr("Off by default. Keeps text history in memory with a new connection separator; terminal modes and formatting are reset. Closing the pane clears it.")
-            color: Theme.textMuted
-            wrapMode: Text.WordWrap
-            font.pixelSize: Theme.textLabel
         }
 
         AppSwitch {
@@ -146,6 +122,14 @@ SectionCard {
         }
 
         AppSwitch {
+            id: reconnectHistorySwitch
+            objectName: "settingsRetainHistoryOnReconnectSwitch"
+            Layout.fillWidth: true
+            text: qsTr("Keep previous output when reconnecting SSH")
+            accessibleName: text
+        }
+
+        AppSwitch {
             id: performanceModeSwitch
 
             objectName: "settingsPerformanceModeSwitch"
@@ -160,12 +144,6 @@ SectionCard {
             Layout.fillWidth: true
             text: qsTr("Reuse the running instance for the same data directory")
             accessibleName: text
-        }
-        Text {
-            Layout.fillWidth: true
-            text: qsTr("Portable and installed copies with separate data directories remain independent. Applies on next launch.")
-            color: Theme.textMuted
-            wrapMode: Text.WordWrap
         }
         AppSwitch {
             id: terminalTitleSwitch
@@ -182,12 +160,6 @@ SectionCard {
             accessibleName: text
         }
         Text {
-            Layout.fillWidth: true
-            text: qsTr("Hover the narrow strip above the content to reveal the title bar. The content does not move.")
-            color: Theme.textMuted
-            wrapMode: Text.WordWrap
-        }
-        Text {
             text: qsTr("Terminal tab widths")
             color: Theme.text
         }
@@ -196,12 +168,6 @@ SectionCard {
             objectName: "settingsTabWidthMode"
             Layout.fillWidth: true
             model: [qsTr("All titles, shrink together"), qsTr("Active title, other tabs as icons")]
-        }
-        Text {
-            Layout.fillWidth: true
-            text: qsTr("A manually renamed tab keeps its name. Clear the name to restore automatic titles.")
-            color: Theme.textMuted
-            wrapMode: Text.WordWrap
         }
         Text {
             text: qsTr("Double-click a terminal tab")
@@ -220,15 +186,6 @@ SectionCard {
             id: tabCloseButtonBox
             Layout.fillWidth: true
             model: [qsTr("Always visible"), qsTr("Show on hover or keyboard focus"), qsTr("Hidden (use the tab menu)")]
-        }
-
-        Text {
-            Layout.fillWidth: true
-            text: qsTr("Uses a truly opaque window and disables material, shadows and motion. Your selected visual-effects preference is kept and restored when this mode is turned off. Restart required.")
-            color: Theme.textMuted
-            wrapMode: Text.WordWrap
-            font.family: Theme.uiFont
-            font.pixelSize: Theme.textLabel
         }
     }
 }

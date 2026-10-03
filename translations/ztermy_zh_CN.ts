@@ -9560,14 +9560,9 @@ Click to unpin · Double-click pins the whole window</source>
 <context>
     <name>WindowBehaviorSettings</name>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="104"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="128"/>
         <source>Keep previous output when reconnecting SSH</source>
         <translation>SSH 重连时保留此前的输出</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="109"/>
-        <source>Off by default. Keeps text history in memory with a new connection separator; terminal modes and formatting are reset. Closing the pane clears it.</source>
-        <translation>默认关闭。仅在内存中保留文本历史，并添加新连接分隔；终端模式与格式会重置。关闭窗格后清除。</translation>
     </message>
     <message>
         <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="60"/>
@@ -9575,19 +9570,14 @@ Click to unpin · Double-click pins the whole window</source>
         <translation>在鼠标所在的屏幕唤醒主窗口</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="122"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="98"/>
         <source>Restore detached windows on the next launch</source>
         <translation>下次启动时恢复独立窗口</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="174"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="152"/>
         <source>Allow terminals to change titles</source>
         <translation>允许终端修改标题</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="202"/>
-        <source>A manually renamed tab keeps its name. Clear the name to restore automatic titles.</source>
-        <translation>手动重命名的标签始终保持名称。清空名称可恢复自动标题。</translation>
     </message>
     <message>
         <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="26"/>
@@ -9600,114 +9590,94 @@ Click to unpin · Double-click pins the whole window</source>
         <translation>关闭窗口时让 ztermy 在通知区域继续运行</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="75"/>
-        <source>The tray menu can show or hide the window and exit ztermy completely.</source>
-        <translation>托盘菜单可以显示或隐藏窗口，也可以彻底退出 ztermy。</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="87"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="78"/>
         <source>Close a pane automatically when its shell exits or SSH session disconnects</source>
         <translation>Shell 退出或 SSH 会话断开后自动关闭窗格</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="96"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="87"/>
         <source>Restore terminal tabs and pane layouts on the next launch</source>
         <translation>下次启动时恢复终端标签页和窗格布局</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="133"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="109"/>
         <source>Open restored local terminals automatically</source>
         <translation>自动打开已恢复的本地终端</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="144"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="120"/>
         <source>Reconnect restored SSH sessions automatically</source>
         <translation>自动重新连接已恢复的 SSH 会话</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="153"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="137"/>
         <source>Prioritize performance on software-rendered or low-power machines</source>
         <translation>在软件渲染或低性能设备上优先保证性能</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="161"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="145"/>
         <source>Reuse the running instance for the same data directory</source>
         <translation>同一数据目录复用已运行的实例</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="166"/>
-        <source>Portable and installed copies with separate data directories remain independent. Applies on next launch.</source>
-        <translation>使用不同数据目录的便携版与安装版互不影响，下次启动时生效。</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="181"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="159"/>
         <source>Automatically hide the window title bar</source>
         <translation>自动隐藏窗口顶栏</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="186"/>
-        <source>Hover the narrow strip above the content to reveal the title bar. The content does not move.</source>
-        <translation>悬停内容上方的窄空白带可唤出顶栏；终端内容不会移动。</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="191"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="163"/>
         <source>Terminal tab widths</source>
         <translation>终端标签宽度</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="198"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="170"/>
         <source>All titles, shrink together</source>
         <translation>全部显示标题，空间不足时同步缩窄</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="198"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="170"/>
         <source>Active title, other tabs as icons</source>
         <translation>仅活动标签显示标题，其余显示图标</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="207"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="173"/>
         <source>Double-click a terminal tab</source>
         <translation>双击终端标签页</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="213"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="179"/>
         <source>Rename</source>
         <translation>重命名</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="213"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="179"/>
         <source>Close tab</source>
         <translation>关闭标签页</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="213"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="179"/>
         <source>No action</source>
         <translation>无操作</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="216"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="182"/>
         <source>Tab close button</source>
         <translation>标签页关闭按钮</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="222"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="188"/>
         <source>Always visible</source>
         <translation>始终显示</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="222"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="188"/>
         <source>Show on hover or keyboard focus</source>
         <translation>悬停或获得键盘焦点时显示</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="222"/>
+        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="188"/>
         <source>Hidden (use the tab menu)</source>
         <translation>隐藏（通过标签页菜单关闭）</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/qml/WindowBehaviorSettings.qml" line="227"/>
-        <source>Uses a truly opaque window and disables material, shadows and motion. Your selected visual-effects preference is kept and restored when this mode is turned off. Restart required.</source>
-        <translation>使用真正不透明的窗口，并关闭材质、阴影和动画。所选视觉效果偏好会保留，并在关闭此模式后恢复。需要重启。</translation>
     </message>
 </context>
 <context>

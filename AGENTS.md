@@ -13,6 +13,10 @@
   internal security architecture as concepts the user must manage unless a
   concrete risk or explicit user choice requires it.
 - Netcatty and other SSH tools are product references only.
+- Keep settings concise: do not add muted small-print explanations beneath
+  ordinary controls. Put implementation details in documentation; show only
+  necessary contextual risk or action feedback in the UI. Keep dependent
+  controls directly below their parent, with unrelated settings at root level.
 - ztermy owns and evolves one built-in, provider-backed terminal Agent. Never
   integrate, detect, launch, bridge, or expose Codex, OpenCode, Claude Code, or
   any other external Agent/harness runtime. Their public product behavior may
