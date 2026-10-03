@@ -78,6 +78,9 @@ QtObject {
     readonly property color windowBackground: highContrast ? highContrastBackground : backdropActive ? "transparent" : skin.content
     readonly property color chromeBackground: highContrast ? highContrastBackground : withAlpha(skin.chrome, chromeAlpha)
     readonly property color workspaceBackground: highContrast ? highContrastBackground : withAlpha(terminalBackground, workspaceAlpha)
+    // Only a fully transparent workspace needs a native pointer-ownership floor.
+    // Use the terminal tint, without adding another layer at nonzero opacity.
+    readonly property color workspaceInputFloor: workspaceBackground.a === 0 ? withAlpha(terminalBackground, 1 / 255) : "transparent"
     // Opaque skin ladder: content pages sit on contentBackground, navigation
     // and side panels on panelBackground, cards and popups above them.
     readonly property color contentBackground: highContrast ? highContrastBackground : skin.content

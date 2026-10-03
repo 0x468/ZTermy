@@ -1020,9 +1020,17 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         height: root.reservedTitleHeight
-        // A zero-alpha strip can lose native pointer ownership at 0% opacity.
-        // Keep a visually negligible input surface, covered by expanded chrome.
-        color: root.autoHideTitleBar ? Qt.rgba(Theme.floatingBackground.r, Theme.floatingBackground.g, Theme.floatingBackground.b, 1 / 255) : root.chromeColor
+        // Hidden chrome extends the page, not the floating overlay material.
+        // The terminal keeps one shared tint plus a zero-opacity input floor.
+        color: !root.autoHideTitleBar ? root.chromeColor : root.currentPage === "terminal" ? Theme.workspaceInputFloor : Theme.contentBackground
+
+        Rectangle {
+            objectName: "mainTitleTriggerNavigation"
+            width: workspaceNavigation.width
+            height: parent.height
+            visible: root.autoHideTitleBar && root.currentPage === "hosts"
+            color: Theme.panelBackground
+        }
     }
 
     // Keep the complete covered area shielded until the slide finishes.

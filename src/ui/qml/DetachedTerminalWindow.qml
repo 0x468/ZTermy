@@ -200,7 +200,7 @@ Window {
         objectName: "detachedTitleTriggerStrip"
         width: parent.width
         height: detachedTerminalWindow.titleTriggerHeight
-        color: Qt.rgba(Theme.floatingBackground.r, Theme.floatingBackground.g, Theme.floatingBackground.b, 1 / 255)
+        color: Theme.workspaceInputFloor
     }
 
     MouseArea {

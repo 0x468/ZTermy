@@ -15,6 +15,14 @@ their normal extent. Expanded chrome is flush with the window top, covering the
 reserved strip and overlaying content without changing its geometry or terminal
 grid. Visible controls replace hidden strip dragging at their locations.
 
+The hidden trigger strip extends the active page surface rather than revealing
+the native backdrop above an opaque page. Settings/SFTP follow the content skin;
+Hosts extend both content and navigation skin at the actual navigation width.
+Terminal and detached strips retain the same single workspace tint. Only a
+fully transparent workspace adds a 1/255 terminal-colored input floor, preserving
+native pointer ownership without stacking another tint at nonzero opacity.
+This does not change persistent chrome or the opaque revealed overlay.
+
 Hover reveals after 150 ms. Leaving starts a 300 ms dismissal delay. Switching
 Tabs never resets hover/reveal state. Pointer presence anywhere in the revealed
 bar, an open title-bar menu, active dragging, or keyboard-visible title-bar
@@ -74,3 +82,8 @@ pointer-held switching across live Tab delegates, terminal geometry/grid
 stability, theme captures, detached Pane creation/merge and explicit return.
 Native desktop checks and screenshot review remain required; compilation alone
 does not establish interaction correctness.
+
+The isolated `title-trigger-material-runtime` capture gate checks hidden strip
+pixels and the material alpha matrix in both window activation phases. It refuses
+ordinary data directories and pre-existing sessions; see
+`docs/testing/TITLE_TRIGGER_MATERIAL_2026_10_03.md` for scope and evidence.

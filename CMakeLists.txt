@@ -4944,6 +4944,15 @@ if(BUILD_TESTING)
             --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/title-bar-immersive-runtime"
     )
     set_tests_properties(title-bar-immersive-runtime PROPERTIES RUN_SERIAL TRUE TIMEOUT 60)
+    add_test(
+        NAME title-trigger-material-runtime
+        COMMAND ztermy
+            --title-trigger-material-smoke
+            --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/title-trigger-material-runtime"
+    )
+    # 288 paired scene/desktop readbacks include inactive-window render waits.
+    # This capture matrix is separate from the 60-second interaction smoke.
+    set_tests_properties(title-trigger-material-runtime PROPERTIES RUN_SERIAL TRUE TIMEOUT 480)
 endif()
 
 if(CMAKE_VERSION VERSION_LESS 4.3)

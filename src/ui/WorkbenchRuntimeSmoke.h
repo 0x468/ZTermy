@@ -8,6 +8,7 @@
 #include "ui/SideDrawerRuntimeSmoke.h"
 #include "ui/SidePanelLayoutRuntimeSmoke.h"
 #include "ui/TitleBarRuntimeSmoke.h"
+#include "ui/TitleTriggerMaterialRuntimeSmoke.h"
 #include "ui/terminal/TerminalPaneRuntimeSmoke.h"
 
 #include <QColor>
@@ -474,6 +475,8 @@ inline bool verifyHistoryScrollPreservation(NativeWindow &window, AppController 
 inline std::optional<bool> runWorkbenchRuntimeCheck(NativeWindow &window, AppController &controller,
                                                     const QStringList &arguments)
 {
+    if (arguments.contains(QStringLiteral("--title-trigger-material-smoke")))
+        return verifyTitleTriggerMaterial(window, controller);
     if (arguments.contains(QStringLiteral("--title-bar-immersive-smoke")))
         return verifyImmersiveTitleBar(window, controller);
     if (arguments.contains(QStringLiteral("--material-theme-capture")))
