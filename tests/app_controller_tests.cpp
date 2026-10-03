@@ -2219,7 +2219,7 @@ void AppControllerTests::persistsConnectionHistorySwitchWithoutStoppingSessions(
         QCOMPARE(reopened.terminalThemeId(), QStringLiteral("ztermy-dark"));
         // Per-row reset (UI V2 chapter 5) compares drafts against these tokens.
         const QVariantMap defaults = reopened.applicationSettingsDefaults();
-        QCOMPARE(defaults.size(), 33);
+        QCOMPARE(defaults.size(), 34);
         QCOMPARE(defaults.value(QStringLiteral("windowsIntegration")).toMap(),
                  ztermy::config::WindowsIntegrationSettings{}.toJson().toVariantMap());
         QCOMPARE(defaults.value(QStringLiteral("terminalTheme")).toString(), QStringLiteral("ztermy-dark"));
@@ -2474,6 +2474,10 @@ void AppControllerTests::managesTerminalSessionLifecyclePreferences()
                                      });
 
     QVERIFY(controller.saveSessionLifecycleSettings(false, true, true, false));
+    QVERIFY(!controller.retainHistoryOnReconnect());
+    QVERIFY(controller.saveSessionLifecycleSettings(false, true, true, false, true));
+    QVERIFY(controller.retainHistoryOnReconnect());
+    QVERIFY(ztermy::config::ApplicationSettingsStore(settingsPath).load()->retainHistoryOnReconnect);
     QVERIFY(controller.preserveTerminalSessions());
     QVERIFY(controller.reopenLocalSessions());
     QVERIFY(!controller.reconnectRemoteSessions());
@@ -2488,6 +2492,7 @@ void AppControllerTests::managesTerminalSessionLifecyclePreferences()
     QCOMPARE(state->starts, 2);
 
     QVERIFY(controller.saveSessionLifecycleSettings(true, false, false, true));
+    QVERIFY(!controller.retainHistoryOnReconnect());
     QVERIFY(controller.closePaneOnSessionEnd());
     QVERIFY(!controller.preserveTerminalSessions());
     QVERIFY(!controller.reopenLocalSessions());

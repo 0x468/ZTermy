@@ -185,6 +185,7 @@ class AppController final : public QObject
     Q_PROPERTY(bool sftpConfirmDelete READ sftpConfirmDelete NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool closeToTray READ closeToTray NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool closePaneOnSessionEnd READ closePaneOnSessionEnd NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(bool retainHistoryOnReconnect READ retainHistoryOnReconnect NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool preserveTerminalSessions READ preserveTerminalSessions NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool reopenLocalSessions READ reopenLocalSessions NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool reconnectRemoteSessions READ reconnectRemoteSessions NOTIFY applicationSettingsChanged)
@@ -357,11 +358,12 @@ public:
     [[nodiscard]] bool sftpConfirmDelete() const noexcept;
     [[nodiscard]] bool closeToTray() const noexcept;
     [[nodiscard]] bool closePaneOnSessionEnd() const noexcept;
+    [[nodiscard]] bool retainHistoryOnReconnect() const noexcept;
     [[nodiscard]] bool preserveTerminalSessions() const noexcept;
     [[nodiscard]] bool reopenLocalSessions() const noexcept;
     [[nodiscard]] bool reconnectRemoteSessions() const noexcept;
     Q_INVOKABLE bool saveSessionLifecycleSettings(bool closePaneOnEnd, bool preserveSessions, bool reopenLocal,
-                                                  bool reconnectRemote);
+                                                  bool reconnectRemote, bool retainHistory = false);
     [[nodiscard]] QVariantMap windowInteractionSettings() const;
     Q_INVOKABLE bool saveWindowInteractionSettings(const QVariantMap &changes);
     [[nodiscard]] QVariantMap windowsIntegrationSettings() const;

@@ -41,7 +41,7 @@ namespace ztermy::ssh
 class SshTerminalSessionTestPeer
 {
 public:
-    static bool finishWithPendingOutput(SshTerminalSession &session)
+    static bool finishWithPendingOutput(SshTerminalSession &session, const bool oldModes = false)
     {
         auto engine = terminal::GhosttyTerminalEngine::create({.columns = 80, .rows = 24});
         if (!engine)
@@ -49,6 +49,12 @@ public:
         session.m_engine = std::move(*engine);
         session.m_running.store(true);
         session.m_viewAvailable.store(true);
+        if (oldModes)
+        {
+            constexpr std::string_view modes = "\x1b[?1003h\x1b[?1006h\x1b[?2004h";
+            if (session.m_engine->feed(std::as_bytes(std::span(modes))))
+                return false;
+        }
         constexpr std::string_view output = "\x1b[?2026hLAST FRAME";
         if (session.m_engine->feed(std::as_bytes(std::span(output))))
             return false;
@@ -58,6 +64,13 @@ public:
             session.readOnlyLoop(token);
         });
         return true;
+    }
+
+    static bool hasFreshModes(SshTerminalSession &session)
+    {
+        constexpr std::string_view text = "test";
+        const auto paste = session.m_engine->encodePaste(std::as_bytes(std::span(text)));
+        return paste && paste->size() == text.size() && !session.m_engine->synchronizedOutput();
     }
 };
 } // namespace ztermy::ssh
@@ -251,6 +264,7 @@ private slots:
     void coalescesImagesOverLoopbackSshWhileGuiIsStalled();
     void deliversFinalSynchronizedFrameBeforeDisconnect();
     void retainsReadOnlyInteractionAfterDisconnect();
+    void reconnectHistoryIsOptInAndResetsModes();
     void rejectsInvalidStartupConfiguration();
     void presentsDistinctFailureStatuses();
     void reportsConnectionRefusalFromLiveSocket();
@@ -306,6 +320,65 @@ void SshTerminalSessionTests::retainsReadOnlyInteractionAfterDisconnect()
     QCOMPARE(copied.size(), count);
 }
 
+void SshTerminalSessionTests::reconnectHistoryIsOptInAndResetsModes()
+{
+    for (const bool retain : {false, true})
+    {
+        QTemporaryDir directory;
+        ztermy::ssh::SshTerminalSession session;
+        QSignalSpy phases(&session, &ztermy::ssh::SshTerminalSession::phaseChanged);
+        QSignalSpy copied(&session, &ztermy::ssh::SshTerminalSession::clipboardTextReady);
+        QSignalSpy search(&session, &ztermy::ssh::SshTerminalSession::searchResultReady);
+        QVERIFY(ztermy::ssh::SshTerminalSessionTestPeer::finishWithPendingOutput(session, true));
+        QTcpServer server;
+        QVERIFY(server.listen(QHostAddress::LocalHost));
+        connect(&server, &QTcpServer::newConnection, &server, [&] {
+            while (auto *socket = server.nextPendingConnection())
+            {
+                socket->abort();
+                socket->deleteLater();
+            }
+        });
+        for (int cycle = 0; cycle < 2; ++cycle)
+        {
+            phases.clear();
+            ztermy::ssh::SshConnectionRequest request{
+                .host = QStringLiteral("127.0.0.1"),
+                .port = server.serverPort(),
+                .username = QStringLiteral("fixture"),
+                .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
+                .privateKeyPath = QStringLiteral("unused-test-key"),
+                .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json")),
+            };
+            QVERIFY(!session.start(std::move(request), {.columns = 90, .rows = 20}, retain));
+            QTRY_VERIFY_WITH_TIMEOUT(std::ranges::any_of(phases,
+                                                         [](const auto &args) {
+                                                             return qvariant_cast<ztermy::ssh::SshConnectionPhase>(
+                                                                        args.constFirst())
+                                                                    == ztermy::ssh::SshConnectionPhase::Failed;
+                                                         }),
+                                     5000);
+            session.search(QStringLiteral("LAST FRAME"), false, true);
+            QTRY_VERIFY_WITH_TIMEOUT(!search.isEmpty(), 3000);
+            QCOMPARE(search.constLast()[2].toUInt(), retain ? 1U : 0U);
+            search.clear();
+            QVERIFY(ztermy::ssh::SshTerminalSessionTestPeer::hasFreshModes(session));
+            copied.clear();
+            session.selectAll();
+            session.copySelection();
+            if (retain)
+            {
+                QTRY_VERIFY_WITH_TIMEOUT(!copied.isEmpty(), 3000);
+                const auto text = copied.constLast().constFirst().toString();
+                QVERIFY(text.contains(QStringLiteral("LAST FRAME")));
+                QCOMPARE(text.count(QStringLiteral("--- New SSH connection ---")), cycle + 1);
+            }
+        }
+        session.stop();
+        QVERIFY(!session.scrollbackPage({.lineCount = 10}));
+    }
+}
+
 void SshTerminalSessionTests::retainsViewportSizeDuringConnectionAndReconnect()
 {
     const QString python = qEnvironmentVariable("ZTERMY_TEST_SSH_FIXTURE_PYTHON");
@@ -314,6 +387,7 @@ void SshTerminalSessionTests::retainsViewportSizeDuringConnectionAndReconnect()
     ztermy::ssh::SshTerminalSession session;
     QSignalSpy hostKey(&session, &ztermy::ssh::SshTerminalSession::hostKeyConfirmationRequired);
     QSignalSpy running(&session, &ztermy::ssh::SshTerminalSession::runningChanged);
+    QSignalSpy searches(&session, &ztermy::ssh::SshTerminalSession::searchResultReady);
     ztermy::terminal::TerminalSnapshotPtr latest;
     connect(&session, &ztermy::ssh::SshTerminalSession::snapshotReady, this,
             [&](ztermy::terminal::TerminalSnapshotPtr snapshot) {
@@ -346,7 +420,7 @@ void SshTerminalSessionTests::retainsViewportSizeDuringConnectionAndReconnect()
             .secret = ztermy::security::SensitiveByteArray(QByteArrayLiteral("fixture-only")),
             .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json")),
         };
-        QVERIFY(!session.start(std::move(request), {.columns = 100, .rows = 30}));
+        QVERIFY(!session.start(std::move(request), {.columns = 100, .rows = 30}, cycle > 0));
         QTRY_COMPARE_WITH_TIMEOUT(hostKey.count(), 1, 10000);
         QCOMPARE(running.count(), 0);
         session.requestResize(150, 40, 8, 16);
@@ -358,13 +432,20 @@ void SshTerminalSessionTests::retainsViewportSizeDuringConnectionAndReconnect()
         QTRY_VERIFY_WITH_TIMEOUT(events.contains(expectedPty), 10000);
         QTRY_VERIFY_WITH_TIMEOUT(latest && latest->columns == columns && latest->rows == 45, 10000);
         QTRY_VERIFY_WITH_TIMEOUT(!running.isEmpty() && running.last().first().toBool(), 5000);
+        if (cycle > 0)
+        {
+            session.search(QStringLiteral("BYE"), false, true);
+            QTRY_VERIFY_WITH_TIMEOUT(!searches.isEmpty(), 3000);
+            QCOMPARE(searches.constLast()[2].toUInt(), 1U);
+            session.clearSearch();
+        }
         // There was no resize after readiness: both the remote PTY and first viewport already agree.
         server.write(QByteArrayLiteral("exit\n"));
         QTRY_VERIFY_WITH_TIMEOUT(!running.isEmpty() && !running.last().first().toBool(), 5000);
-        session.stop();
         QVERIFY(server.waitForFinished(5000) || server.state() == QProcess::NotRunning);
         QCOMPARE(server.exitCode(), 0);
     }
+    session.stop();
 }
 
 void SshTerminalSessionTests::synchronizesOutputOverLoopbackSsh()

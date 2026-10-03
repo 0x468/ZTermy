@@ -177,6 +177,47 @@ inline bool verifyReconnectShortcutRuntime(NativeWindow &window, AppController &
         if (connections != before || !controller.resetActionShortcut(QStringLiteral("terminal.reconnect")))
             return false;
         qInfo() << "Reconnect shortcut unbind/reset passed";
+        if (!controller.saveSessionLifecycleSettings(false, true, true, false, true))
+            return false;
+        before = connections;
+        viewport->forceActiveFocus();
+        press(Qt::Key_R, Qt::ControlModifier);
+        if (!processWindowEventsUntil(
+                [&] {
+                    return connections == before + 1 && ready();
+                },
+                5s))
+            return false;
+        const QString marker =
+            QCoreApplication::translate("ztermy::ssh::SshTerminalSession", "--- New SSH connection ---");
+        controller.searchTerminal(marker, false, true);
+        if (!processWindowEventsUntil(
+                [&] {
+                    return controller.terminalSearchTotal() == 1;
+                },
+                3s)
+            || !captureWindowSmokeItem(target.contentItem(), &target == &window
+                                                                 ? QStringLiteral("reconnect-history-main.png")
+                                                                 : QStringLiteral("reconnect-history-detached.png")))
+            return false;
+        controller.clearTerminalSearch();
+        if (!controller.saveSessionLifecycleSettings(false, true, true, false, false))
+            return false;
+        before = connections;
+        viewport->forceActiveFocus();
+        press(Qt::Key_R, Qt::ControlModifier);
+        if (!processWindowEventsUntil(
+                [&] {
+                    return connections == before + 1 && ready();
+                },
+                5s))
+            return false;
+        controller.searchTerminal(marker, false, true);
+        processWindowEventsFor(200ms);
+        if (controller.terminalSearchTotal() != 0)
+            return false;
+        controller.clearTerminalSearch();
+        qInfo() << "Reconnect history opt-in/out native routing passed";
         return captureWindowSmokeItem(target.contentItem(), &target == &window
                                                                 ? QStringLiteral("reconnect-shortcut-main.png")
                                                                 : QStringLiteral("reconnect-shortcut-detached.png"));

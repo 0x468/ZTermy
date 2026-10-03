@@ -48,7 +48,8 @@ public:
     SshTerminalSession(const SshTerminalSession &) = delete;
     SshTerminalSession &operator=(const SshTerminalSession &) = delete;
 
-    [[nodiscard]] std::error_code start(SshConnectionRequest request, terminal::TerminalGeometry geometry);
+    [[nodiscard]] std::error_code start(SshConnectionRequest request, terminal::TerminalGeometry geometry,
+                                        bool retainHistory = false);
     void stop() noexcept;
     void requestStop();
     [[nodiscard]] bool stopFinished() const noexcept { return m_stopFinished.load(); }
@@ -200,6 +201,9 @@ private:
     void queueCommand(Command command);
     void run(SshConnectionRequest &request, terminal::TerminalGeometry geometry, const std::stop_token &stopToken);
     void readOnlyLoop(const std::stop_token &stopToken);
+    void stopImpl(bool discardHistory) noexcept;
+    [[nodiscard]] bool importRetainedHistory(const terminal::GhosttyTerminalEngine &previous,
+                                             terminal::TerminalGeometry geometry);
     [[nodiscard]] bool handleViewCommand(const Command &command);
     void publishSnapshot(bool hostInteraction = true);
     void publishSnapshotIfDirty();

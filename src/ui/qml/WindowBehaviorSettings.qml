@@ -7,6 +7,7 @@ SectionCard {
     id: settings
     property alias closeToTray: closeToTraySwitch.checked
     property alias closePaneOnSessionEnd: closePaneOnSessionEndSwitch.checked
+    property alias retainHistoryOnReconnect: reconnectHistorySwitch.checked
     property alias preserveTerminalSessions: preserveTerminalSessionsSwitch.checked
     property alias reopenLocalSessions: reopenLocalSessionsSwitch.checked
     property alias reconnectRemoteSessions: reconnectRemoteSessionsSwitch.checked
@@ -94,6 +95,21 @@ SectionCard {
             Layout.fillWidth: true
             text: qsTr("Restore terminal tabs and pane layouts on the next launch")
             accessibleName: text
+        }
+
+        AppSwitch {
+            id: reconnectHistorySwitch
+            objectName: "settingsRetainHistoryOnReconnectSwitch"
+            Layout.fillWidth: true
+            text: qsTr("Keep previous output when reconnecting SSH")
+            accessibleName: text
+        }
+        Text {
+            Layout.fillWidth: true
+            text: qsTr("Off by default. Keeps text history in memory with a new connection separator; terminal modes and formatting are reset. Closing the pane clears it.")
+            color: Theme.textMuted
+            wrapMode: Text.WordWrap
+            font.pixelSize: Theme.textLabel
         }
 
         AppSwitch {

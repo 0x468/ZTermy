@@ -3874,6 +3874,11 @@ bool AppController::preserveTerminalSessions() const noexcept
     return m_settings.preserveTerminalSessions;
 }
 
+bool AppController::retainHistoryOnReconnect() const noexcept
+{
+    return m_settings.retainHistoryOnReconnect;
+}
+
 bool AppController::reopenLocalSessions() const noexcept
 {
     return m_settings.reopenLocalSessions;
@@ -3885,10 +3890,12 @@ bool AppController::reconnectRemoteSessions() const noexcept
 }
 
 bool AppController::saveSessionLifecycleSettings(const bool closePaneOnEnd, const bool preserveSessions,
-                                                 const bool reopenLocal, const bool reconnectRemote)
+                                                 const bool reopenLocal, const bool reconnectRemote,
+                                                 const bool retainHistory)
 {
     auto updated = m_settings;
     updated.closePaneOnSessionEnd = closePaneOnEnd;
+    updated.retainHistoryOnReconnect = retainHistory;
     updated.preserveTerminalSessions = preserveSessions;
     updated.reopenLocalSessions = reopenLocal;
     updated.reconnectRemoteSessions = reconnectRemote;
@@ -7793,7 +7800,8 @@ void AppController::attemptSshReconnect(const QString &tabId, const std::uint64_
     tab->address = request->host;
     tab->status = tr("Reconnecting to SSH host...");
     emit terminalTabsChanged();
-    const std::error_code error = tab->ssh->start(std::move(*request), {.columns = 100, .rows = 30});
+    const std::error_code error =
+        tab->ssh->start(std::move(*request), {.columns = 100, .rows = 30}, m_settings.retainHistoryOnReconnect);
     if (error)
     {
         tab->sshPhase = ssh::SshConnectionPhase::Failed;

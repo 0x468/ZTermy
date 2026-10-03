@@ -231,9 +231,9 @@ diagnostics::LatencySummary SshTerminalSession::inputQueueLatencySummary() const
     return m_inputQueueLatency.summary();
 }
 
-std::error_code SshTerminalSession::start(SshConnectionRequest request, const terminal::TerminalGeometry geometry)
+std::error_code SshTerminalSession::start(SshConnectionRequest request, const terminal::TerminalGeometry geometry,
+                                          const bool retainHistory)
 {
-    stop();
     if (!validSshConnectionRequest(request) || !geometry.valid())
     {
         return std::make_error_code(std::errc::invalid_argument);
@@ -249,6 +249,10 @@ std::error_code SshTerminalSession::start(SshConnectionRequest request, const te
         return engine.error();
     }
 
+    // Stop and join before transferring ownership. Text extraction/replay is
+    // performed by the new worker, never by the GUI or render thread.
+    stopImpl(!retainHistory);
+    auto previous = std::move(m_engine);
     m_engine = std::move(*engine);
     m_synchronizedOutputStartedNanoseconds.store(0, std::memory_order_release);
     if (m_colorScheme)
@@ -279,9 +283,18 @@ std::error_code SshTerminalSession::start(SshConnectionRequest request, const te
         m_acceptingResize = true;
     }
 
-    m_worker = std::jthread([this, request = std::move(request), geometry](const std::stop_token &stopToken) mutable {
+    m_worker = std::jthread([this, request = std::move(request), geometry,
+                             previous = std::move(previous)](const std::stop_token &stopToken) mutable {
         try
         {
+            if (previous && !importRetainedHistory(*previous, geometry))
+            {
+                m_engine = std::move(previous);
+                finishWorker(tr("Previous SSH output could not be retained"), SshConnectionPhase::Failed);
+                readOnlyLoop(stopToken);
+                return;
+            }
+            previous.reset();
             run(request, geometry, stopToken);
             if (!stopToken.stop_requested())
                 readOnlyLoop(stopToken);
@@ -318,6 +331,11 @@ void SshTerminalSession::requestStop()
 
 void SshTerminalSession::stop() noexcept
 {
+    stopImpl(true);
+}
+
+void SshTerminalSession::stopImpl(const bool discardHistory) noexcept
+{
     m_viewAvailable.store(false);
     {
         std::scoped_lock lock(m_commandMutex);
@@ -348,7 +366,8 @@ void SshTerminalSession::stop() noexcept
     m_snapshotDeliveryScheduled.store(false);
     m_engineDirty.store(false);
     m_synchronizedOutputStartedNanoseconds.store(0, std::memory_order_release);
-    m_engine.reset();
+    if (discardHistory)
+        m_engine.reset();
 
     if (m_running.exchange(false))
     {

@@ -80,7 +80,8 @@ constexpr qint64 detachedWindowsSchemaVersion = 40;
 constexpr qint64 immersiveTitleBarSchemaVersion = 41;
 constexpr qint64 globalShortcutSchemaVersion = 42;
 constexpr qint64 explorerMenuSchemaVersion = 43;
-constexpr qint64 currentSchemaVersion = explorerMenuSchemaVersion;
+constexpr qint64 reconnectHistorySchemaVersion = 44;
+constexpr qint64 currentSchemaVersion = reconnectHistorySchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -255,6 +256,7 @@ using ztermy::config::ThemePreference;
     const QJsonValue performanceModeValue = root.value(QStringLiteral("performanceMode"));
     const QJsonValue connectionHistoryValue = root.value(QStringLiteral("connectionHistoryEnabled"));
     const QJsonValue closePaneOnSessionEndValue = root.value(QStringLiteral("closePaneOnSessionEnd"));
+    const QJsonValue retainHistoryOnReconnectValue = root.value(QStringLiteral("retainHistoryOnReconnect"));
     const QJsonValue preserveTerminalSessionsValue = root.value(QStringLiteral("preserveTerminalSessions"));
     const QJsonValue reopenLocalSessionsValue = root.value(QStringLiteral("reopenLocalSessions"));
     const QJsonValue restoreDetachedWindowsValue = root.value(QStringLiteral("restoreDetachedWindows"));
@@ -324,6 +326,7 @@ using ztermy::config::ThemePreference;
                 || !reopenLocalSessionsValue.isBool() || !reconnectRemoteSessionsValue.isBool()))
         || (version >= terminalTitleSchemaVersion && !allowTerminalTitleChangesValue.isBool())
         || (version >= detachedWindowsSchemaVersion && !restoreDetachedWindowsValue.isBool())
+        || (version >= reconnectHistorySchemaVersion && !retainHistoryOnReconnectValue.isBool())
         || (version >= effectsTierSchemaVersion && !effectsTierValue.isString())
         || (version >= unifiedThemeSchemaVersion && (!lightThemeValue.isString() || !darkThemeValue.isString()))
         || (version >= terminalThemeSchemaVersion
@@ -512,6 +515,7 @@ using ztermy::config::ThemePreference;
         .performanceMode = version >= performanceModeSchemaVersion && performanceModeValue.toBool(),
         .connectionHistoryEnabled = version < connectionHistorySchemaVersion || connectionHistoryValue.toBool(),
         .closePaneOnSessionEnd = version >= sessionLifecycleSchemaVersion && closePaneOnSessionEndValue.toBool(),
+        .retainHistoryOnReconnect = version >= reconnectHistorySchemaVersion && retainHistoryOnReconnectValue.toBool(),
         .preserveTerminalSessions = version < sessionLifecycleSchemaVersion || preserveTerminalSessionsValue.toBool(),
         .reopenLocalSessions = version < sessionLifecycleSchemaVersion || reopenLocalSessionsValue.toBool(),
         .reconnectRemoteSessions = version >= sessionLifecycleSchemaVersion && reconnectRemoteSessionsValue.toBool(),
@@ -675,6 +679,7 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("version"), currentSchemaVersion},
         {QStringLiteral("connectionHistoryEnabled"), settings.connectionHistoryEnabled},
         {QStringLiteral("closePaneOnSessionEnd"), settings.closePaneOnSessionEnd},
+        {QStringLiteral("retainHistoryOnReconnect"), settings.retainHistoryOnReconnect},
         {QStringLiteral("preserveTerminalSessions"), settings.preserveTerminalSessions},
         {QStringLiteral("reopenLocalSessions"), settings.reopenLocalSessions},
         {QStringLiteral("restoreDetachedWindows"), settings.restoreDetachedWindows},

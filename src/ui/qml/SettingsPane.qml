@@ -563,6 +563,7 @@ Rectangle {
         sftpConfirmDeleteSwitch.checked = controller.sftpConfirmDelete;
         windowBehavior.closeToTray = controller.closeToTray;
         windowBehavior.closePaneOnSessionEnd = controller.closePaneOnSessionEnd;
+        windowBehavior.retainHistoryOnReconnect = controller.retainHistoryOnReconnect;
         windowBehavior.preserveTerminalSessions = controller.preserveTerminalSessions;
         windowBehavior.reopenLocalSessions = controller.reopenLocalSessions;
         windowBehavior.reconnectRemoteSessions = controller.reconnectRemoteSessions;
@@ -610,7 +611,7 @@ Rectangle {
         const terminalThemeSaved = effectsSaved && themeEditor.save();
         const shellSaved = terminalThemeSaved && controller.saveLocalShellPreference(localShellTokens[Math.max(0, localShellBox.currentIndex)] || "automatic");
         const selectionSaved = shellSaved && controller.saveTerminalSelectionPopupSettings(selectionPopupSwitch.checked, selectionActionDraftValues());
-        const lifecycleSaved = selectionSaved && controller.saveSessionLifecycleSettings(windowBehavior.closePaneOnSessionEnd, windowBehavior.preserveTerminalSessions, windowBehavior.reopenLocalSessions, windowBehavior.reconnectRemoteSessions);
+        const lifecycleSaved = selectionSaved && controller.saveSessionLifecycleSettings(windowBehavior.closePaneOnSessionEnd, windowBehavior.preserveTerminalSessions, windowBehavior.reopenLocalSessions, windowBehavior.reconnectRemoteSessions, windowBehavior.retainHistoryOnReconnect);
         const windowSaved = lifecycleSaved && controller.saveWindowInteractionSettings(windowBehavior.interactionValues());
         const saved = windowSaved && controller.saveWindowsIntegrationSettings(windowsIntegration.values());
         presentStatus(saved ? restartRequired ? qsTr("Settings saved. Restart ztermy to apply the rendering mode.") : qsTr("Settings saved and applied.") : windowChrome.globalShortcutError || qsTr("These settings could not be saved. Check the font and numeric ranges."), !saved, saved);

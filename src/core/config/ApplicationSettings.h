@@ -177,6 +177,7 @@ struct ApplicationSettings final
     bool performanceMode = false;
     bool connectionHistoryEnabled = true;
     bool closePaneOnSessionEnd = false;
+    bool retainHistoryOnReconnect = false;
     bool preserveTerminalSessions = true;
     bool reopenLocalSessions = true;
     bool reconnectRemoteSessions = false;

@@ -8,6 +8,45 @@
 namespace ztermy::ssh
 {
 
+bool SshTerminalSession::importRetainedHistory(const terminal::GhosttyTerminalEngine &previous,
+                                               const terminal::TerminalGeometry geometry)
+{
+    const auto history = previous.plainText();
+    if (!history)
+        return false;
+    // Bound the transient replay allocation too. The fresh engine's normal
+    // scrollback budget remains authoritative across repeated reconnects.
+    constexpr std::size_t maximumReplayBytes = std::size_t{4} * 1024 * 1024;
+    const std::string_view tail(*history);
+    const auto bounded = tail.substr(tail.size() > maximumReplayBytes ? tail.size() - maximumReplayBytes : 0);
+    const QString text = QString::fromUtf8(bounded.data(), static_cast<qsizetype>(bounded.size()));
+    QString printable;
+    printable.reserve(text.size());
+    for (const QChar character : text)
+    {
+        const ushort code = character.unicode();
+        if (code == '\n')
+            printable.append(QStringLiteral("\r\n"));
+        else if (code == '\t' || (code >= 0x20 && (code < 0x7f || code > 0x9f)))
+            printable.append(character);
+    }
+    QByteArray replay = printable.toUtf8();
+    replay.append("\r\n");
+    replay.append(tr("--- New SSH connection ---").toUtf8());
+    replay.append("\r\n");
+    // Move all prior rows into scrollback, leaving a clean active screen for
+    // the new peer. Do not carry old modes, replies, clipboard or image state.
+    for (quint16 row = 0; row < geometry.rows; ++row)
+        replay.append("\r\n");
+    replay.append("\x1b[H");
+    if (m_engine->feed(std::as_bytes(std::span(replay.constData(), static_cast<std::size_t>(replay.size())))))
+        return false;
+    (void)m_engine->takePtyWrite();
+    (void)m_engine->takeClipboardWrite();
+    publishSnapshot();
+    return true;
+}
+
 void SshTerminalSession::publishSnapshot(const bool hostInteraction)
 {
     if (hostInteraction)
