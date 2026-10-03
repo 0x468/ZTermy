@@ -14,10 +14,20 @@ bool verifyTrayExit(NativeWindow &window)
         originalIds.append(tab.toMap().value(QStringLiteral("id")).toString());
     if (originalIds.size() != 3)
         return false;
-    window.setCloseToTrayEnabled(true);
+    const auto arguments = QCoreApplication::arguments();
+    const bool installerExit = arguments.contains(QStringLiteral("--installer-exit-smoke"));
+    window.setCloseToTrayEnabled(!arguments.contains(QStringLiteral("--installer-exit-without-tray")));
     windowing::reveal(window);
     bool invoked = false;
     bool timedOut = false;
+    const auto exitConnection =
+        QObject::connect(&window, &NativeWindow::windowClosing, &window, [&](const bool quitApplication) {
+            if (installerExit)
+                invoked = quitApplication;
+        });
+    const auto disconnectExit = qScopeGuard([&] {
+        QObject::disconnect(exitConnection);
+    });
     QTimer deadline;
     deadline.setSingleShot(true);
     QObject::connect(&deadline, &QTimer::timeout, &window, [&] {
@@ -36,8 +46,25 @@ bool verifyTrayExit(NativeWindow &window)
             QCoreApplication::exit(EXIT_FAILURE);
             return;
         }
-        if (QCoreApplication::arguments().contains(QStringLiteral("--tray-exit-hidden")))
-            window.close(); // Ordinary close-to-tray, followed by explicit exit.
+        if (arguments.contains(QStringLiteral("--tray-exit-hidden")))
+        {
+            if (window.closeToTrayEnabled())
+                window.close(); // Ordinary close-to-tray, followed by explicit exit.
+            else
+                window.hide();
+            if (window.isVisible())
+            {
+                QCoreApplication::exit(EXIT_FAILURE);
+                return;
+            }
+        }
+        if (installerExit)
+        {
+            // The external runner posts the same registered message as zinstaller,
+            // including to hidden windows. Do not invoke the exit method here.
+            qInfo() << "Installer safe exit: receiver ready";
+            return;
+        }
         invoked = QMetaObject::invokeMethod(&window, "exitFromTray");
     });
     deadline.start(10000);

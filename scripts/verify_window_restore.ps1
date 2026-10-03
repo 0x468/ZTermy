@@ -1,7 +1,42 @@
 param([string]$BuildDirectory = 'build/msvc-dynamic-release', [switch]$RemovedScreen, [switch]$VisualStatus, [switch]$SnapCapture,
-      [switch]$TrayExit, [string]$ExecutableName = 'ztermy.exe')
+      [switch]$TrayExit, [switch]$InstallerExit, [switch]$WithoutTray, [string]$ExecutableName = 'ztermy.exe')
 
 $ErrorActionPreference = 'Stop'
+$started = Get-Date
+if ($WithoutTray -and !$InstallerExit) { throw '-WithoutTray requires -InstallerExit.' }
+if ($InstallerExit) { $TrayExit = $true }
+if ($InstallerExit -and -not ('ZtermyInstallerCloseProbe' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+public static class ZtermyInstallerCloseProbe {
+    private delegate bool Visitor(IntPtr window, IntPtr context);
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool EnumWindows(Visitor visitor, IntPtr context);
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint RegisterWindowMessage(string name);
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+    public static int Send(uint ownedProcessId) {
+        uint message = RegisterWindowMessage("ZSeries.SafeClose.v1");
+        if (message == 0) throw new Win32Exception(Marshal.GetLastWin32Error());
+        int posted = 0;
+        Visitor visitor = (window, context) => {
+            uint processId;
+            GetWindowThreadProcessId(window, out processId);
+            if (processId == ownedProcessId && PostMessage(window, message, IntPtr.Zero, IntPtr.Zero)) posted++;
+            return true;
+        };
+        if (!EnumWindows(visitor, IntPtr.Zero)) throw new Win32Exception(Marshal.GetLastWin32Error());
+        GC.KeepAlive(visitor);
+        return posted;
+    }
+}
+'@
+}
 $repo = Split-Path $PSScriptRoot -Parent
 $build = (Resolve-Path (Join-Path $repo $BuildDirectory)).Path
 $exe = Join-Path $build $ExecutableName
@@ -57,7 +92,11 @@ if ($RemovedScreen) {
 }
 $workspace | ConvertTo-Json -Depth 50 | Set-Content $statePath -Encoding utf8
 $oldBackend = $env:QT_QUICK_BACKEND
+$oldIsolation = $env:ZTERMY_TEST_ISOLATED_SHELLS
+$oldClink = $env:CLINK_NOAUTORUN
 $env:QT_QUICK_BACKEND = 'software'
+$env:ZTERMY_TEST_ISOLATED_SHELLS = '1'
+$env:CLINK_NOAUTORUN = '1'
 $owned = $null
 try {
     foreach ($pass in 1..2) {
@@ -69,16 +108,46 @@ try {
             $arguments += '--tray-exit-smoke'
             if ($pass -eq 2) { $arguments += '--tray-exit-hidden' }
         }
+        $logPath = Join-Path $data 'logs/ztermy.log'
+        $previousLogLength = if (Test-Path -LiteralPath $logPath) {
+            (Get-Content -LiteralPath $logPath -Raw -Encoding utf8).Length
+        } else { 0 }
+        if ($InstallerExit) {
+            $arguments += '--installer-exit-smoke'
+            if ($WithoutTray) { $arguments += '--installer-exit-without-tray' }
+        }
         $owned = Start-Process -FilePath $exe -ArgumentList $arguments -WindowStyle Hidden -PassThru
+        if ($InstallerExit) {
+            $ready = $false
+            $readiness = [Diagnostics.Stopwatch]::StartNew()
+            while ($readiness.ElapsedMilliseconds -lt 12000 -and !$owned.HasExited) {
+                if (Test-Path -LiteralPath $logPath) {
+                    $newLog = Get-Content -LiteralPath $logPath -Raw -Encoding utf8
+                    if ($newLog.Length -ge $previousLogLength -and
+                        $newLog.Substring($previousLogLength) -match 'Installer safe exit: receiver ready') {
+                        $ready = $true
+                        break
+                    }
+                }
+                Start-Sleep -Milliseconds 100
+            }
+            if (!$ready) { throw 'Installer-exit receiver never became ready.' }
+            $posted = [ZtermyInstallerCloseProbe]::Send([uint32]$owned.Id)
+            if ($posted -lt 1) { throw 'No owned native window received the installer close request.' }
+            Write-Output "Posted installer safe-close to $posted owned window(s), tray=$(!$WithoutTray), hidden=$($pass -eq 2)."
+        }
         if (!$owned.WaitForExit(20000)) { throw 'Runtime check did not complete' }
         if ($owned.ExitCode -ne 0) { throw "Runtime check failed: $($owned.ExitCode); see isolated logs" }
         $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($owned.Id)")
         if ($children.Count) { throw 'Terminal child processes remain after application exit' }
         if ($TrayExit) {
-            $log = Get-Content (Join-Path $data 'logs/ztermy.log') -Raw
+            $log = Get-Content -LiteralPath $logPath -Raw -Encoding utf8
             if ($log -notmatch 'Tray exit: event loop stopped without timeout and full Tab topology preserved: true' -or
                 $log -notmatch 'Local terminal session started' -or $log -notmatch 'Local terminal session stopped') {
                 throw 'Tray exit did not exercise live local-session cleanup'
+            }
+            if ($InstallerExit -and $log -notmatch 'Installer requested orderly application exit') {
+                throw 'Installer close did not reach the real registered-message receiver.'
             }
         }
         $saved = Get-Content $statePath -Raw | ConvertFrom-Json
@@ -95,6 +164,19 @@ try {
         $owned.Dispose()
         $owned = $null
     }
+    try {
+        $events = @(Get-WinEvent -FilterHashtable @{
+            LogName = 'System'; ProviderName = 'Application Popup'; Id = 26; StartTime = $started
+        } -ErrorAction Stop)
+    } catch {
+        if ($_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound*') { throw }
+        $events = @()
+    }
+    if (@($events | Where-Object {
+        $_.Message -match '(?i)(clink(?:_x64)?|cmd|pwsh|powershell)\.exe' -and
+        $_.Message -match '(?i)0xc0000142'
+    }).Count) { throw 'New Shell DLL-initialization popup; acceptance failed.' }
+    Write-Output 'No new Shell DLL-initialization popup events.'
 } finally {
     if ($owned) {
         $owned.Refresh()
@@ -102,5 +184,7 @@ try {
         $owned.Dispose()
     }
     $env:QT_QUICK_BACKEND = $oldBackend
+    $env:ZTERMY_TEST_ISOLATED_SHELLS = $oldIsolation
+    $env:CLINK_NOAUTORUN = $oldClink
     Write-Output "Evidence: $data"
 }

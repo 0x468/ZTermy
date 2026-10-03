@@ -52,6 +52,12 @@ constexpr UINT kTrayHideCommand = 0x3102;
 constexpr UINT kTrayExitCommand = 0x3103;
 constexpr WORD kApplicationIconResource = 101;
 
+[[nodiscard]] UINT installerSafeCloseMessage() noexcept
+{
+    static const UINT message = RegisterWindowMessageW(L"ZSeries.SafeClose.v1");
+    return message;
+}
+
 struct AccentPolicy
 {
     int state = kAccentDisabled;
@@ -487,6 +493,21 @@ bool NativeWindow::nativeEvent(const QByteArray &eventType, void *message, qintp
 {
     const auto nativeMessage = static_cast<MSG *>(message);
     const HWND windowHandle = nativeMessage->hwnd;
+
+    const UINT safeCloseMessage = installerSafeCloseMessage();
+    if (safeCloseMessage != 0 && nativeMessage->message == safeCloseMessage)
+    {
+        // The installer requests application exit, not an ordinary close-to-tray.
+        // Reuse the explicit exit path so detached topology is captured before
+        // Qt closes all windows and AppController performs orderly shutdown.
+        if (nativeMessage->wParam == 0 && nativeMessage->lParam == 0 && !m_exitingFromTray)
+        {
+            qCInfo(windowLog) << "Installer requested orderly application exit";
+            exitFromTray();
+        }
+        *result = 0;
+        return true;
+    }
 
     switch (nativeMessage->message)
     {

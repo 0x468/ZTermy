@@ -3,6 +3,15 @@
 此目录是产品唯一安装器配置源。修改产品版本、品牌或行为后提交 product.toml。
 工具版本和摘要固定在 zinstaller-tools.lock.json；本机 SDK、staging、输出路径不提交。
 
+安装前请求退出使用 `z-series-safe-close-v1`，不是普通 `WM_CLOSE`。
+Ztermy 接收 `ZSeries.SafeClose.v1` 后走托盘“退出”的完整清理流程，隐藏主窗口和
+独立窗口也会退出；平时关闭到托盘的设置保持不变。安装器发送请求后仍须重新检测
+进程确实消失才开始安装，不自动强制终止。旧版 Ztermy 不支持该请求时，需手动从
+托盘退出后重新检测。当前锁定 SDK 已支持协议，不需要重新构建或修改安装器仓库。
+运行时验收：`scripts/verify_window_restore.ps1 -InstallerExit`，以及加 `-WithoutTray` 的对照；
+两者分别覆盖显示/隐藏主窗口、活动本地会话、多独立窗口、退出清理与下一次启动恢复。
+详情见 [有序退出约定](../docs/adr/0036-orderly-application-shutdown.md)。
+
 先由产品侧完成 CMake 编译、windeployqt 部署与最终模块精简，然后执行：
 
 动态构建使用 `/MD`，当前 CMake 部署关闭了 compiler runtime 自动复制。
@@ -225,3 +234,36 @@ journal 不变，恢复安装 0、140 文件哈希一致、重装 0、释放后�
 卸载后的干净 VM 另以 `--renderer software` 打开最终 EXE，ready 和真实
 安装选项页截图通过，见 `sandbox/results/software-ui-ready.json`。上游修复
 提交为 `a92b459`，未推送；本轮未改变版本号或发布 Release。
+
+## 2026-10-03：托盘安全退出验收包
+
+本次重新编译动态 Release 并部署 Qt/CRT，不沿用旧主程序。新包位于
+`build/setup-safe-close-20261003/setup-verified/Ztermy-0.5.2/Ztermy-0.5.2-Setup.exe`，
+47,542,713 字节，SHA-256
+`f6e6e96148aab0e079cfedb16b3e6cc20089e81583f873988deff68bde1d056a`。
+包中主 EXE 与本次动态编译摘要一致：
+`100027a2f2763e6a98fe5185d4ef245d411281dc30b7ab8b66c7bb66d14ef0f0`。
+版本仍为 0.5.2，仅本地验收，未推送或发布。
+
+Debug / 静态 Release 全量 CTest 分别 130/130；全量静态 Release clang-tidy、
+C++ 格式、98 个 QML 质量、2401 条翻译及资产门禁通过。Debug 首轮标题栏测试
+在并发分析负载与旧测试状态下超时；保留现场并移走专用测试状态后，原并行数、
+原超时全量重跑通过，不将首轮计为通过。静态 portable ZIP / MSI 重生成、MSI 结构契约
+通过；沿用 ICE 跳过配置，不宣称 ICE 验证通过。
+
+新 payload 的 Windows-only PATH 启动通过；真实安全退出消息验证有/无托盘 ×
+主窗口显示/隐藏四组合，包含三个干净 CMD 会话、多独立窗口、无残留子进程和重启拓扑恢复。
+测试数据已移出 payload，无 PFX/P12、私钥或用户数据。
+
+干净 Sandbox 整包矩阵通过且摘要匹配新包：140 文件、首装/重装/升级/卸载、
+未信任身份拒绝与回滚、授权后身份注册、注入升级失败后原文件/ledger/菜单身份恢复、
+安装版原生 UI 通过。证据：
+`build/setup-safe-close-20261003/sandbox/results-verified/installed-integration-trust-result.json`。
+宿主机未安装、导入信任或变更系统注册。
+
+最终 Setup 的默认界面在 VM 中发送 ready，但真实界面的“请求安全退出”点击验收
+被自动审批拒绝：Windows MCP 无法将 VM 内的坐标与可访问按钮关联。未绕过拒绝，不将
+原生消息测试或 ready 记录冒充鼠标验收。随后 Owner 于 2026-10-03 确认整包实机
+手动验证通过，并授权提交本轮修复；这份人工验收与上述自动测试证据分别记录。
+首次输出目录发布拒绝访问和首次 VM 测试读取活动日志共享冲突的记录均保留；
+新绝对路径输出与共享读取的整包重跑通过。

@@ -10,7 +10,7 @@ version_source = "payload:ztermy.exe"
 [application]
 main_executable = "ztermy.exe"
 running_processes = ["ztermy.exe"]
-close_strategy = "window-close"
+close_strategy = "z-series-safe-close-v1"
 
 [install]
 default_scope = "per-user"
