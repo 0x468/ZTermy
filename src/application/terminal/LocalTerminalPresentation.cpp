@@ -132,7 +132,7 @@ void LocalTerminalSession::scheduleSynchronizedOutputFallback(const std::int64_t
 
 void LocalTerminalSession::scheduleLatestSnapshotDelivery()
 {
-    if (!m_running.load())
+    if (!m_viewAvailable.load())
     {
         m_snapshotDeliveryScheduled.store(false);
         return;
@@ -145,7 +145,7 @@ void LocalTerminalSession::scheduleLatestSnapshotDelivery()
 
 void LocalTerminalSession::deliverLatestSnapshot()
 {
-    if (!m_running.load())
+    if (!m_viewAvailable.load())
     {
         std::scoped_lock lock(m_snapshotMutex);
         m_pendingSnapshot.reset();
@@ -175,7 +175,7 @@ void LocalTerminalSession::deliverLatestSnapshot()
             return;
         }
     }
-    if (m_engineDirty.load(std::memory_order_acquire) && m_running.load())
+    if (m_engineDirty.load(std::memory_order_acquire) && m_viewAvailable.load())
     {
         std::scoped_lock lock(m_commandMutex);
         if (m_commands.empty() || !std::holds_alternative<SnapshotRequestCommand>(m_commands.back()))

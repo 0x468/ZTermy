@@ -6,6 +6,7 @@
 #include "domain/terminal/GhosttyTerminalEngine.h"
 #include "infrastructure/terminal/ConPtyProcess.h"
 
+#include <QDir>
 #include <QLoggingCategory>
 #include <QMetaObject>
 #include <QStandardPaths>
@@ -30,7 +31,7 @@ namespace
 [[nodiscard]] std::wstring quotedExecutable(const QString &path)
 {
     std::wstring result = L"\"";
-    result.append(path.toStdWString());
+    result.append(QDir::toNativeSeparators(path).toStdWString());
     result.push_back(L'\"');
     return result;
 }
@@ -133,6 +134,7 @@ std::error_code LocalTerminalSession::start(const TerminalGeometry geometry)
     m_synchronizedOutputStartedNanoseconds.store(0, std::memory_order_release);
     resetMetrics();
     m_running.store(true);
+    m_viewAvailable.store(true);
     emit runningChanged(true);
     emit statusChanged(tr("Local %1 connected").arg(launchSpec.displayName));
     publishSnapshot();
@@ -167,6 +169,7 @@ std::error_code LocalTerminalSession::start(const TerminalGeometry geometry)
 
 void LocalTerminalSession::requestStop()
 {
+    m_viewAvailable.store(false);
     if (m_stopThread.joinable())
         return;
     m_snapshotDeliveryTimer.stop();
@@ -179,6 +182,7 @@ void LocalTerminalSession::requestStop()
 
 void LocalTerminalSession::stopWorkers() noexcept
 {
+    m_viewAvailable.store(false);
     m_exitThread.request_stop();
     m_writeThread.request_stop();
     m_readThread.request_stop();
@@ -370,7 +374,7 @@ void LocalTerminalSession::requestResize(const quint16 columns, const quint16 ro
                                     .rows = rows,
                                     .cellWidthPixels = cellWidthPixels,
                                     .cellHeightPixels = cellHeightPixels};
-    if (!geometry.valid() || !m_running.load())
+    if (!geometry.valid() || !m_viewAvailable.load())
     {
         return;
     }
@@ -391,7 +395,7 @@ void LocalTerminalSession::requestResize(const quint16 columns, const quint16 ro
 
 void LocalTerminalSession::requestScroll(const int rows)
 {
-    if (rows == 0 || !m_running.load())
+    if (rows == 0 || !m_viewAvailable.load())
     {
         return;
     }
@@ -420,7 +424,7 @@ void LocalTerminalSession::requestScroll(const int rows)
 void LocalTerminalSession::requestSelection(const quint16 startColumn, const quint16 startRow, const quint16 endColumn,
                                             const quint16 endRow, const bool rectangular)
 {
-    if (!m_running.load())
+    if (!m_viewAvailable.load())
     {
         return;
     }
@@ -444,7 +448,7 @@ void LocalTerminalSession::requestSelection(const quint16 startColumn, const qui
 
 void LocalTerminalSession::requestSelectionGesture(const TerminalSelectionGesture &gesture)
 {
-    if (!m_running.load())
+    if (!m_viewAvailable.load())
     {
         return;
     }
@@ -493,7 +497,7 @@ void LocalTerminalSession::setColorScheme(const ztermy::terminal::TerminalColorS
 
 void LocalTerminalSession::queueCommand(Command command)
 {
-    if (!m_running.load())
+    if (!m_viewAvailable.load())
     {
         return;
     }
@@ -536,7 +540,7 @@ void LocalTerminalSession::search(const QString &query, const bool backwards, co
 std::expected<ztermy::terminal::TerminalScrollbackPage, std::error_code>
 LocalTerminalSession::scrollbackPage(const ztermy::terminal::TerminalScrollbackRequest request) const
 {
-    if (!m_running.load() || m_engine == nullptr)
+    if (!m_viewAvailable.load() || m_engine == nullptr)
     {
         return std::unexpected(std::make_error_code(std::errc::not_connected));
     }
@@ -620,7 +624,7 @@ bool LocalTerminalSession::consumeOutput(const std::span<const std::byte> bytes)
     }
     if (synchronizedOutputStarted != 0)
         scheduleSynchronizedOutputFallback(synchronizedOutputStarted);
-    if (!ptyWrite.empty() && !writeToProcess(ptyWrite))
+    if (!ptyWrite.empty() && m_running.load() && m_process && m_process->running() && !writeToProcess(ptyWrite))
         return false;
     if (clipboardWrite)
         emit clipboardTextReady(QString::fromUtf8(*clipboardWrite));
@@ -653,6 +657,14 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
             }
         }
 
+        // Drop input queued just before exit; view commands remain on this worker.
+        if (!m_running.load()
+            && (std::holds_alternative<InputCommand>(command) || std::holds_alternative<PasteCommand>(command)
+                || std::holds_alternative<KeyCommand>(command) || std::holds_alternative<MouseCommand>(command)
+                || std::holds_alternative<FocusCommand>(command)))
+        {
+            continue;
+        }
         if (std::holds_alternative<SnapshotRequestCommand>(command))
         {
             publishSnapshotIfDirty();
@@ -679,7 +691,7 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
             if (!writeToProcess(
                     std::as_bytes(std::span(input->bytes.constData(), static_cast<std::size_t>(input->bytes.size())))))
             {
-                break;
+                continue;
             }
             publishSnapshot();
             continue;
@@ -717,7 +729,7 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
             }
             if (!writeToProcess(*encoded))
             {
-                break;
+                continue;
             }
             publishSnapshot();
             continue;
@@ -738,7 +750,7 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
             }
             if (!encoded->empty() && !writeToProcess(*encoded))
             {
-                break;
+                continue;
             }
             continue;
         }
@@ -758,7 +770,7 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
             }
             if (!encoded->empty() && !writeToProcess(*encoded))
             {
-                break;
+                continue;
             }
             continue;
         }
@@ -787,7 +799,7 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
             }
             if (!writeToProcess(*encoded))
             {
-                break;
+                continue;
             }
             publishSnapshot();
             continue;
@@ -922,9 +934,9 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
                 postStatus(tr("Terminal color scheme failed: %1").arg(QString::fromStdString(error.message())));
                 continue;
             }
-            if (!ptyWrite.empty() && !writeToProcess(ptyWrite))
+            if (m_running.load() && !ptyWrite.empty() && !writeToProcess(ptyWrite))
             {
-                break;
+                continue;
             }
             publishSnapshot();
             continue;
@@ -953,7 +965,8 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
             // Keep ConPTY and the parser on one geometry boundary. Otherwise
             // resize-triggered shell output can be parsed against the old grid.
             if (const std::error_code resizeError =
-                    m_process->resize({.columns = geometry.columns, .rows = geometry.rows}))
+                    m_running.load() ? m_process->resize({.columns = geometry.columns, .rows = geometry.rows})
+                                     : std::error_code{})
             {
                 postStatus(tr("Terminal resize failed: %1").arg(QString::fromStdString(resizeError.message())));
                 continue;
@@ -988,9 +1001,11 @@ void LocalTerminalSession::monitorProcessExit(const std::stop_token &stopToken)
         }
         if (!*exited)
             continue;
-        if (m_readThread.joinable())
-            CancelSynchronousIo(static_cast<HANDLE>(m_readThread.native_handle()));
-        emit processExitObserved();
+        // Let the reader drain ConPTY's final output before reporting exit.
+        // Cancelling ReadFile here loses bytes when a short-lived child ends
+        // before the reader gets its next scheduling slot.
+        if (m_process->finishOutput())
+            emit processExitObserved();
         break;
     }
     CloseHandle(wakeEvent);
@@ -1026,7 +1041,7 @@ void LocalTerminalSession::postProcessExited()
     {
         return;
     }
-    m_writeThread.request_stop();
+    // Keep the command worker for scroll/search/selection, without child I/O.
     m_commandAvailable.notify_all();
     emit statusChanged(tr("Local shell exited"));
     emit runningChanged(false);

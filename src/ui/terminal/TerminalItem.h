@@ -42,6 +42,7 @@ class TerminalItem : public QQuickItem
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(TerminalView)
+    Q_PROPERTY(bool readOnly READ readOnly WRITE setReadOnly NOTIFY readOnlyChanged)
     Q_PROPERTY(QString statusText READ statusText NOTIFY statusTextChanged)
     Q_PROPERTY(QString fontFamily READ fontFamily WRITE setFontFamily NOTIFY fontChanged)
     Q_PROPERTY(int fontPixelSize READ fontPixelSize WRITE setFontPixelSize NOTIFY fontChanged)
@@ -101,6 +102,8 @@ class TerminalItem : public QQuickItem
         QColor selectionForeground READ selectionForeground WRITE setSelectionForeground NOTIFY paletteOverrideChanged)
 
 public:
+    [[nodiscard]] bool readOnly() const noexcept { return m_readOnly; }
+    void setReadOnly(bool readOnly);
     bool textBlinkEnabled() const;
     void setTextBlinkEnabled(bool enabled);
     explicit TerminalItem(QQuickItem *parent = nullptr);
@@ -199,6 +202,7 @@ public slots:
     Q_INVOKABLE void cancelCopyMode();
 
 signals:
+    void readOnlyChanged();
     void textBlinkEnabledChanged();
     void inputGenerated(const QByteArray &bytes);
     void keyEventGenerated(const ztermy::terminal::TerminalKeyEvent &event);
@@ -364,6 +368,7 @@ private:
     bool m_cursorBlink = true;
     bool m_cursorBlinkPhase = true;
     bool m_terminalCursorVisible = true;
+    bool m_readOnly = false;
     bool m_ligaturesEnabled = true;
     bool m_copyOnSelect = false;
     bool m_keepSelectionAfterCopy = false;

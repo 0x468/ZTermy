@@ -262,6 +262,7 @@ private slots:
     void routesAiModelDiscoveryThroughCustomProxy();
     void managesMcpServerConfiguration();
     void managesActionShortcutsAndDispatchContext();
+    void reconnectActionOnlyTargetsAnEndedSavedSshPane();
     void preservesShortcutsWhenGlobalRegistrationFails();
     void configuresExplorerShellsAndPreservesLiteralDirectories();
     void launchRequestsDetachLocalAndQueueCredentialPrompts();
@@ -1360,6 +1361,96 @@ void AppControllerTests::managesActionShortcutsAndDispatchContext()
     }
 }
 
+void AppControllerTests::reconnectActionOnlyTargetsAnEndedSavedSshPane()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    const QString profilesPath = directory.filePath(QStringLiteral("profiles.json"));
+    const QString knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json"));
+    const QString settingsPath = directory.filePath(QStringLiteral("settings.json"));
+    const std::array profiles{
+        ztermy::ssh::SshProfile{.id = "reconnect-shortcut",
+                                .name = "Loopback fixture",
+                                .host = "127.0.0.1",
+                                .port = server.serverPort(),
+                                .username = "fixture",
+                                .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
+                                .privateKeyPath = "unused-test-key"}};
+    QVERIFY(ztermy::ssh::SshProfileStore(profilesPath).save(profiles));
+    const auto state = std::make_shared<FakeLocalSessionState>();
+    const auto factory = [state] {
+        return std::make_unique<FakeLocalTerminalSession>(state);
+    };
+    ztermy::AppController controller(profilesPath, knownHostsPath, settingsPath, factory);
+    const QString actionId = QStringLiteral("terminal.reconnect");
+    const auto action = [&] {
+        for (const auto &entry : controller.actions())
+            if (entry.toMap().value(QStringLiteral("id")) == actionId)
+                return entry.toMap();
+        return QVariantMap{};
+    };
+    QVERIFY(!action().value(QStringLiteral("enabled")).toBool());
+    QVERIFY(!controller.triggerAction(actionId));
+    const auto local = controller.startLocalTerminal();
+    QVERIFY(!local.isEmpty());
+    QVERIFY(!controller.triggerAction(actionId));
+    QVERIFY(!action().value(QStringLiteral("enabled")).toBool());
+
+    using Access = ztermy::AppControllerTestAccess;
+    QVERIFY(Access::start(controller,
+                          {.host = QStringLiteral("127.0.0.1"),
+                           .port = server.serverPort(),
+                           .username = QStringLiteral("fixture"),
+                           .privateKeyPath = QStringLiteral("unused-test-key"),
+                           .knownHostsPath = knownHostsPath},
+                          QStringLiteral("reconnect-shortcut")));
+    auto &tab = Access::active(controller);
+    tab.ssh->stop(); // No authentication or remote command is performed.
+    tab.running = false;
+    using Phase = ztermy::ssh::SshConnectionPhase;
+    for (const auto phase : {Phase::Resolving, Phase::Connecting, Phase::Handshaking, Phase::VerifyingHostKey,
+                             Phase::AwaitingHostKeyConfirmation, Phase::Authenticating, Phase::OpeningChannel,
+                             Phase::Connected, Phase::Closing})
+    {
+        tab.sshPhase = phase;
+        const auto generation = tab.reconnectGeneration;
+        QVERIFY(!action().value(QStringLiteral("enabled")).toBool());
+        QVERIFY(!controller.triggerAction(actionId));
+        QVERIFY(!controller.reconnectTerminalTab(tab.id));
+        QCOMPARE(tab.reconnectGeneration, generation);
+    }
+    for (const auto phase : {Phase::Disconnected, Phase::Failed})
+    {
+        tab.sshPhase = phase;
+        QVERIFY(action().value(QStringLiteral("enabled")).toBool());
+    }
+    tab.reconnectPending = true;
+    QVERIFY(!controller.triggerAction(actionId));
+    tab.reconnectPending = false;
+    tab.running = true;
+    QVERIFY(!controller.triggerAction(actionId));
+    tab.running = false;
+    tab.sourceProfileId = QStringLiteral("deleted-profile");
+    QVERIFY(!action().value(QStringLiteral("enabled")).toBool());
+    QVERIFY(!controller.triggerAction(actionId));
+    tab.sourceProfileId = QStringLiteral("reconnect-shortcut");
+    const auto generation = tab.reconnectGeneration;
+    QVERIFY(controller.triggerAction(actionId));
+    QCOMPARE(tab.reconnectGeneration, generation + 1);
+    QVERIFY(!controller.triggerAction(actionId));
+    QCOMPARE(tab.reconnectGeneration, generation + 1);
+    tab.ssh->stop();
+
+    QVERIFY(
+        controller.setActionShortcut(actionId, QStringLiteral("Ctrl+Alt+R")).value(QStringLiteral("valid")).toBool());
+    ztermy::AppController reloaded(profilesPath, knownHostsPath, settingsPath, factory);
+    for (const auto &entry : reloaded.actions())
+        if (entry.toMap().value(QStringLiteral("id")) == actionId)
+            QCOMPARE(entry.toMap().value(QStringLiteral("shortcut")).toString(), QStringLiteral("Ctrl+Alt+R"));
+}
+
 void AppControllerTests::configuresExplorerShellsAndPreservesLiteralDirectories()
 {
     QTemporaryDir directory;
@@ -2186,6 +2277,9 @@ void AppControllerTests::bindsRemoteRequestsAndHistoryToConnectionIdentity()
     auto &tab = Access::active(controller);
     tab.ssh->stop(); // The loopback fixture never authenticates or executes a Shell command.
     tab.running = false;
+    // Model the settled end state rather than leaving the previous queued
+    // connecting phase on this manually stopped fixture.
+    tab.sshPhase = ztermy::ssh::SshConnectionPhase::Disconnected;
     const quint64 previousGeneration = tab.historyRequestId;
     Access::historyResult(controller, previousGeneration, {{.command = "first-user-only"}});
     tab.capturedHistory.push_back({.command = "session-only"});

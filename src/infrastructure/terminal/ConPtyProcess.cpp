@@ -25,6 +25,7 @@ namespace
 const auto createNativeConsole = &ConptyCreatePseudoConsole;
 const auto resizeNativeConsole = &ConptyResizePseudoConsole;
 const auto closeNativeConsole = &ConptyClosePseudoConsole;
+const auto releaseNativeConsole = &ConptyReleasePseudoConsole;
 #else
 HRESULT createNativeConsole(COORD size, HANDLE input, HANDLE output, DWORD flags, HPCON *console)
 {
@@ -38,6 +39,10 @@ HRESULT resizeNativeConsole(HPCON console, COORD size)
 void closeNativeConsole(HPCON console)
 {
     ztermy::terminal::conPtyApi().close(console);
+}
+HRESULT releaseNativeConsole(HPCON console)
+{
+    return ztermy::terminal::conPtyApi().release(console);
 }
 #endif
 
@@ -208,6 +213,7 @@ namespace ztermy::terminal
 
 struct ConPtyProcess::Impl
 {
+    std::mutex consoleMutex;
     UniqueHandle inputWrite;
     UniqueHandle outputRead;
     UniqueHandle process;
@@ -451,6 +457,7 @@ std::error_code ConPtyProcess::write(const std::span<const std::byte> source)
 
 std::error_code ConPtyProcess::resize(const TerminalSize size)
 {
+    std::scoped_lock lock(m_impl->consoleMutex);
     if (!size.valid())
     {
         return invalidArgument();
@@ -500,6 +507,20 @@ std::expected<bool, std::error_code> ConPtyProcess::waitForExitOrEvent(const std
 bool ConPtyProcess::running() const noexcept
 {
     return m_impl->process && WaitForSingleObject(m_impl->process.get(), 0) == WAIT_TIMEOUT;
+}
+
+std::error_code ConPtyProcess::finishOutput() noexcept
+{
+    std::scoped_lock lock(m_impl->consoleMutex);
+    if (running())
+        return std::make_error_code(std::errc::operation_in_progress);
+    if (!m_impl->pseudoConsole)
+        return std::make_error_code(std::errc::not_connected);
+    // Release ownership without a CTRL_CLOSE_EVENT: the producer flushes its
+    // final frame and closes the pipe after its last client disconnects. Keep
+    // the HPCON allocated until explicit close, as required by ConPTY.
+    const HRESULT result = releaseNativeConsole(m_impl->pseudoConsole.get());
+    return SUCCEEDED(result) ? std::error_code{} : hresultError(result);
 }
 
 void ConPtyProcess::close() noexcept

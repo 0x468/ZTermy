@@ -50,6 +50,9 @@ public:
                                                                           void *wakeEvent) const;
 
     [[nodiscard]] bool running() const noexcept;
+    // After natural child exit, release ConPTY's output producer. The caller
+    // keeps reading the pipe until EOF, including the final buffered output.
+    [[nodiscard]] std::error_code finishOutput() noexcept;
     void close() noexcept;
 
 private:

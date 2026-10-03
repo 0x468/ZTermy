@@ -4953,6 +4953,13 @@ if(BUILD_TESTING)
     # 288 paired scene/desktop readbacks include inactive-window render waits.
     # This capture matrix is separate from the 60-second interaction smoke.
     set_tests_properties(title-trigger-material-runtime PROPERTIES RUN_SERIAL TRUE TIMEOUT 480)
+    add_test(
+        NAME retained-terminal-runtime
+        COMMAND "${CMAKE_COMMAND}" -E env "ZTERMY_TEST_ENDED_COPY=1" "ZTERMY_TEST_ISOLATED_SHELLS=1"
+            "$<TARGET_FILE:ztermy>" --lifecycle-runtime-smoke
+            --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/retained-terminal-runtime"
+    )
+    set_tests_properties(retained-terminal-runtime PROPERTIES RUN_SERIAL TRUE TIMEOUT 60)
 endif()
 
 if(CMAKE_VERSION VERSION_LESS 4.3)

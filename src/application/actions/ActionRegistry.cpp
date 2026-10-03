@@ -145,6 +145,17 @@ constexpr std::array actions{
         .autoRepeat = true,
     },
     ActionDescriptor{
+        .id = "terminal.reconnect",
+        .category = "terminal",
+        .label = QT_TRANSLATE_NOOP("ActionRegistry", "Reconnect disconnected SSH pane"),
+        .description = QT_TRANSLATE_NOOP(
+            "ActionRegistry", "Reconnect the focused disconnected SSH pane. Connected shells keep this key."),
+        .defaultShortcut = "Ctrl+R",
+        .terminalRequired = true,
+        .paletteVisible = true,
+        .autoRepeat = false,
+    },
+    ActionDescriptor{
         .id = "terminal.splitHorizontal",
         .category = "terminal",
         .label = QT_TRANSLATE_NOOP("ActionRegistry", "Split pane horizontally"),
@@ -680,6 +691,13 @@ void ActionRegistry::setOverrides(const QMap<QString, QString> &overrides)
     }
 
     m_overrides = candidates;
+    // This newly introduced default must not steal a previously customized
+    // binding. Persist the opt-out through the existing overrides contract.
+    const QString reconnectId = QStringLiteral("terminal.reconnect");
+    if (!m_overrides.contains(reconnectId) && std::ranges::any_of(candidates, [](const QString &shortcut) {
+            return shortcut == QStringLiteral("Ctrl+R");
+        }))
+        m_overrides.insert(reconnectId, QString{});
     QMap<QString, QString> owners;
     for (const ActionDescriptor &descriptor : ::actions)
     {

@@ -41,6 +41,7 @@ public:
             return false;
         session.m_engine = std::move(*engine);
         session.m_running.store(true);
+        session.m_viewAvailable.store(true);
         session.m_writeThread = std::jthread([&session](const std::stop_token &token) {
             session.writeLoop(token);
         });
@@ -121,6 +122,7 @@ private slots:
     void buildsEphemeralPowerShellIntegrationCommand();
     void emitsPowerShell5CompatibleOscSequences();
     void recognizesLocalShellExit();
+    void retainsReadOnlyInteractionAfterExit();
     void returnsCursorPositionQueryToLocalChild();
     void hidesIntermediateSynchronizedOutput();
     void synchronizesRawOutputAndRecoversAfterTimeout();
@@ -222,6 +224,55 @@ void LocalTerminalSessionTests::recognizesLocalShellExit()
     QTRY_VERIFY_WITH_TIMEOUT(
         !statusSpy.isEmpty() && statusSpy.constLast().constFirst().toString().contains(QStringLiteral("exited")), 5000);
     session.stop();
+}
+
+void LocalTerminalSessionTests::retainsReadOnlyInteractionAfterExit()
+{
+    ztermy::terminal::LocalTerminalSession session;
+    const auto output = std::make_shared<MemoryOutputSink>();
+    session.setOutputSink(output);
+    session.setLaunchSpec({.id = QStringLiteral("commandPrompt"),
+                           .displayName = QStringLiteral("Command Prompt"),
+                           .executable = QStandardPaths::findExecutable(QStringLiteral("cmd.exe")),
+                           .arguments = {QStringLiteral("/D"), QStringLiteral("/Q")},
+                           .powerShellIntegration = false});
+    QSignalSpy running(&session, &ztermy::terminal::LocalTerminalSession::runningChanged);
+    QSignalSpy copied(&session, &ztermy::terminal::LocalTerminalSession::clipboardTextReady);
+    QSignalSpy selected(&session, &ztermy::terminal::LocalTerminalSession::selectedTextReady);
+    QSignalSpy search(&session, &ztermy::terminal::LocalTerminalSession::searchResultReady);
+    QSignalSpy frames(&session, &ztermy::terminal::LocalTerminalSession::snapshotReady);
+    QVERIFY(!session.start({.columns = 80, .rows = 24}));
+    QTRY_VERIFY_WITH_TIMEOUT(output->contains(QByteArrayLiteral(">")) || running.size() >= 2, 5000);
+    QVERIFY(output->contains(QByteArrayLiteral(">")));
+    session.queueInput(QByteArrayLiteral("for /L %i in (1,1,80) do @echo RETAINED_%i\rexit\r"));
+    QTRY_VERIFY_WITH_TIMEOUT(running.size() >= 2 && !running.constLast().constFirst().toBool(), 5000);
+    QVERIFY(output->contains(QByteArrayLiteral("RETAINED_80")));
+    session.requestResize(100, 20, 8, 16);
+    QTRY_VERIFY_WITH_TIMEOUT(
+        !frames.isEmpty()
+            && qvariant_cast<ztermy::terminal::TerminalSnapshotPtr>(frames.constLast().constFirst())->columns == 100,
+        3000);
+    session.selectAll();
+    session.copySelection();
+    session.requestSelectedText();
+    QTRY_COMPARE_WITH_TIMEOUT(copied.size(), 1, 3000);
+    QTRY_COMPARE_WITH_TIMEOUT(selected.size(), 1, 3000);
+    QVERIFY(copied.constFirst().constFirst().toString().contains(QStringLiteral("RETAINED_80")));
+    QCOMPARE(copied.constFirst().constFirst(), selected.constFirst().constFirst());
+    session.search(QStringLiteral("RETAINED_1"), false, true);
+    QTRY_COMPARE_WITH_TIMEOUT(search.size(), 1, 3000);
+    QVERIFY(search.constFirst()[2].toUInt() > 0);
+    session.requestScroll(-40);
+    session.queueInput(QByteArrayLiteral("SHOULD_NOT_RUN\r"));
+    session.queuePaste(QByteArrayLiteral("SHOULD_NOT_PASTE"));
+    const auto history = session.scrollbackPage({.lineCount = 100});
+    QVERIFY(history && history->totalLines >= 80);
+    session.stop();
+    QVERIFY(!session.scrollbackPage({.lineCount = 10}));
+    const auto count = copied.size();
+    session.copySelection();
+    QTest::qWait(30);
+    QCOMPARE(copied.size(), count);
 }
 
 void LocalTerminalSessionTests::returnsCursorPositionQueryToLocalChild()

@@ -269,6 +269,8 @@ private:
     std::atomic<std::int64_t> m_synchronizedOutputStartedNanoseconds = 0;
     std::atomic_bool m_snapshotBuildActive = false;
     std::atomic_bool m_running = false;
+    // A stopped child can leave a live, read-only in-memory terminal view.
+    std::atomic_bool m_viewAvailable = false;
     std::atomic_uint64_t m_readBytes = 0;
     std::atomic_uint64_t m_snapshotsProduced = 0;
     std::atomic_uint64_t m_snapshotsDelivered = 0;

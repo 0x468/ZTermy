@@ -32,6 +32,7 @@ private slots:
     void ignoresUnknownAndInvalidPersistedOverrides();
     void restoresDefaults();
     void presentationTracksShortcutChangesAndContext();
+    void reconnectShortcutIsConfigurableAndPreservesExistingBindings();
 };
 
 void ActionRegistryTests::presentationTracksShortcutChangesAndContext()
@@ -171,6 +172,38 @@ void ActionRegistryTests::restoresDefaults()
     QVERIFY(registry.setShortcut(QStringLiteral("terminal.find"), QString{}).valid());
     QVERIFY(registry.resetAllShortcuts());
     QCOMPARE(registry.effectiveShortcut(QStringLiteral("terminal.find")), QStringLiteral("Ctrl+Shift+F"));
+}
+
+void ActionRegistryTests::reconnectShortcutIsConfigurableAndPreservesExistingBindings()
+{
+    ztermy::actions::ActionRegistry registry;
+    const QString id = QStringLiteral("terminal.reconnect");
+    QCOMPARE(registry.defaultShortcut(id), QStringLiteral("Ctrl+R"));
+    QVERIFY(!registry.allowsAutoRepeat(id));
+    QVERIFY(!registry.enabled(id, false));
+    QVERIFY(actionById(registry.actions(true), id).value(QStringLiteral("paletteVisible")).toBool());
+    QVERIFY(registry.setShortcut(id, QStringLiteral("Ctrl+Alt+R")).valid());
+    QCOMPARE(registry.effectiveShortcut(id), QStringLiteral("Ctrl+Alt+R"));
+    QVERIFY(registry.setShortcut(id, {}).valid());
+    QVERIFY(registry.effectiveShortcut(id).isEmpty());
+    QVERIFY(registry.resetShortcut(id));
+    QCOMPARE(registry.effectiveShortcut(id), QStringLiteral("Ctrl+R"));
+
+    // Both earlier and later catalog entries keep a legacy customized Ctrl+R.
+    for (const auto *owner : {"application.hosts", "terminal.find"})
+    {
+        const QString ownerId = QString::fromLatin1(owner);
+        registry.setOverrides({{ownerId, QStringLiteral("Ctrl+R")}});
+        QCOMPARE(registry.effectiveShortcut(ownerId), QStringLiteral("Ctrl+R"));
+        QVERIFY(registry.effectiveShortcut(id).isEmpty());
+        QCOMPARE(registry.validateShortcut(id, QStringLiteral("Ctrl+R")).error,
+                 ztermy::actions::ShortcutValidationError::Conflict);
+        registry.setOverrides(registry.overrides());
+        QCOMPARE(registry.effectiveShortcut(ownerId), QStringLiteral("Ctrl+R"));
+        QVERIFY(registry.effectiveShortcut(id).isEmpty());
+    }
+    registry.setOverrides({{id, QStringLiteral("Ctrl+Alt+R")}});
+    QCOMPARE(registry.effectiveShortcut(id), QStringLiteral("Ctrl+Alt+R"));
 }
 
 QTEST_MAIN(ActionRegistryTests)

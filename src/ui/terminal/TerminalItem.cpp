@@ -786,7 +786,7 @@ void TerminalItem::resolveMultilinePaste(const bool accepted)
     {
         emit multilinePastePendingChanged();
     }
-    if (accepted && !pending.isEmpty())
+    if (accepted && !m_readOnly && !pending.isEmpty())
     {
         emit pasteRequested(pending);
     }
@@ -875,12 +875,14 @@ void TerminalItem::copySelectionWithPolicy(const bool keepSelection)
 
 void TerminalItem::pasteClipboard()
 {
+    if (m_readOnly)
+        return;
     requestPasteBytes(readClipboardText().toUtf8());
 }
 
 void TerminalItem::requestPasteBytes(const QByteArray &bytes)
 {
-    if (bytes.isEmpty())
+    if (m_readOnly || bytes.isEmpty())
     {
         return;
     }
@@ -1063,6 +1065,11 @@ void TerminalItem::keyPressEvent(QKeyEvent *event)
         return;
     }
 
+    if (m_readOnly)
+    {
+        event->accept();
+        return;
+    }
     const auto action =
         event->isAutoRepeat() ? terminal::TerminalKeyAction::repeat : terminal::TerminalKeyAction::press;
     const auto key = platform::windows::terminalKeyEvent(*event, action, !m_preeditText.isEmpty());
@@ -1082,11 +1089,6 @@ void TerminalItem::keyPressEvent(QKeyEvent *event)
 
 void TerminalItem::keyReleaseEvent(QKeyEvent *event)
 {
-    if (m_copyModeActive)
-    {
-        event->accept();
-        return;
-    }
     if (event->key() == Qt::Key_Control && m_hoverInside)
     {
         m_controlModifierDown = false;
@@ -1095,6 +1097,11 @@ void TerminalItem::keyReleaseEvent(QKeyEvent *event)
     else if (event->key() == Qt::Key_Control)
     {
         m_controlModifierDown = false;
+    }
+    if (m_copyModeActive || m_readOnly)
+    {
+        event->accept();
+        return;
     }
     if (event->isAutoRepeat())
     {
@@ -1119,6 +1126,11 @@ QString TerminalItem::readClipboardText() const
 
 void TerminalItem::inputMethodEvent(QInputMethodEvent *event)
 {
+    if (m_readOnly)
+    {
+        event->accept();
+        return;
+    }
     m_preeditText = event->preeditString();
     m_preeditCursorPosition = m_preeditText.size();
     m_preeditCursorVisible = true;
@@ -1698,9 +1710,23 @@ void TerminalItem::cancelSelectionGesture()
     m_selectionClickSelected = false;
 }
 
+void TerminalItem::setReadOnly(const bool readOnly)
+{
+    if (m_readOnly == readOnly)
+        return;
+    m_readOnly = readOnly;
+    m_preeditText.clear();
+    if (readOnly)
+        resolveMultilinePaste(false);
+    setFlag(ItemAcceptsInputMethod, !readOnly);
+    notifyInputMethod();
+    update();
+    emit readOnlyChanged();
+}
+
 bool TerminalItem::terminalOwnsMouse(const Qt::KeyboardModifiers &modifiers) const noexcept
 {
-    return m_snapshot && m_snapshot->mouseTrackingActive && !modifiers.testFlag(Qt::ShiftModifier);
+    return !m_readOnly && m_snapshot && m_snapshot->mouseTrackingActive && !modifiers.testFlag(Qt::ShiftModifier);
 }
 
 terminal::TerminalMouseEvent TerminalItem::mouseEvent(const terminal::TerminalMouseAction action,
@@ -1754,7 +1780,7 @@ void TerminalItem::reportFocus(const bool focused)
 void TerminalItem::wheelEvent(QWheelEvent *event)
 {
     const bool remoteMouse = terminalOwnsMouse(event->modifiers());
-    const bool alternateScroll = m_snapshot && m_snapshot->alternateScrollActive && !remoteMouse;
+    const bool alternateScroll = !m_readOnly && m_snapshot && m_snapshot->alternateScrollActive && !remoteMouse;
     const auto emitRemoteSteps = [this, event, remoteMouse, alternateScroll](int steps) {
         steps = std::clamp(steps, -64, 64);
         if (remoteMouse)

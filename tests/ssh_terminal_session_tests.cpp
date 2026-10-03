@@ -48,11 +48,15 @@ public:
             return false;
         session.m_engine = std::move(*engine);
         session.m_running.store(true);
+        session.m_viewAvailable.store(true);
         constexpr std::string_view output = "\x1b[?2026hLAST FRAME";
         if (session.m_engine->feed(std::as_bytes(std::span(output))))
             return false;
         session.m_engineDirty.store(true);
         session.finishWorker(QStringLiteral("closed"), SshConnectionPhase::Disconnected);
+        session.m_worker = std::jthread([&session](const std::stop_token &token) {
+            session.readOnlyLoop(token);
+        });
         return true;
     }
 };
@@ -246,6 +250,7 @@ private slots:
     void retainsViewportSizeDuringConnectionAndReconnect();
     void coalescesImagesOverLoopbackSshWhileGuiIsStalled();
     void deliversFinalSynchronizedFrameBeforeDisconnect();
+    void retainsReadOnlyInteractionAfterDisconnect();
     void rejectsInvalidStartupConfiguration();
     void presentsDistinctFailureStatuses();
     void reportsConnectionRefusalFromLiveSocket();
@@ -265,6 +270,41 @@ private slots:
     void measuresInteractiveInputQueueLatency();
     void survivesRepeatedConnectDisconnectCycles();
 };
+
+void SshTerminalSessionTests::retainsReadOnlyInteractionAfterDisconnect()
+{
+    ztermy::ssh::SshTerminalSession session;
+    QSignalSpy copied(&session, &ztermy::ssh::SshTerminalSession::clipboardTextReady);
+    QSignalSpy selected(&session, &ztermy::ssh::SshTerminalSession::selectedTextReady);
+    QSignalSpy search(&session, &ztermy::ssh::SshTerminalSession::searchResultReady);
+    QSignalSpy frames(&session, &ztermy::ssh::SshTerminalSession::snapshotReady);
+    QVERIFY(ztermy::ssh::SshTerminalSessionTestPeer::finishWithPendingOutput(session));
+    session.requestResize(100, 20, 8, 16);
+    QTRY_VERIFY_WITH_TIMEOUT(
+        !frames.isEmpty()
+            && qvariant_cast<ztermy::terminal::TerminalSnapshotPtr>(frames.constLast().constFirst())->columns == 100,
+        3000);
+    session.selectAll();
+    session.copySelection();
+    session.requestSelectedText();
+    QTRY_COMPARE_WITH_TIMEOUT(copied.size(), 1, 3000);
+    QTRY_COMPARE_WITH_TIMEOUT(selected.size(), 1, 3000);
+    QVERIFY(copied.constFirst().constFirst().toString().contains(QStringLiteral("LAST FRAME")));
+    QCOMPARE(copied.constFirst().constFirst(), selected.constFirst().constFirst());
+    session.search(QStringLiteral("LAST FRAME"), false, true);
+    QTRY_COMPARE_WITH_TIMEOUT(search.size(), 1, 3000);
+    QCOMPARE(search.constFirst()[2].toUInt(), 1U);
+    session.queueInput(QByteArrayLiteral("SHOULD_NOT_RUN\r"));
+    session.queuePaste(QByteArrayLiteral("SHOULD_NOT_PASTE"));
+    const auto history = session.scrollbackPage({.lineCount = 100});
+    QVERIFY(history);
+    session.stop();
+    QVERIFY(!session.scrollbackPage({.lineCount = 10}));
+    const auto count = copied.size();
+    session.copySelection();
+    QTest::qWait(30);
+    QCOMPARE(copied.size(), count);
+}
 
 void SshTerminalSessionTests::retainsViewportSizeDuringConnectionAndReconnect()
 {

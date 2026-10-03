@@ -199,6 +199,8 @@ private:
     void queueByteCommand(Command command, std::size_t byteCount);
     void queueCommand(Command command);
     void run(SshConnectionRequest &request, terminal::TerminalGeometry geometry, const std::stop_token &stopToken);
+    void readOnlyLoop(const std::stop_token &stopToken);
+    [[nodiscard]] bool handleViewCommand(const Command &command);
     void publishSnapshot(bool hostInteraction = true);
     void publishSnapshotIfDirty();
     void buildSnapshot(bool force = false);
@@ -230,6 +232,7 @@ private:
     std::atomic_bool m_stopFinished = true;
 
     std::mutex m_commandMutex;
+    std::condition_variable_any m_viewCommandAvailable;
     std::deque<Command> m_commands;
     // Resize is meaningful during bootstrap too; ordinary terminal input is not.
     bool m_acceptingResize = false;
@@ -249,6 +252,7 @@ private:
     std::atomic_bool m_engineDirty = false;
     std::atomic<std::int64_t> m_synchronizedOutputStartedNanoseconds = 0;
     std::atomic_bool m_running = false;
+    std::atomic_bool m_viewAvailable = false;
     std::atomic_bool m_telemetryRequestedVisible = false;
     diagnostics::LatencyHistogram m_inputQueueLatency;
 };

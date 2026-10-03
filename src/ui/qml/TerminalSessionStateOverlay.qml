@@ -1,97 +1,103 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Layouts
 
+// A reserved strip, not a panel over output. Retained terminals remain
+// selectable during reconnect and this strip's exit animation.
 Item {
     id: overlay
 
     required property var controller
     required property var tab
+    property bool dismissed: false
+    readonly property bool local: tab.kind === "local"
+    readonly property bool reconnecting: tab.kind === "ssh" && !!tab.reconnecting
+    readonly property bool requested: reconnecting || (!controller.closePaneOnSessionEnd && (local ? !!tab.canReopen : !tab.connecting && (!!tab.canReconnect || !!tab.remoteClosed || !!tab.failed)))
+    readonly property string heading: reconnecting ? qsTr("Reconnecting to SSH host") : local ? (tab.localExited ? qsTr("Local terminal ended") : qsTr("Local terminal is not open")) : tab.failed ? qsTr("SSH session unavailable") : tab.remoteClosed ? qsTr("SSH session ended") : qsTr("SSH session is disconnected")
+    readonly property string reconnectShortcut: controller.actions.find(action => action.id === "terminal.reconnect")?.shortcut || ""
     signal closeRequested
+    signal statusDismissed
 
-    StatePanel {
-        anchors.centerIn: parent
-        width: Math.max(180, Math.min(440, parent.width - 24))
-        visible: !overlay.controller.closePaneOnSessionEnd && overlay.tab.kind === "local" && overlay.tab.canReopen
-        kind: "disconnected"
-        heading: overlay.tab.localExited ? qsTr("Local terminal ended") : qsTr("Local terminal is not open")
-        description: overlay.tab.status || qsTr("This restored local terminal is waiting to be opened.")
-        detail: qsTr("Open the same local shell again or close this pane.")
-        ActionButton {
-            text: qsTr("Open again")
-            accessibleName: qsTr("Open local terminal pane again")
-            variant: "primary"
-            onClicked: overlay.controller.reopenLocalTerminalTab(overlay.tab.sessionId)
-        }
-        ActionButton {
-            text: qsTr("Close pane")
-            accessibleName: qsTr("Close ended local terminal pane")
-            onClicked: overlay.closeRequested()
+    objectName: "terminalSessionStateStrip-" + (tab.sessionId || "")
+    height: requested && !dismissed ? 44 : 0
+    visible: height > 0
+    clip: true
+    onRequestedChanged: {
+        if (!requested)
+            dismissed = false;
+    }
+    onReconnectingChanged: {
+        if (reconnecting)
+            dismissed = false;
+    }
+
+    Behavior on height {
+        NumberAnimation {
+            duration: overlay.requested && !overlay.dismissed ? Motion.enter : Motion.exit
+            easing.type: overlay.requested && !overlay.dismissed ? Motion.enterEasing : Motion.exitEasing
         }
     }
 
-    StatePanel {
-        anchors.centerIn: parent
-        width: Math.max(180, Math.min(440, parent.width - 24))
-        visible: !overlay.controller.closePaneOnSessionEnd && overlay.tab.kind === "ssh" && overlay.tab.canReconnect && !overlay.tab.connecting && !overlay.tab.reconnecting && !overlay.tab.remoteClosed && !overlay.tab.failed
-        kind: "disconnected"
-        heading: qsTr("SSH session is disconnected")
-        description: qsTr("Reconnect to continue using this restored terminal tab.")
-        detail: qsTr("The tab layout was restored, but SSH connections are not kept alive after ztermy exits.")
-        ActionButton {
-            text: qsTr("Reconnect")
-            accessibleName: qsTr("Reconnect restored SSH terminal pane")
-            variant: "primary"
-            onClicked: overlay.controller.reconnectTerminalTab(overlay.tab.sessionId)
-        }
-        ActionButton {
-            text: qsTr("Close pane")
-            accessibleName: qsTr("Close disconnected SSH terminal pane")
-            onClicked: overlay.closeRequested()
-        }
+    Rectangle {
+        anchors.fill: parent
+        color: Theme.panelBackground
+        border.color: Theme.border
     }
-
-    StatePanel {
-        anchors.centerIn: parent
-        width: Math.max(180, Math.min(440, parent.width - 24))
-        visible: !overlay.controller.closePaneOnSessionEnd && overlay.tab.kind === "ssh" && overlay.tab.remoteClosed && !overlay.tab.reconnecting
-        kind: "disconnected"
-        heading: qsTr("SSH session ended")
-        description: overlay.tab.status || ""
-        detail: qsTr("The remote host closed the terminal connection. Reconnect is available for saved host profiles.")
-        ActionButton {
-            visible: !!overlay.tab.canReconnect
-            text: qsTr("Reconnect")
-            accessibleName: qsTr("Reconnect saved SSH terminal pane")
-            variant: "primary"
-            onClicked: overlay.controller.reconnectTerminalTab(overlay.tab.sessionId)
-        }
-        ActionButton {
-            text: qsTr("Close pane")
-            accessibleName: qsTr("Close ended SSH terminal pane")
-            onClicked: overlay.closeRequested()
-        }
+    MouseArea {
+        objectName: "sessionStateInputShield"
+        anchors.fill: parent
+        acceptedButtons: Qt.AllButtons
     }
+    RowLayout {
+        enabled: overlay.requested && !overlay.dismissed
+        anchors.fill: parent
+        anchors.leftMargin: 10
+        anchors.rightMargin: 6
+        spacing: 8
 
-    StatePanel {
-        anchors.centerIn: parent
-        width: Math.max(180, Math.min(440, parent.width - 24))
-        visible: !overlay.controller.closePaneOnSessionEnd && overlay.tab.kind === "ssh" && overlay.tab.failed && !overlay.tab.reconnecting
-        kind: "error"
-        heading: qsTr("SSH session unavailable")
-        description: overlay.tab.status || ""
-        detail: qsTr("Reconnect with the saved host settings or close this pane.")
-        ActionButton {
-            visible: !!overlay.tab.canReconnect
-            text: qsTr("Reconnect")
-            accessibleName: qsTr("Reconnect saved SSH terminal pane")
-            variant: "primary"
-            onClicked: overlay.controller.reconnectTerminalTab(overlay.tab.sessionId)
+        Text {
+            Layout.fillWidth: true
+            text: overlay.heading
+            color: Theme.text
+            font.family: Theme.uiFont
+            font.pixelSize: Theme.textBody
+            elide: Text.ElideRight
+            AppToolTip {
+                text: overlay.tab.status || overlay.heading
+                visible: statusHover.hovered
+            }
+            HoverHandler {
+                id: statusHover
+            }
         }
         ActionButton {
+            visible: overlay.reconnecting || (overlay.local ? !!overlay.tab.canReopen : !!overlay.tab.canReconnect)
+            text: overlay.reconnecting ? qsTr("Cancel reconnect") : overlay.local ? qsTr("Open again") : qsTr("Reconnect")
+            accessibleName: text
+            onClicked: {
+                if (overlay.reconnecting)
+                    overlay.controller.cancelTerminalReconnect(overlay.tab.sessionId);
+                else if (overlay.local)
+                    overlay.controller.reopenLocalTerminalTab(overlay.tab.sessionId);
+                else
+                    overlay.controller.reconnectTerminalTab(overlay.tab.sessionId);
+            }
+        }
+        ActionButton {
+            visible: overlay.width >= 360
             text: qsTr("Close pane")
-            accessibleName: qsTr("Close failed SSH terminal pane")
             onClicked: overlay.closeRequested()
+        }
+        AppIconButton {
+            objectName: "dismissSessionStatus-" + (overlay.tab.sessionId || "")
+            iconName: "close"
+            label: qsTr("Dismiss session status")
+            toolTipText: !overlay.local && overlay.tab.canReconnect && overlay.reconnectShortcut.length > 0 ? qsTr("Dismiss session status. Reconnect with %1 while the terminal is focused.").arg(overlay.reconnectShortcut) : label
+            onClicked: {
+                overlay.dismissed = true;
+                overlay.statusDismissed();
+            }
         }
     }
 }

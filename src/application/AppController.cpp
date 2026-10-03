@@ -82,6 +82,14 @@ namespace
 
 constexpr auto AiProxyCredentialReference = "ai-proxy";
 
+[[nodiscard]] bool canManuallyReconnect(const ztermy::TerminalSessionState &tab)
+{
+    using ztermy::ssh::SshConnectionPhase;
+    return tab.kind == ztermy::TerminalSessionKind::Ssh && tab.ssh != nullptr && !tab.running && !tab.reconnectPending
+           && !tab.sourceProfileId.isEmpty()
+           && (tab.sshPhase == SshConnectionPhase::Disconnected || tab.sshPhase == SshConnectionPhase::Failed);
+}
+
 class AiSystemProxyFactory final : public QNetworkProxyFactory
 {
 public:
@@ -3051,8 +3059,7 @@ QVariantMap AppController::terminalTabValue(const TerminalTab &tab, const QStrin
         {QStringLiteral("restoreQuarantined"), tab.restoreQuarantined},
         {QStringLiteral("reconnecting"), tab.reconnectPending},
         {QStringLiteral("reconnectAttempt"), static_cast<int>(tab.reconnectAttempt)},
-        {QStringLiteral("canReconnect"),
-         tab.kind == TerminalTabKind::Ssh && !tab.sourceProfileId.isEmpty() && !tab.running},
+        {QStringLiteral("canReconnect"), canManuallyReconnect(tab) && profile != m_profiles.end()},
         {QStringLiteral("connectionPhase"), sshConnectionPhaseToken(connectionPhase)},
         {QStringLiteral("connectionStage"), sshConnectionStageToken(connectionPhase)},
         {QStringLiteral("connectionStageIndex"), sshConnectionStageIndex(connectionPhase)},
@@ -3285,7 +3292,21 @@ bool AppController::triggerCommandPaletteItem(const QVariantMap &item)
 
 QVariantList AppController::actions() const
 {
-    return m_actionRegistry.actions(activeTab() != nullptr);
+    const TerminalTab *tab = activeTab();
+    QVariantList result = m_actionRegistry.actions(tab != nullptr);
+    for (auto &entry : result)
+    {
+        QVariantMap action = entry.toMap();
+        if (action.value(QStringLiteral("id")) != QStringLiteral("terminal.reconnect"))
+            continue;
+        action.insert(QStringLiteral("enabled"),
+                      tab != nullptr && canManuallyReconnect(*tab)
+                          && std::ranges::find(m_profiles, utf8String(tab->sourceProfileId), &ssh::SshProfile::id)
+                                 != m_profiles.end());
+        entry = action;
+        break;
+    }
+    return result;
 }
 
 QString AppController::terminalHistoryState() const
@@ -7427,6 +7448,11 @@ void AppController::resolveTransferConflict(const QString &taskId, const QString
 
 bool AppController::triggerAction(const QString &actionId)
 {
+    if (actionId == QStringLiteral("terminal.reconnect"))
+    {
+        const TerminalTab *tab = activeTab();
+        return tab != nullptr && reconnectTerminalTab(tab->id);
+    }
     if (!m_actionRegistry.enabled(actionId, activeTab() != nullptr))
     {
         return false;
@@ -7795,8 +7821,7 @@ bool AppController::reconnectTerminalTab(const QString &id)
             tab = findTabForPane(utf8QString(workspace->activePaneId));
         }
     }
-    if (tab == nullptr || tab->kind != TerminalTabKind::Ssh || tab->ssh == nullptr || tab->running
-        || tab->sourceProfileId.isEmpty())
+    if (tab == nullptr || !canManuallyReconnect(*tab))
     {
         return false;
     }

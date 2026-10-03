@@ -1,6 +1,7 @@
 #pragma once
 
 #include "application/AppController.h"
+#include "ui/RetainedTerminalRuntimeSmoke.h"
 #include "ui/RuntimeSmokeItems.h"
 #include "ui/WindowStateRuntimeSmoke.h"
 #include "ui/terminal/TerminalItem.h"
@@ -174,6 +175,8 @@ namespace ztermy::ui
         showTerminalPage();
         return runPaneCloseRuntimeSmoke(controller);
     }
+    if (qEnvironmentVariableIntValue("ZTERMY_TEST_ENDED_COPY") > 0)
+        return verifyRetainedTerminal(window, controller);
     constexpr int sequentialCycles = 8;
     qint64 maximumCloseMilliseconds = 0;
     for (int cycle = 0; cycle < sequentialCycles; ++cycle)

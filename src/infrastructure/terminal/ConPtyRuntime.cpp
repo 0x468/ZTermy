@@ -101,7 +101,8 @@ struct Runtime final
         api.create = reinterpret_cast<ConPtyApi::Create>(GetProcAddress(module, "ConptyCreatePseudoConsole"));
         api.resize = reinterpret_cast<ConPtyApi::Resize>(GetProcAddress(module, "ConptyResizePseudoConsole"));
         api.close = reinterpret_cast<ConPtyApi::Close>(GetProcAddress(module, "ConptyClosePseudoConsole"));
-        if (!api.create || !api.resize || !api.close)
+        api.release = reinterpret_cast<ConPtyApi::Release>(GetProcAddress(module, "ConptyReleasePseudoConsole"));
+        if (!api.create || !api.resize || !api.close || !api.release)
             api.error = std::make_error_code(std::errc::function_not_supported);
     }
 

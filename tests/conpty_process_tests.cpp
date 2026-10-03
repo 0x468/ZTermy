@@ -37,6 +37,7 @@ class ConPtyProcessTests final : public QObject
 private slots:
     void rejectsInvalidDimensions();
     void capturesUtf8OutputFromChildProcess();
+    void drainsFinalOutputAfterNaturalExit();
     void preservesInlineImageProtocolsFromChildProcess();
 #ifndef ZTERMY_CONPTY_REDISTRIBUTABLE_PROBE
     void pinsRuntimeBinariesAgainstReplacement();
@@ -104,6 +105,40 @@ void ConPtyProcessTests::capturesUtf8OutputFromChildProcess()
 
     process.close();
     QVERIFY(!process.running());
+}
+
+void ConPtyProcessTests::drainsFinalOutputAfterNaturalExit()
+{
+    for (int iteration = 0; iteration < 3; ++iteration)
+    {
+        ztermy::terminal::ConPtyProcess process;
+        const auto error = process.start(L"C:\\Windows\\System32\\cmd.exe",
+                                         L"cmd.exe /d /s /c \"for /L %i in (1,1,80) do @echo ZTERMY_TAIL_%i\"",
+                                         {.columns = 80, .rows = 24});
+        QVERIFY2(!error, error.message().c_str());
+        auto reader = std::async(std::launch::async, [&process] {
+            QByteArray output;
+            std::array<std::byte, 4096> buffer{};
+            while (output.size() < qsizetype{1024} * 1024)
+            {
+                const auto read = process.read(buffer);
+                if (!read || *read == 0)
+                    break;
+                output.append(reinterpret_cast<const char *>(buffer.data()), static_cast<qsizetype>(*read));
+            }
+            return output;
+        });
+        const auto exited = process.waitForExit(5s);
+        const auto released = exited && *exited ? process.finishOutput() : std::make_error_code(std::errc::timed_out);
+        const auto drained = !released && reader.wait_for(5s) == std::future_status::ready;
+        if (!drained)
+            process.close();
+        QVERIFY(drained);
+        const auto output = reader.get();
+        QVERIFY(output.contains("ZTERMY_TAIL_1"));
+        QVERIFY(output.contains("ZTERMY_TAIL_80"));
+        process.close();
+    }
 }
 
 void ConPtyProcessTests::preservesInlineImageProtocolsFromChildProcess()

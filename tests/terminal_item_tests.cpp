@@ -113,6 +113,7 @@ private slots:
     void routesDroppedFilesWithoutPastingLocalPaths();
     void accumulatesWheelDeltasIntoScrollRows();
     void routesTrackedMouseAndWheelToTerminal();
+    void keepsReadOnlyMouseSelectionLocal();
     void exposesScrollbarAndRequestsAbsoluteScroll();
     void preservesNativeMonospaceCellAdvance();
     void keepsShellPredictionReadableAndDistinctOnLightBackground_data();
@@ -1197,6 +1198,17 @@ void TerminalItemTests::confirmsMultilinePaste()
     QVERIFY(!item.multilinePastePending());
     QCOMPARE(pasteSpy.count(), 1);
     QCOMPARE(pasteSpy.at(0).at(0).toByteArray(), QByteArrayLiteral("first\nsecond"));
+
+    // A pending confirmation belongs to the ended session, never its restart.
+    item.pasteClipboard();
+    QVERIFY(item.multilinePastePending());
+    item.setReadOnly(true);
+    QVERIFY(!item.multilinePastePending());
+    item.resolveMultilinePaste(true);
+    QCOMPARE(pasteSpy.count(), 1);
+    item.setReadOnly(false);
+    item.resolveMultilinePaste(true);
+    QCOMPARE(pasteSpy.count(), 1);
 }
 
 void TerminalItemTests::selectsCellsAndCopiesOnMouseRelease()
@@ -1495,6 +1507,40 @@ void TerminalItemTests::accumulatesWheelDeltasIntoScrollRows()
     QCOMPARE(scrollSpy.count(), 3);
     QCOMPARE(scrollSpy.at(0).at(0).toInt(), -3);
     QCOMPARE(scrollSpy.at(2).at(0).toInt(), -6);
+}
+
+void TerminalItemTests::keepsReadOnlyMouseSelectionLocal()
+{
+    TestableTerminalItem item;
+    item.setSize(QSizeF{800, 480});
+    auto snapshot = snapshotAt(0, 0);
+    snapshot->mouseTrackingActive = true;
+    snapshot->alternateScrollActive = true;
+    item.setSnapshot(snapshot);
+    item.setReadOnly(true);
+    QSignalSpy mouse(&item, &ztermy::ui::TerminalItem::mouseEventGenerated);
+    QSignalSpy keys(&item, &ztermy::ui::TerminalItem::keyEventGenerated);
+    QSignalSpy selection(&item, &ztermy::ui::TerminalItem::selectionGestureRequested);
+    QSignalSpy scroll(&item, &ztermy::ui::TerminalItem::scrollRequested);
+    QSignalSpy paste(&item, &ztermy::ui::TerminalItem::pasteRequested);
+    const QPointF point{40, 40};
+    QMouseEvent press(QEvent::MouseButtonPress, point, point, point, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    item.mousePressEvent(&press);
+    QCOMPARE(selection.size(), 1);
+    QWheelEvent wheel(point, point, QPoint{}, QPoint{0, 120}, Qt::NoButton, Qt::NoModifier, Qt::ScrollUpdate, false);
+    item.wheelEvent(&wheel);
+    QVERIFY(!scroll.isEmpty());
+    QKeyEvent key(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier, QStringLiteral("a"));
+    item.keyPressEvent(&key);
+    item.clipboardTextFixture = QStringLiteral("one\ntwo");
+    item.pasteClipboard();
+    QCOMPARE(mouse.size(), 0);
+    QCOMPARE(keys.size(), 0);
+    QCOMPARE(paste.size(), 0);
+    QVERIFY(!item.multilinePastePending());
+    item.setReadOnly(false);
+    item.mousePressEvent(&press);
+    QCOMPARE(mouse.size(), 1);
 }
 
 void TerminalItemTests::routesTrackedMouseAndWheelToTerminal()

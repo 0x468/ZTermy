@@ -94,7 +94,7 @@ void SshTerminalSession::scheduleSynchronizedOutputFallback(const std::int64_t s
 
 void SshTerminalSession::scheduleLatestSnapshotDelivery()
 {
-    if (!m_running.load())
+    if (!m_viewAvailable.load() && !m_running.load())
     {
         m_snapshotDeliveryScheduled.store(false);
         return;
@@ -107,7 +107,7 @@ void SshTerminalSession::scheduleLatestSnapshotDelivery()
 
 void SshTerminalSession::deliverLatestSnapshot()
 {
-    if (!m_running.load())
+    if (!m_viewAvailable.load() && !m_running.load())
     {
         std::scoped_lock lock(m_snapshotMutex);
         m_pendingSnapshot.reset();
@@ -136,7 +136,7 @@ void SshTerminalSession::deliverLatestSnapshot()
             return;
         }
     }
-    if (m_engineDirty.load(std::memory_order_acquire) && m_running.load())
+    if (m_engineDirty.load(std::memory_order_acquire) && (m_viewAvailable.load() || m_running.load()))
     {
         std::scoped_lock lock(m_commandMutex);
         if (m_commands.empty() || !std::holds_alternative<SnapshotRequestCommand>(m_commands.back()))
@@ -145,6 +145,169 @@ void SshTerminalSession::deliverLatestSnapshot()
             signalCommandWake();
         }
     }
+}
+
+void SshTerminalSession::readOnlyLoop(const std::stop_token &stopToken)
+{
+    while (!stopToken.stop_requested() && m_viewAvailable.load())
+    {
+        Command command;
+        {
+            std::unique_lock lock(m_commandMutex);
+            if (!m_viewCommandAvailable.wait(lock, stopToken, [this] {
+                    return !m_commands.empty();
+                }))
+                break;
+            command = std::move(m_commands.front());
+            m_commands.pop_front();
+            if (const auto *input = std::get_if<InputCommand>(&command))
+                m_queuedInputBytes -= static_cast<std::size_t>(input->bytes.size());
+            else if (const auto *paste = std::get_if<PasteCommand>(&command))
+                m_queuedInputBytes -= static_cast<std::size_t>(paste->bytes.size());
+        }
+        if (std::holds_alternative<SnapshotRequestCommand>(command))
+            publishSnapshotIfDirty();
+        else if (const auto *geometry = std::get_if<terminal::TerminalGeometry>(&command))
+        {
+            if (!m_engine->resize(*geometry))
+                publishSnapshot();
+        }
+        else if (const auto *colors = std::get_if<ColorSchemeCommand>(&command))
+        {
+            if (!m_engine->setColorScheme(colors->scheme))
+                publishSnapshot();
+            (void)m_engine->takePtyWrite();
+        }
+        else
+            (void)handleViewCommand(command);
+        // All live I/O commands are dropped. This loop owns no SSH transport.
+    }
+}
+
+bool SshTerminalSession::handleViewCommand(const Command &command)
+{
+    if (const auto *scroll = std::get_if<ScrollCommand>(&command))
+    {
+        m_engine->scrollViewport(scroll->rows);
+        publishSnapshot();
+        return true;
+    }
+
+    if (const auto *selection = std::get_if<SelectionCommand>(&command))
+    {
+        if (const std::error_code error = m_engine->setSelection(selection->selection))
+        {
+            postStatus(tr("SSH terminal selection failed: %1").arg(QString::fromStdString(error.message())));
+            return true;
+        }
+        publishSnapshot();
+        return true;
+    }
+
+    if (const auto *gesture = std::get_if<SelectionGestureCommand>(&command))
+    {
+        const auto changed = m_engine->applySelectionGesture(gesture->gesture);
+        if (!changed)
+        {
+            postStatus(
+                tr("SSH terminal selection gesture failed: %1").arg(QString::fromStdString(changed.error().message())));
+            return true;
+        }
+        if (*changed)
+        {
+            publishSnapshot();
+        }
+        return true;
+    }
+
+    if (const auto *copyMode = std::get_if<CopyModeCommand>(&command))
+    {
+        const auto changed = m_engine->applyCopyModeAction(copyMode->action);
+        if (!changed)
+        {
+            postStatus(tr("SSH terminal Copy Mode failed: %1").arg(QString::fromStdString(changed.error().message())));
+            return true;
+        }
+        if (*changed)
+        {
+            publishSnapshot();
+        }
+        return true;
+    }
+
+    if (std::holds_alternative<SelectAllCommand>(command))
+    {
+        if (const std::error_code error = m_engine->selectAll())
+        {
+            postStatus(tr("SSH terminal select all failed: %1").arg(QString::fromStdString(error.message())));
+            return true;
+        }
+        publishSnapshot();
+        return true;
+    }
+
+    if (std::holds_alternative<CopyCommand>(command))
+    {
+        auto selectedText = m_engine->selectedText();
+        if (!selectedText)
+        {
+            postStatus(tr("SSH terminal copy failed: %1").arg(QString::fromStdString(selectedText.error().message())));
+        }
+        else if (*selectedText)
+        {
+            const QString text =
+                QString::fromUtf8((*selectedText)->data(), static_cast<qsizetype>((*selectedText)->size()));
+            postClipboardText(text);
+        }
+        return true;
+    }
+
+    if (std::holds_alternative<SelectedTextCommand>(command))
+    {
+        auto selectedText = m_engine->selectedText();
+        if (!selectedText)
+        {
+            postStatus(tr("SSH terminal selection read failed: %1")
+                           .arg(QString::fromStdString(selectedText.error().message())));
+        }
+        else
+        {
+            const QString text = *selectedText ? QString::fromUtf8((*selectedText)->data(),
+                                                                   static_cast<qsizetype>((*selectedText)->size()))
+                                               : QString{};
+            postSelectedText(text);
+        }
+        return true;
+    }
+
+    if (const auto *search = std::get_if<SearchCommand>(&command))
+    {
+        auto result = m_engine->search(
+            std::string_view(search->query.constData(), static_cast<std::size_t>(search->query.size())),
+            search->direction, search->caseSensitive);
+        if (!result)
+        {
+            postStatus(tr("SSH terminal search failed: %1").arg(QString::fromStdString(result.error().message())));
+            return true;
+        }
+        const QString query = QString::fromUtf8(search->query);
+        const terminal::TerminalSearchResult searchResult = *result;
+        postSearchResult(query, searchResult.current, searchResult.total, searchResult.wrapped);
+        publishSnapshot();
+        return true;
+    }
+    if (std::holds_alternative<ClearSearchCommand>(command))
+    {
+        if (const std::error_code error = m_engine->clearSearch())
+        {
+            postStatus(tr("SSH terminal search clear failed: %1").arg(QString::fromStdString(error.message())));
+            return true;
+        }
+        postSearchResult({}, 0, 0, false);
+        publishSnapshot();
+        return true;
+    }
+    return false;
 }
 
 } // namespace ztermy::ssh

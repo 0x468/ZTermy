@@ -123,6 +123,14 @@ Item {
             readonly property var node: root.node
             readonly property var tab: node.tab || ({})
             readonly property var activeViewport: node.active ? viewport : null
+            Shortcut {
+                objectName: "terminalReconnectShortcut-" + (leaf.tab.sessionId || "")
+                sequence: root.actionShortcut("terminal.reconnect")
+                enabled: sequence.length > 0 && !!leaf.tab.canReconnect && viewport.activeFocus
+                autoRepeat: false
+                context: Qt.WindowShortcut
+                onActivated: root.controller.reconnectTerminalTab(leaf.tab.sessionId)
+            }
             readonly property bool aiConfigured: !!root.controller && root.controller.aiModel.trim().length > 0 && (root.controller.aiProviderPreference === "openai-chatgpt" ? root.controller.aiChatGptConfigured : root.controller.aiBaseUrl.trim().length > 0 && (root.controller.aiProviderPreference === "ollama" || root.controller.aiApiKeyConfigured))
             readonly property bool connectionProgressRequested: tab.kind === "ssh" && (!!tab.connecting || !!tab.reconnecting)
             property bool connectionProgressVisible: false
@@ -382,8 +390,11 @@ Item {
                 }
 
                 objectName: "terminalViewport-" + leaf.node.id
-                anchors.fill: parent
-                anchors.margins: 0
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: sessionStateStrip.top
+                readOnly: !leaf.tab.running
                 focus: !!leaf.node.active || activeFocus
                 fontFamily: leaf.tab.sessionFontFamily && leaf.tab.sessionFontFamily.length > 0 ? leaf.tab.sessionFontFamily : root.defaultFontFamily
                 fontPixelSize: leaf.tab.sessionFontSize > 0 ? leaf.tab.sessionFontSize : root.defaultFontSize
@@ -396,7 +407,7 @@ Item {
                 selectionForeground: Theme.terminalSelectionForeground
                 cursorBlink: root.cursorBlink
                 textBlinkEnabled: Motion.enabled && !Motion.reduced
-                terminalCursorVisible: !!leaf.node.active && activeFocus && leaf.Window.window !== null && leaf.Window.window.active
+                terminalCursorVisible: !!leaf.tab.running && !!leaf.node.active && activeFocus && leaf.Window.window !== null && leaf.Window.window.active
                 copyOnSelect: root.copyOnSelect
                 keepSelectionAfterCopy: root.keepSelectionAfterCopy
                 confirmMultilinePaste: root.confirmMultilinePaste
@@ -935,38 +946,19 @@ Item {
                 }
             }
 
-            StatePanel {
-                objectName: "sshReconnectProgressPanel"
-                anchors.centerIn: parent
-                width: Math.max(180, Math.min(440, parent.width - 24))
-                visible: leaf.connectionProgressVisible && leaf.connectionProgressWasReconnect
-                opacity: leaf.connectionProgressOpacity
-                z: 9
-                kind: "loading"
-                heading: qsTr("Reconnecting to SSH host")
-                description: leaf.connectionProgressRequested ? leaf.tab.status || "" : leaf.connectionProgressLastStatus
-                detail: leaf.tab.connectionInteractionRequired ? qsTr("Waiting for host key confirmation.") : qsTr("Automatic retries use bounded exponential backoff and never retain credentials in the terminal pane.")
-                steps: [qsTr("Establish connection"), qsTr("Authenticate"), qsTr("Open terminal")]
-                activeStep: leaf.connectionProgressRequested ? leaf.tab.connectionStageIndex : leaf.connectionProgressLastStep
-                progress: leaf.connectionProgressValue
-
-                Behavior on opacity {
-                    MotionFeedback {}
-                }
-
-                ActionButton {
-                    text: qsTr("Cancel reconnect")
-                    accessibleName: qsTr("Cancel automatic SSH reconnect")
-                    onClicked: root.controller.cancelTerminalReconnect(leaf.tab.sessionId)
-                }
-            }
-
             TerminalSessionStateOverlay {
-                anchors.fill: parent
+                id: sessionStateStrip
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
                 z: 9
                 controller: root.controller
                 tab: leaf.tab
                 onCloseRequested: leaf.closePane()
+                onStatusDismissed: {
+                    if (leaf.node.active)
+                        viewport.forceActiveFocus();
+                }
             }
         }
     }
