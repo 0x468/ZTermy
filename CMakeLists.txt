@@ -4960,6 +4960,13 @@ if(BUILD_TESTING)
             --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/retained-terminal-runtime"
     )
     set_tests_properties(retained-terminal-runtime PROPERTIES RUN_SERIAL TRUE TIMEOUT 60)
+    add_test(
+        NAME ai-long-content-runtime
+        COMMAND ztermy --ai-long-content-runtime-smoke
+            --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/ai-long-content-runtime"
+    )
+    # Six width/theme cases, two captures each; Debug text layout is heavier.
+    set_tests_properties(ai-long-content-runtime PROPERTIES RUN_SERIAL TRUE TIMEOUT 120)
 endif()
 
 if(CMAKE_VERSION VERSION_LESS 4.3)

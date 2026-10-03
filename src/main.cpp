@@ -14,6 +14,7 @@
 #include "platform/windows/CrashDiagnostics.h"
 #include "platform/windows/LaunchFeedback.h"
 #include "platform/windows/NativeWindow.h"
+#include "ui/AiLongContentRuntimeSmoke.h"
 #include "ui/AiMemoryDiagnostics.h"
 #include "ui/MemoryLifecycleRuntimeSmoke.h"
 #include "ui/RuntimeSmokeItems.h"
@@ -4704,6 +4705,13 @@ int main(int argc, char *argv[])
         appController.shutdown();
         window.releaseResources();
         qCInfo(applicationLog) << "Shortcut settings runtime smoke passed=" << passed;
+        return passed ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+    if (QCoreApplication::arguments().contains(QStringLiteral("--ai-long-content-runtime-smoke")))
+    {
+        const bool passed = ztermy::ui::verifyAiLongContentRuntime(window, appController, QDir(paths->dataDirectory));
+        appController.shutdown();
+        window.releaseResources();
         return passed ? EXIT_SUCCESS : EXIT_FAILURE;
     }
     if (QCoreApplication::arguments().contains(QStringLiteral("--launch-runtime-smoke")))

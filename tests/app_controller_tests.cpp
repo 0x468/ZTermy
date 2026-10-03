@@ -270,6 +270,7 @@ private slots:
     void retranslatesPreviouslyReadActions();
     void restoresCompleteAgentPresentationFromHistory();
     void exposesProviderFailureRecoveryActions();
+    void retriesProviderResponseWithoutRepeatingCompletedTool_data();
     void retriesProviderResponseWithoutRepeatingCompletedTool();
     void compactsConversationContextWithoutDeletingTranscript();
     void managesMultipleLocalTerminalTabs();
@@ -1967,8 +1968,18 @@ void AppControllerTests::exposesProviderFailureRecoveryActions()
     QVERIFY(controller.activeAiErrorRecovery().isEmpty());
 }
 
+void AppControllerTests::retriesProviderResponseWithoutRepeatingCompletedTool_data()
+{
+    QTest::addColumn<QString>("command");
+    QTest::newRow("short") << QStringLiteral("echo retry-once");
+    QTest::newRow("long-multiline") << QStringLiteral("cat <<'ZTERMY_TEST'\n")
+                                           + QStringLiteral("long command fixture row\n").repeated(120)
+                                           + QStringLiteral("ZTERMY_TEST");
+}
+
 void AppControllerTests::retriesProviderResponseWithoutRepeatingCompletedTool()
 {
+    QFETCH(QString, command);
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
     const auto sessionState = std::make_shared<FakeLocalSessionState>();
@@ -1982,10 +1993,10 @@ void AppControllerTests::retriesProviderResponseWithoutRepeatingCompletedTool()
     QTcpServer provider;
     QVERIFY(provider.listen(QHostAddress::LocalHost, 0));
     QList<QByteArray> requestBodies;
-    QObject::connect(&provider, &QTcpServer::newConnection, &controller, [&provider, &requestBodies] {
+    QObject::connect(&provider, &QTcpServer::newConnection, &controller, [&provider, &requestBodies, command] {
         while (QTcpSocket *socket = provider.nextPendingConnection())
         {
-            QObject::connect(socket, &QTcpSocket::readyRead, socket, [socket, &requestBodies] {
+            QObject::connect(socket, &QTcpSocket::readyRead, socket, [socket, &requestBodies, command] {
                 QByteArray request = socket->property("requestBuffer").toByteArray();
                 request += socket->readAll();
                 socket->setProperty("requestBuffer", request);
@@ -2032,9 +2043,19 @@ void AppControllerTests::retriesProviderResponseWithoutRepeatingCompletedTool()
                 QByteArray body;
                 if (requestBodies.size() == 1)
                 {
-                    body =
-                        R"({"message":{"content":"","tool_calls":[{"function":{"name":"run_command","arguments":{"command":"echo retry-once","timeout_ms":1}}}]},"done":true})"
-                        "\n";
+                    const QJsonObject function{
+                        {QStringLiteral("name"), QStringLiteral("run_command")},
+                        {QStringLiteral("arguments"),
+                         QJsonObject{{QStringLiteral("command"), command}, {QStringLiteral("timeout_ms"), 1}}}};
+                    body = QJsonDocument(
+                               QJsonObject{
+                                   {QStringLiteral("message"),
+                                    QJsonObject{{QStringLiteral("content"), QString{}},
+                                                {QStringLiteral("tool_calls"),
+                                                 QJsonArray{QJsonObject{{QStringLiteral("function"), function}}}}}},
+                                   {QStringLiteral("done"), true}})
+                               .toJson(QJsonDocument::Compact)
+                           + '\n';
                 }
                 else if (requestBodies.size() == 2)
                 {
@@ -2061,9 +2082,11 @@ void AppControllerTests::retriesProviderResponseWithoutRepeatingCompletedTool()
     const QString endpoint = QStringLiteral("http://127.0.0.1:%1").arg(provider.serverPort());
     QVERIFY(controller.saveAiProviderSettings(QStringLiteral("ollama"), endpoint, QStringLiteral("/api/chat"),
                                               QStringLiteral("qwen3"), false, QStringLiteral("yolo")));
-    const auto commandDispatchCount = [&sessionState] {
-        return std::ranges::count_if(sessionState->inputs, [](const QByteArray &input) {
-            return input.trimmed() == QByteArrayLiteral("echo retry-once");
+    QByteArray expectedInput = command.toUtf8();
+    expectedInput.replace('\n', '\r');
+    const auto commandDispatchCount = [&sessionState, &expectedInput] {
+        return std::ranges::count_if(sessionState->inputs, [&expectedInput](const QByteArray &input) {
+            return input.trimmed() == expectedInput;
         });
     };
     QCOMPARE(commandDispatchCount(), 0);
@@ -2086,7 +2109,7 @@ void AppControllerTests::retriesProviderResponseWithoutRepeatingCompletedTool()
     {
         const QString content = value.toObject().value(QStringLiteral("content")).toString();
         originalPromptCount += content == QStringLiteral("Inspect disk usage") ? 1 : 0;
-        foundToolEvidence = foundToolEvidence || content.contains(QStringLiteral("echo retry-once"));
+        foundToolEvidence = foundToolEvidence || content.contains(command.section(QChar{'\n'}, 0, 0));
         foundRetryContinuation =
             foundRetryContinuation || content.contains(QStringLiteral("do not repeat side-effecting actions"));
     }
@@ -2103,6 +2126,17 @@ void AppControllerTests::retriesProviderResponseWithoutRepeatingCompletedTool()
              QStringLiteral("failed"));
     QCOMPARE(conversation->data(conversation->index(2), ztermy::ai::AiConversationModel::TextRole).toString(),
              QStringLiteral("continued without rerunning"));
+    const QVariantList commandActivities =
+        conversation->data(conversation->index(1), ztermy::ai::AiConversationModel::ToolActivitiesRole).toList();
+    QCOMPARE(commandActivities.size(), 1);
+    const QVariantMap commandActivity = commandActivities.constFirst().toMap();
+    QCOMPARE(commandActivity.value(QStringLiteral("state")).toString(), QStringLiteral("failed"));
+    QCOMPARE(commandActivity.value(QStringLiteral("resultCode")).toString(), QStringLiteral("timeout"));
+    QCOMPARE(QJsonDocument::fromJson(commandActivity.value(QStringLiteral("argumentsJson")).toString().toUtf8())
+                 .object()
+                 .value(QStringLiteral("command"))
+                 .toString(),
+             command);
 }
 
 void AppControllerTests::compactsConversationContextWithoutDeletingTranscript()

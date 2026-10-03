@@ -152,6 +152,7 @@ Rectangle {
 
         Flickable {
             id: detailViewport
+            objectName: "aiToolDetailViewport"
 
             Layout.fillWidth: true
             Layout.preferredHeight: Math.min(132, Math.max(38, detailText.contentHeight + 12))
@@ -186,6 +187,7 @@ Rectangle {
 
             TextEdit {
                 id: detailText
+                objectName: "aiToolDetailText"
 
                 x: 6
                 y: 6
@@ -1697,6 +1699,7 @@ Rectangle {
 
                 delegate: Item {
                     id: messageItem
+                    objectName: "aiMessageItem"
 
                     required property int index
                     required property string messageRole
@@ -1727,6 +1730,9 @@ Rectangle {
                     required property int toolEvidenceFailedCount
                     required property int toolEvidencePendingCount
                     required property int toolEvidenceFailedSideEffectCount
+                    // Tool updates replace the presentation array. Keep expansion
+                    // with the message delegate, not a recreated tool-card instance.
+                    property var expandedToolIds: ({})
                     readonly property bool reasoningActive: state === "streaming" && reasoning.length > 0 && text.length === 0
                     readonly property bool recoveryActive: messageRole === "assistant" && (state === "failed" || state === "cancelled") && index === conversationList.count - 1
                     readonly property var recovery: recoveryActive ? pane.controller.activeAiErrorRecovery : ({})
@@ -1755,6 +1761,7 @@ Rectangle {
 
                         ColumnLayout {
                             id: messageColumn
+                            objectName: "aiMessageColumn"
 
                             anchors.left: parent.left
                             anchors.right: parent.right
@@ -1896,9 +1903,10 @@ Rectangle {
 
                                         delegate: Rectangle {
                                             id: toolCard
+                                            objectName: "aiToolCard"
 
                                             required property var modelData
-                                            property bool expanded: false
+                                            readonly property bool expanded: messageItem.expandedToolIds[modelData.id] === true
                                             readonly property bool hasDetails: pane.toolActivityHasDetails(modelData)
                                             Layout.fillWidth: true
                                             Layout.preferredHeight: toolCardColumn.implicitHeight + 12
@@ -1922,11 +1930,16 @@ Rectangle {
                                                     objectName: "aiToolActivityToggle"
                                                     Layout.fillWidth: true
                                                     Layout.preferredHeight: 34
+                                                    clip: true
                                                     hoverEnabled: toolCard.hasDetails
                                                     focusPolicy: toolCard.hasDetails ? Qt.StrongFocus : Qt.NoFocus
                                                     enabled: toolCard.hasDetails
                                                     Accessible.name: toolCard.hasDetails ? (toolCard.expanded ? qsTr("Collapse tool details") : qsTr("Expand tool details")) + " · " + toolCard.modelData.name : toolCard.modelData.name
-                                                    onClicked: toolCard.expanded = !toolCard.expanded
+                                                    onClicked: {
+                                                        const expanded = Object.assign({}, messageItem.expandedToolIds);
+                                                        expanded[toolCard.modelData.id] = !toolCard.expanded;
+                                                        messageItem.expandedToolIds = expanded;
+                                                    }
 
                                                     contentItem: RowLayout {
                                                         spacing: 7
@@ -1966,7 +1979,12 @@ Rectangle {
                                                             Text {
                                                                 Layout.fillWidth: true
                                                                 visible: toolCard.modelData.summary.length > 0
-                                                                text: toolCard.modelData.summary
+                                                                objectName: "aiToolSummary"
+                                                                // A summary is a single preview row, not the raw
+                                                                // multiline command. Full text stays in details.
+                                                                text: toolCard.modelData.summary.replace(/\s+/g, " ").trim()
+                                                                textFormat: Text.PlainText
+                                                                maximumLineCount: 1
                                                                 color: Theme.textMuted
                                                                 elide: Text.ElideRight
                                                                 font.family: Theme.terminalFont
@@ -2165,6 +2183,7 @@ Rectangle {
 
                             MarkdownMessage {
                                 id: messageText
+                                objectName: "aiMessageBody"
 
                                 memoryDiagnostics: pane.memoryDiagnostics
                                 diagnosticRow: messageItem.index
