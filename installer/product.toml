@@ -3,7 +3,7 @@ schema_version = 5
 [product]
 id = "z-series.ztermy"
 display_name = "Ztermy"
-version = "0.5.2"
+version = "0.5.3"
 architecture = "x86-64"
 version_source = "payload:ztermy.exe"
 

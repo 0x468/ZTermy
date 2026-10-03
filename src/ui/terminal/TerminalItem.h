@@ -3,6 +3,7 @@
 #include "ui/WheelAcceleration.h"
 
 #include "domain/terminal/TerminalEngine.h"
+#include "ui/terminal/TerminalFontStyles.h"
 #include "ui/terminal/TerminalKeywordHighlighter.h"
 #include "ui/terminal/TerminalQuickSelect.h"
 #include "ui/terminal/TerminalRenderMetrics.h"
@@ -311,13 +312,6 @@ private:
     void reportFocus(bool focused);
     void restartCursorBlink();
     void requestPasteBytes(const QByteArray &bytes);
-
-    static constexpr std::size_t styleBold = 1U << 0U;
-    static constexpr std::size_t styleItalic = 1U << 1U;
-    static constexpr std::size_t styleUnderline = 1U << 2U;
-    static constexpr std::size_t styleStrikeOut = 1U << 3U;
-    static constexpr std::size_t styleOverline = 1U << 4U;
-    static constexpr std::size_t styledFontCount = 1U << 5U;
 
     ztermy::terminal::TerminalSnapshotPtr m_snapshot;
     QFont m_font;

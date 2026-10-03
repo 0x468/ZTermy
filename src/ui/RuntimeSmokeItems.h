@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ui/RuntimeSmokeClipboard.h"
 #include "ui/terminal/TerminalPaneRuntimeSmoke.h"
 
 #include <QCoreApplication>

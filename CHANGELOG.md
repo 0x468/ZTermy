@@ -6,6 +6,32 @@ Release assets are published through GitHub Releases.
 
 ## Unreleased
 
+## 0.5.3 — 2026-10-03
+
+- Keep ended terminal output scrollable, searchable and copyable. Replace
+  modal exit prompts with a dismissible bottom status area, and add a
+  configurable SSH reconnect shortcut (Ctrl+R by default) that only applies
+  to an ended SSH pane with terminal focus.
+- Add an off-by-default SSH reconnect history setting. Keep bounded text
+  history in memory with connection separators while resetting terminal
+  protocol modes; explicit pane close still clears it. Settings schema 44
+  preserves schema-43 preferences and defaults the new switch off.
+- Prevent multiline AI tool summaries from overlapping cards and answers.
+  Keep arguments/results selectable and scrollable and retain expanded
+  details across tool updates. Cover long-command timeout and retry behavior.
+- Add configurable Windows window-summoning shortcuts, traditional Explorer
+  integration and optional Windows 11 menus, including detected Shell choices
+  and their icons. Support external directory/SSH launches into main or
+  detached windows with explicit authentication inputs.
+- Correct installer renderer startup and mapped-image update recovery, and
+  request whole-application graceful exit instead of hiding tray windows.
+- Blend the hidden title trigger with the active page and terminal material,
+  restore light-theme transparency, and correct import/export icon direction.
+- Detect available local Shells instead of exposing development-machine
+  choices, extend Profile/Shell icons and protect unsaved host-editor drafts.
+- Add calibrated Windows heap-lifetime checks and isolated local-Shell
+  regression gates that reject new DLL-initialization popup errors.
+
 - Add optional immersive auto-hide chrome, revealed only from a separate top
   strip without resizing the terminal. Keep it open while the pointer remains
   over the bar, including repeated Tab switching.
@@ -13,7 +39,7 @@ Release assets are published through GitHub Releases.
   policy, and replace bright terminal Tab cards with theme-aware ink and a
   restrained active indicator.
 - Simplify detached windows to one workspace with multiple Panes, overlay
-  window controls and explicit whole-layout return. Restore legacy multi-Tab
+  window controls and pane-local return. Restore legacy multi-Tab
   windows as separate windows without losing layouts or session identities.
 
 - Unify interface icons using the reviewed Tabler outline set while preserving

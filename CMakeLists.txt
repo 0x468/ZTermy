@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 project(
     ztermy
-    VERSION 0.5.2
+    VERSION 0.5.3
     DESCRIPTION "A native Windows SSH terminal"
     LANGUAGES C CXX RC
 )
@@ -1067,6 +1067,7 @@ qt_add_executable(ztermy WIN32
     src/platform/windows/DetachedWindowNativeFrame.cpp
     src/platform/windows/DetachedWindowNativeFrame.h
     src/platform/windows/NativeWindow.cpp
+    src/platform/windows/NativeWindowPreferences.cpp
     src/platform/windows/NativeWindow.h
     src/platform/windows/WindowsGlobalShortcut.cpp
     src/platform/windows/WindowsGlobalShortcut.h
@@ -1496,6 +1497,8 @@ set_source_files_properties(src/ui/qml/PaneFocusEdges.qml PROPERTIES QT_RESOURCE
 set_source_files_properties(src/ui/qml/DetachedTerminalWindow.qml PROPERTIES QT_RESOURCE_ALIAS DetachedTerminalWindow.qml)
 set_source_files_properties(src/ui/qml/TerminalWindowCoordinator.qml PROPERTIES QT_RESOURCE_ALIAS TerminalWindowCoordinator.qml)
 set_source_files_properties(src/ui/qml/WindowBehaviorSettings.qml PROPERTIES QT_RESOURCE_ALIAS WindowBehaviorSettings.qml)
+set_source_files_properties(src/ui/qml/AiToolHeader.qml PROPERTIES QT_RESOURCE_ALIAS AiToolHeader.qml)
+set_source_files_properties(src/ui/qml/SettingsDiagnosticsCard.qml PROPERTIES QT_RESOURCE_ALIAS SettingsDiagnosticsCard.qml)
 set_source_files_properties(src/ui/qml/WindowsIntegrationSettings.qml PROPERTIES QT_RESOURCE_ALIAS WindowsIntegrationSettings.qml)
 set_source_files_properties(src/ui/qml/WindowsIntegrationSettings.qml PROPERTIES QT_RESOURCE_ALIAS WindowsIntegrationSettings.qml)
 set_source_files_properties(src/ui/qml/TitleWindowActions.qml PROPERTIES QT_RESOURCE_ALIAS TitleWindowActions.qml)
@@ -1590,6 +1593,8 @@ qt_add_qml_module(ztermy
         src/ui/qml/DetachedTerminalWindow.qml
         src/ui/qml/TerminalWindowCoordinator.qml
         src/ui/qml/WindowBehaviorSettings.qml
+        src/ui/qml/AiToolHeader.qml
+        src/ui/qml/SettingsDiagnosticsCard.qml
         src/ui/qml/WindowsIntegrationSettings.qml
         src/ui/qml/TitleWindowActions.qml
         src/ui/qml/TitleTab.qml
@@ -5086,108 +5091,13 @@ if(BUILD_TESTING)
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyBrandingAssets.cmake"
     )
 
-    add_custom_target(ztermy_test_binaries
-        DEPENDS
-            ztermy_remote_telemetry_tests
-            ztermy_action_registry_tests
-            ztermy_diagnostic_reporter_tests
-            ztermy_performance_evidence_tests
-            ztermy_application_paths_tests
-            ztermy_application_settings_tests
-            ztermy_last_known_good_file_tests
-            ztermy_localization_manager_tests
-            ztermy_latency_histogram_tests
-            ztermy_window_hit_test_tests
-            ztermy_conpty_process_tests
-            ztermy_windows_local_shell_catalog_tests
-            ztermy_ssh_runtime_tests
-            ztermy_ssh_connection_state_tests
-            ztermy_ssh_host_key_tests
-            ztermy_known_hosts_store_tests
-            ztermy_open_ssh_config_importer_tests
-            ztermy_local_file_browser_controller_tests
-            ztermy_known_hosts_controller_tests
-            ztermy_keychain_controller_tests
-            ztermy_connection_history_tests
-            ztermy_ssh_keychain_store_tests
-            ztermy_ssh_keychain_migration_tests
-            ztermy_ssh_identity_resolver_tests
-            ztermy_ssh_profile_store_tests
-            ztermy_ssh_target_tests
-            ztermy_windows_tcp_socket_tests
-            ztermy_explicit_proxy_tunnel_tests
-            ztermy_ssh_handshake_tests
-            ztermy_ssh_connection_bootstrap_tests
-            ztermy_ssh_real_host_tests
-            ztermy_ssh_terminal_session_tests
-            ztermy_sftp_types_tests
-            ztermy_port_forwarding_rule_store_tests
-            ztermy_socks5_protocol_tests
-            ztermy_port_forwarding_job_tests
-            ztermy_port_forwarding_real_host_tests
-            ztermy_session_log_writer_tests
-            ztermy_transfer_queue_tests
-            ztermy_transfer_batch_tests
-            ztermy_transfer_planner_tests
-            ztermy_transfer_source_adapters_tests
-            ztermy_transfer_batch_materializer_tests
-            ztermy_transfer_batch_coordinator_tests
-            ztermy_sftp_session_tests
-            ztermy_sftp_directory_model_tests
-            ztermy_transfer_executor_tests
-            ztermy_transfer_manager_tests
-            ztermy_transfer_recovery_store_tests
-            ztermy_transfer_batch_recovery_store_tests
-            ztermy_workspace_state_store_tests
-            ztermy_terminal_engine_tests
-            ztermy_command_block_store_tests
-            ztermy_shell_integration_decoder_tests
-            ztermy_command_block_assembler_tests
-            ztermy_semantic_terminal_observer_tests
-            ztermy_ai_stream_parser_tests
-            ztermy_provider_stream_mapper_tests
-            ztermy_provider_request_factory_tests
-            ztermy_ai_trace_sanitizer_tests
-            ztermy_provider_http_client_tests
-            ztermy_ai_provider_retry_policy_tests
-            ztermy_ai_permission_policy_tests
-            ztermy_ai_permission_rule_store_tests
-            ztermy_ai_tool_dispatch_ledger_tests
-            ztermy_ai_agent_guard_tests
-            ztermy_ai_command_tracker_tests
-            ztermy_ai_action_tool_dispatcher_tests
-            ztermy_ai_wait_command_tool_tests
-            ztermy_ai_sftp_read_tool_tests
-            ztermy_ai_sftp_list_tool_tests
-            ztermy_ai_terminal_output_tool_tests
-            ztermy_ai_turn_runner_tests
-            ztermy_ai_provider_replay_codec_tests
-            ztermy_ai_conversation_store_tests
-            ztermy_ai_conversation_history_model_tests
-            ztermy_ai_conversation_model_tests
-            ztermy_ai_quick_message_store_tests
-            ztermy_ai_user_skill_catalog_tests
-            ztermy_ai_user_skill_tool_tests
-            ztermy_ai_read_tool_dispatcher_tests
-            ztermy_ai_native_tool_catalog_tests
-            ztermy_ai_context_broker_tests
-            ztermy_ai_read_tools_tests
-            ztermy_ai_context_redactor_tests
-            ztermy_ai_context_serializer_tests
-            ztermy_local_terminal_session_tests
-            ztermy_ai_agent_scenario_tests
-            ztermy_ai_agent_real_host_tests
-            ztermy_app_controller_tests
-            ztermy_application_instance_tests
-            ztermy_windows_global_shortcut_tests
-            ztermy_explorer_command_tests
-            ztermy_window_state_tests
-            ztermy_windows_protected_clipboard_tests
-            ztermy_terminal_item_tests
-            ztermy_font_catalog_tests
-            ztermy_svg_icon_image_provider_tests
-            ztermy_windows_executable_metadata_tests
-    )
+    # Keep clean-build prerequisites complete as modules add test executables.
+    # A partial hand-maintained list can leave stale binaries in CTest and
+    # missing Ninja module response files in the clang-tidy database.
+    get_property(ZTERMY_DIRECTORY_TARGETS DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+    list(FILTER ZTERMY_DIRECTORY_TARGETS INCLUDE REGEX "^ztermy_.*_tests$")
+    add_custom_target(ztermy_test_binaries DEPENDS ${ZTERMY_DIRECTORY_TARGETS})
+    unset(ZTERMY_DIRECTORY_TARGETS)
 endif()
 
 find_program(ZTERMY_CLANG_FORMAT_EXECUTABLE NAMES clang-format REQUIRED)
@@ -5298,6 +5208,8 @@ add_custom_target(ztermy_format_check
 
 add_custom_target(ztermy_clang_tidy_prerequisites)
 add_dependencies(ztermy_clang_tidy_prerequisites ztermy)
+add_dependencies(ztermy_clang_tidy_prerequisites
+    ztermy_performance_launcher ztermy_performance_report)
 if(TARGET ztermy_terminal_image_memory_probe)
     # EXCLUDE_FROM_ALL probes still appear in the analysis compilation database.
     # Generate their Ninja module response files before clang-tidy reads it.

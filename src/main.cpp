@@ -124,19 +124,7 @@ using ztermy::ui::terminalViewportHasFocus;
 using ztermy::ui::terminalViewportItem;
 using ztermy::ui::visualQuickItem;
 
-[[nodiscard]] std::unique_ptr<QMimeData> cloneMimeData(const QMimeData *source)
-{
-    auto clone = std::make_unique<QMimeData>();
-    if (source == nullptr)
-    {
-        return clone;
-    }
-    for (const QString &format : source->formats())
-    {
-        clone->setData(format, source->data(format));
-    }
-    return clone;
-}
+using ztermy::ui::cloneMimeData;
 
 [[nodiscard]] bool runWindowRuntimeSmoke(ztermy::NativeWindow &window)
 {

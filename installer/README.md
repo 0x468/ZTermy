@@ -27,7 +27,7 @@ $env:ZINSTALLER_SDK = 'C:\SDK\zinstaller-builder-sdk'
 ~~~
 
 staging 不应含 smoke-data、portable.flag、调试 DLL 或 .zinstaller。
-Builder 不会自动删除它们。当前源码版本为 0.5.2，若使用其他版本已验证 staging，
+Builder 不会自动删除它们。当前源码版本为 0.5.3，若使用其他版本已验证 staging，
 可用 --version 覆盖，仍会核对 PE ProductVersion。
 
 工具锁 sdk_sha256 固定解压 SDK 文件清单，ZIP 的传输摘要单独随 SDK 提供。

@@ -1924,96 +1924,16 @@ Rectangle {
                                                 anchors.margins: 6
                                                 spacing: 5
 
-                                                Button {
+                                                AiToolHeader {
                                                     id: toolHeader
-
-                                                    objectName: "aiToolActivityToggle"
-                                                    Layout.fillWidth: true
-                                                    Layout.preferredHeight: 34
-                                                    clip: true
-                                                    hoverEnabled: toolCard.hasDetails
-                                                    focusPolicy: toolCard.hasDetails ? Qt.StrongFocus : Qt.NoFocus
-                                                    enabled: toolCard.hasDetails
-                                                    Accessible.name: toolCard.hasDetails ? (toolCard.expanded ? qsTr("Collapse tool details") : qsTr("Expand tool details")) + " · " + toolCard.modelData.name : toolCard.modelData.name
+                                                    activity: toolCard.modelData
+                                                    hasDetails: toolCard.hasDetails
+                                                    expanded: toolCard.expanded
+                                                    stateLabel: pane.toolStateLabel(toolCard.modelData.state, toolCard.modelData.resultCode)
                                                     onClicked: {
                                                         const expanded = Object.assign({}, messageItem.expandedToolIds);
                                                         expanded[toolCard.modelData.id] = !toolCard.expanded;
                                                         messageItem.expandedToolIds = expanded;
-                                                    }
-
-                                                    contentItem: RowLayout {
-                                                        spacing: 7
-
-                                                        BusyIndicator {
-                                                            id: toolBusy
-
-                                                            Layout.preferredWidth: 16
-                                                            Layout.preferredHeight: 16
-                                                            running: toolCard.modelData.state === "queued" || toolCard.modelData.state === "running" || toolCard.modelData.state === "executing" || toolCard.modelData.state === "awaiting_approval"
-                                                            visible: running
-                                                        }
-
-                                                        AppIcon {
-                                                            Layout.preferredWidth: 15
-                                                            Layout.preferredHeight: 15
-                                                            visible: !toolBusy.visible
-                                                            name: toolCard.modelData.state === "succeeded" ? "check" : toolCard.modelData.state === "cancelled" || toolCard.modelData.state === "failed" ? "close" : toolCard.modelData.sideEffecting ? "terminal" : "search"
-                                                            color: toolCard.modelData.state === "succeeded" ? Theme.successText : toolCard.modelData.state === "failed" ? Theme.dangerText : Theme.textMuted
-                                                        }
-
-                                                        ColumnLayout {
-                                                            Layout.fillWidth: true
-                                                            Layout.minimumWidth: 0
-                                                            spacing: 1
-
-                                                            Text {
-                                                                Layout.fillWidth: true
-                                                                text: toolCard.modelData.name
-                                                                color: Theme.text
-                                                                elide: Text.ElideRight
-                                                                font.family: Theme.terminalFont
-                                                                font.pixelSize: Theme.textCompact
-                                                                font.weight: Font.DemiBold
-                                                            }
-
-                                                            Text {
-                                                                Layout.fillWidth: true
-                                                                visible: toolCard.modelData.summary.length > 0
-                                                                objectName: "aiToolSummary"
-                                                                // A summary is a single preview row, not the raw
-                                                                // multiline command. Full text stays in details.
-                                                                text: toolCard.modelData.summary.replace(/\s+/g, " ").trim()
-                                                                textFormat: Text.PlainText
-                                                                maximumLineCount: 1
-                                                                color: Theme.textMuted
-                                                                elide: Text.ElideRight
-                                                                font.family: Theme.terminalFont
-                                                                font.pixelSize: Theme.textCompact
-                                                            }
-                                                        }
-
-                                                        Text {
-                                                            text: pane.toolStateLabel(toolCard.modelData.state, toolCard.modelData.resultCode)
-                                                            color: toolCard.modelData.state === "succeeded" ? Theme.successText : toolCard.modelData.state === "failed" ? Theme.dangerText : toolCard.modelData.state === "cancelled" ? Theme.warning : Theme.textMuted
-                                                            elide: Text.ElideRight
-                                                            font.family: Theme.uiFont
-                                                            font.pixelSize: Theme.textCompact
-                                                            font.weight: Font.Medium
-                                                        }
-
-                                                        AppIcon {
-                                                            Layout.preferredWidth: 13
-                                                            Layout.preferredHeight: 13
-                                                            visible: toolCard.hasDetails
-                                                            name: toolCard.expanded ? "chevron-down" : "chevron-right"
-                                                            color: Theme.textMuted
-                                                        }
-                                                    }
-                                                    background: Rectangle {
-                                                        radius: Theme.radiusSmall
-                                                        color: "transparent"
-                                                        border.color: toolHeader.visualFocus ? Theme.focus : "transparent"
-                                                        border.width: toolHeader.visualFocus ? 2 : 0
                                                     }
                                                 }
 
