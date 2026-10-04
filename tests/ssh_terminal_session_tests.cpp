@@ -41,6 +41,18 @@ namespace ztermy::ssh
 class SshTerminalSessionTestPeer
 {
 public:
+    static void queueExitBeforeMouse(SshTerminalSession &session, const terminal::TerminalMouseEvent &mouse)
+    {
+        std::scoped_lock lock(session.m_commandMutex);
+        session.m_commands.emplace_back(std::in_place_type<SshTerminalSession::InputCommand>,
+                                        QByteArrayLiteral("EXIT\r"), std::chrono::steady_clock::now());
+        session.m_commands.emplace_back(std::in_place_type<SshTerminalSession::InputCommand>,
+                                        QByteArray(qsizetype{512} * 1024, 'P'), std::chrono::steady_clock::now());
+        session.m_commands.emplace_back(std::in_place_type<SshTerminalSession::MouseCommand>, mouse);
+        session.m_queuedInputBytes += 512 * 1024 + 5;
+        session.signalCommandWake();
+    }
+
     static bool finishWithPendingOutput(SshTerminalSession &session, const bool oldModes = false)
     {
         auto engine = terminal::GhosttyTerminalEngine::create({.columns = 80, .rows = 24});
@@ -260,6 +272,8 @@ class SshTerminalSessionTests final : public QObject
 
 private slots:
     void synchronizesOutputOverLoopbackSsh();
+    void stopsQueuedMouseAfterRemoteExit_data();
+    void stopsQueuedMouseAfterRemoteExit();
     void retainsViewportSizeDuringConnectionAndReconnect();
     void coalescesImagesOverLoopbackSshWhileGuiIsStalled();
     void deliversFinalSynchronizedFrameBeforeDisconnect();
@@ -446,6 +460,89 @@ void SshTerminalSessionTests::retainsViewportSizeDuringConnectionAndReconnect()
         QCOMPARE(server.exitCode(), 0);
     }
     session.stop();
+}
+
+void SshTerminalSessionTests::stopsQueuedMouseAfterRemoteExit_data()
+{
+    QTest::addColumn<bool>("fragmented");
+    QTest::newRow("whole-reset") << false;
+    QTest::newRow("bytewise-reset") << true;
+}
+
+void SshTerminalSessionTests::stopsQueuedMouseAfterRemoteExit()
+{
+    QFETCH(bool, fragmented);
+    const QString python = qEnvironmentVariable("ZTERMY_TEST_SSH_FIXTURE_PYTHON");
+    if (python.isEmpty())
+        QSKIP("Set ZTERMY_TEST_SSH_FIXTURE_PYTHON to a Python environment with Paramiko");
+    for (int trial = 0; trial < 3; ++trial)
+    {
+        QProcess server;
+        QByteArray serverEvents;
+        connect(&server, &QProcess::readyReadStandardOutput, this, [&] {
+            serverEvents += server.readAllStandardOutput();
+        });
+        server.start(python, {QFINDTESTDATA("fixtures/mouse_exit_ssh_server.py"),
+                              fragmented ? QStringLiteral("bytewise") : QStringLiteral("whole")});
+        QVERIFY(server.waitForStarted(5000));
+        QTRY_VERIFY_WITH_TIMEOUT(serverEvents.contains('\n'), 10000);
+        bool portValid = false;
+        const auto port = serverEvents.split('\n').first().toUShort(&portValid);
+        QVERIFY(portValid && port != 0);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        ztermy::ssh::SshTerminalSession session;
+        connect(&session, &ztermy::ssh::SshTerminalSession::hostKeyConfirmationRequired, &session, [&] {
+            session.confirmHostKey(false);
+        });
+        bool tracking = false;
+        connect(&session, &ztermy::ssh::SshTerminalSession::snapshotReady, this,
+                [&](const ztermy::terminal::TerminalSnapshotPtr &snapshot) {
+                    tracking = snapshot->mouseTrackingActive;
+                });
+        ztermy::ssh::SshConnectionRequest request{
+            .host = QStringLiteral("127.0.0.1"),
+            .port = port,
+            .username = QStringLiteral("fixture"),
+            .authentication = ztermy::ssh::SshAuthenticationMethod::Password,
+            .secret = ztermy::security::SensitiveByteArray(QByteArrayLiteral("fixture-only")),
+            .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json")),
+        };
+        QVERIFY(!session.start(std::move(request),
+                               {.columns = 120, .rows = 60, .cellWidthPixels = 8, .cellHeightPixels = 16}));
+        QTRY_VERIFY_WITH_TIMEOUT(tracking, 10000);
+        ztermy::terminal::TerminalMouseEvent mouse{
+            .action = ztermy::terminal::TerminalMouseAction::motion,
+            .button = ztermy::terminal::TerminalMouseButton::none,
+            .positionX = 10,
+            .positionY = 10,
+            .screenWidthPixels = 960,
+            .screenHeightPixels = 960,
+            .cellWidthPixels = 8,
+            .cellHeightPixels = 16,
+        };
+        session.queueMouseEvent(mouse);
+        QTRY_VERIFY_WITH_TIMEOUT(serverEvents.contains("TRACKED_MOUSE"), 5000);
+        mouse.positionX = 21 * 8 + 1;
+        mouse.positionY = 13 * 16 + 1;
+        ztermy::ssh::SshTerminalSessionTestPeer::queueExitBeforeMouse(session, mouse);
+        QTRY_VERIFY_WITH_TIMEOUT(serverEvents.contains("RESET_SENT"), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(!tracking, 5000);
+        mouse.positionX += 8;
+        session.queueMouseEvent(mouse);
+        mouse.action = ztermy::terminal::TerminalMouseAction::press;
+        mouse.button = ztermy::terminal::TerminalMouseButton::left;
+        session.queueMouseEvent(mouse);
+        session.queueInput(QByteArrayLiteral("POST_EXIT\r"));
+        QTRY_VERIFY_WITH_TIMEOUT(serverEvents.contains("KEYBOARD_AFTER_EXIT"), 5000);
+        server.write(QByteArrayLiteral("finish\n"));
+        QTRY_VERIFY_WITH_TIMEOUT(server.state() == QProcess::NotRunning, 5000);
+        serverEvents += server.readAllStandardOutput();
+        QVERIFY2(!serverEvents.contains("MOUSE_AFTER_EXIT"), serverEvents.constData());
+        QVERIFY(serverEvents.contains("DONE reports_after_exit=0"));
+        QCOMPARE(server.exitCode(), 0);
+        session.stop();
+    }
 }
 
 void SshTerminalSessionTests::synchronizesOutputOverLoopbackSsh()

@@ -174,6 +174,9 @@ public:
                  const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] std::expected<void, SshTransportError> configureKeepalive(std::uint32_t intervalSeconds) noexcept;
     [[nodiscard]] std::expected<int, SshTransportError> sendKeepalive() noexcept;
+    // One non-blocking read: nullopt means no data yet, zero means EOF.
+    [[nodiscard]] std::expected<std::optional<std::size_t>, SshTransportError>
+    pollTerminal(SshByteTransport &transport, std::span<char> output, const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] std::expected<std::size_t, SshTransportError>
     readTerminal(SshByteTransport &transport, std::span<char> output, std::chrono::milliseconds timeout,
                  const std::stop_token &stopToken = {}, std::uintptr_t interruptEvent = 0) noexcept;

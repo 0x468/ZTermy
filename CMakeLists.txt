@@ -46,7 +46,9 @@ find_package(OpenSSL 3.0 REQUIRED COMPONENTS Crypto)
 
 set(
     GHOSTTY_ZIG_BUILD_FLAGS
-    "-Dsimd=false"
+    # The source archive has no Git metadata. Never infer Ghostty's version
+    # from the enclosing ztermy checkout/tag; match the pinned build.zig.zon.
+    "-Dsimd=false;-Dversion-string=1.3.2-dev"
     CACHE STRING
     "Additional flags passed to the libghostty-vt Zig build"
     FORCE

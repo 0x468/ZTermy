@@ -915,8 +915,73 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     telemetryScheduler.setVisible(m_telemetryRequestedVisible.load(), std::chrono::steady_clock::now());
     postRemoteTelemetryState(telemetryScheduler.visible() ? QStringLiteral("loading") : QStringLiteral("paused"));
 
+    const auto consumeOutput = [&](const std::span<const char> output) {
+        const QByteArray decodedBytes = textCodec.decodeRemote(std::as_bytes(output));
+        const auto bytes =
+            std::as_bytes(std::span(decodedBytes.constData(), static_cast<std::size_t>(decodedBytes.size())));
+        if (m_outputSink)
+            m_outputSink->append(bytes);
+        if (const std::error_code error = m_engine->feed(bytes))
+        {
+            finishFailure(SshFailureKind::ProtocolError, tr("SSH terminal parser failed"));
+            return false;
+        }
+        const std::vector<std::byte> ptyWrite = m_engine->takePtyWrite();
+        if (!ptyWrite.empty())
+        {
+            const auto response = std::span(reinterpret_cast<const char *>(ptyWrite.data()), ptyWrite.size());
+            if (auto written = session->writeTerminal(*transport, response, 10s, stopToken); !written)
+            {
+                finishFailure(sshFailureFromTransport(written.error()));
+                return false;
+            }
+        }
+        if (std::optional<std::string> clipboardWrite = m_engine->takeClipboardWrite())
+            emit clipboardTextReady(QString::fromUtf8(*clipboardWrite));
+        if (m_engine->synchronizedOutput())
+        {
+            if (m_synchronizedOutputStartedNanoseconds.load(std::memory_order_relaxed) == 0)
+            {
+                const auto started = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                         std::chrono::steady_clock::now().time_since_epoch())
+                                         .count();
+                m_synchronizedOutputStartedNanoseconds.store(started, std::memory_order_release);
+                scheduleSynchronizedOutputFallback(started);
+            }
+        }
+        else
+            m_synchronizedOutputStartedNanoseconds.store(0, std::memory_order_release);
+        publishSnapshot(false);
+        return true;
+    };
+    const auto drainPendingOutput = [&] {
+        // Never wait for future output or let a continuously printing peer
+        // starve keyboard input. Parse ready mode changes before mouse encoding.
+        for (std::size_t reads = 0; reads < 32; ++reads)
+        {
+            const auto read = session->pollTerminal(*transport, readBuffer, stopToken);
+            if (!read)
+            {
+                finishFailure(sshFailureFromTransport(read.error()));
+                return false;
+            }
+            if (!*read)
+                return true;
+            if (**read == 0)
+            {
+                finishFailure(SshFailureKind::RemoteClosed);
+                return false;
+            }
+            if (!consumeOutput(std::span(readBuffer).first(**read)))
+                return false;
+        }
+        return true;
+    };
+
     while (!stopToken.stop_requested())
     {
+        if (!drainPendingOutput())
+            return;
         std::deque<Command> commands;
         {
             std::scoped_lock lock(m_commandMutex);
@@ -1012,6 +1077,10 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
 
             if (const auto *mouse = std::get_if<MouseCommand>(&command))
             {
+                // A preceding key/paste can make a TUI exit. Its reset may
+                // already be buffered by libssh2 while writing that input.
+                if (!drainPendingOutput())
+                    return;
                 auto encoded = m_engine->encodeMouse(mouse->event);
                 if (!encoded)
                 {
@@ -1300,49 +1369,8 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
             return;
         }
 
-        const auto remoteBytes = std::as_bytes(std::span(readBuffer).first(*read));
-        const QByteArray decodedBytes = textCodec.decodeRemote(remoteBytes);
-        const auto bytes =
-            std::as_bytes(std::span(decodedBytes.constData(), static_cast<std::size_t>(decodedBytes.size())));
-        if (m_outputSink)
-        {
-            m_outputSink->append(bytes);
-        }
-        if (const std::error_code error = m_engine->feed(bytes))
-        {
-            finishFailure(SshFailureKind::ProtocolError, tr("SSH terminal parser failed"));
+        if (!consumeOutput(std::span(readBuffer).first(*read)))
             return;
-        }
-        const std::vector<std::byte> ptyWrite = m_engine->takePtyWrite();
-        if (!ptyWrite.empty())
-        {
-            const auto response = std::span(reinterpret_cast<const char *>(ptyWrite.data()), ptyWrite.size());
-            if (auto written = session->writeTerminal(*transport, response, 10s, stopToken); !written)
-            {
-                finishFailure(sshFailureFromTransport(written.error()));
-                return;
-            }
-        }
-        if (std::optional<std::string> clipboardWrite = m_engine->takeClipboardWrite())
-        {
-            emit clipboardTextReady(QString::fromUtf8(*clipboardWrite));
-        }
-        if (m_engine->synchronizedOutput())
-        {
-            if (m_synchronizedOutputStartedNanoseconds.load(std::memory_order_relaxed) == 0)
-            {
-                const auto started = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                         std::chrono::steady_clock::now().time_since_epoch())
-                                         .count();
-                m_synchronizedOutputStartedNanoseconds.store(started, std::memory_order_release);
-                scheduleSynchronizedOutputFallback(started);
-            }
-        }
-        else
-        {
-            m_synchronizedOutputStartedNanoseconds.store(0, std::memory_order_release);
-        }
-        publishSnapshot(false);
     }
 
     requestClose(state);

@@ -133,6 +133,7 @@ private slots:
     void encodesKeysFromLiveTerminalModes();
     void doesNotScrollWhenNushellClearsToViewportBottom();
     void encodesMouseAndFocusEventsFromLiveTerminalModes();
+    void deduplicatesMouseMotionUntilModesOrGeometryChange();
     void stopsHoverReportsAfterTrackingReset_data();
     void stopsHoverReportsAfterTrackingReset();
     void keepsMouseModesIndependentOfAlternateScreenAndPrompt();
@@ -2431,6 +2432,81 @@ void TerminalEngineTests::encodesMouseAndFocusEventsFromLiveTerminalModes()
     focus = engine.encodeFocus(false);
     QVERIFY(focus);
     QCOMPARE(std::string(reinterpret_cast<const char *>(focus->data()), focus->size()), "\x1b[O");
+}
+
+void TerminalEngineTests::deduplicatesMouseMotionUntilModesOrGeometryChange()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 80, .rows = 24});
+    QVERIFY(result);
+    auto &engine = **result;
+    const auto feed = [&](const std::string_view bytes) {
+        return engine.feed(std::as_bytes(std::span(bytes)));
+    };
+    QVERIFY(!feed("\x1b[?1003;1006h"));
+    ztermy::terminal::TerminalMouseEvent mouse{
+        .action = ztermy::terminal::TerminalMouseAction::motion,
+        .button = ztermy::terminal::TerminalMouseButton::none,
+        .positionX = 11.0,
+        .positionY = 21.0,
+        .screenWidthPixels = 800,
+        .screenHeightPixels = 480,
+        .cellWidthPixels = 10,
+        .cellHeightPixels = 20,
+    };
+    const auto report = [&] {
+        const auto encoded = engine.encodeMouse(mouse);
+        return encoded ? QByteArray(reinterpret_cast<const char *>(encoded->data()),
+                                    static_cast<qsizetype>(encoded->size()))
+                       : QByteArrayLiteral("encoding-error");
+    };
+    QCOMPARE(report(), QByteArrayLiteral("\x1b[<35;2;2M"));
+    QVERIFY(report().isEmpty());
+    mouse.positionX += 1;
+    QVERIFY(report().isEmpty()); // Sub-cell motion is not a new SGR cell.
+    QVERIFY(!feed("ordinary TUI output\x1b[?1004h"));
+    QVERIFY(report().isEmpty()); // Output and focus mode must not reset motion.
+    mouse.positionX += 10;
+    QCOMPARE(report(), QByteArrayLiteral("\x1b[<35;3;2M"));
+    mouse.action = ztermy::terminal::TerminalMouseAction::press;
+    mouse.button = ztermy::terminal::TerminalMouseButton::left;
+    mouse.anyButtonPressed = true;
+    QCOMPARE(report(), QByteArrayLiteral("\x1b[<0;3;2M"));
+    QCOMPARE(report(), QByteArrayLiteral("\x1b[<0;3;2M")); // Never deduplicate clicks.
+    mouse.action = ztermy::terminal::TerminalMouseAction::release;
+    mouse.anyButtonPressed = false;
+    QCOMPARE(report(), QByteArrayLiteral("\x1b[<0;3;2m"));
+    mouse.action = ztermy::terminal::TerminalMouseAction::motion;
+    mouse.button = ztermy::terminal::TerminalMouseButton::none;
+    QVERIFY(!feed("\x1b[?1003l"));
+    QVERIFY(!feed("\x1b[?1003h")); // Re-enable even without a mouse event in between.
+    QCOMPARE(report(), QByteArrayLiteral("\x1b[<35;3;2M"));
+    QVERIFY(report().isEmpty());
+    mouse.screenWidthPixels += 10;
+    QCOMPARE(report(), QByteArrayLiteral("\x1b[<35;3;2M"));
+    QVERIFY(report().isEmpty());
+    QVERIFY(!feed("\x1b[?1016h"));
+    QVERIFY(!report().isEmpty());
+    mouse.positionX += 1;
+    QVERIFY(!report().isEmpty()); // Pixel tracking retains sub-cell movement.
+    QVERIFY(!feed("\x1b[?1016l\x1b[?1006l\x1b[?1003l\x1b[?1002;1006h"));
+    mouse.button = ztermy::terminal::TerminalMouseButton::left;
+    mouse.anyButtonPressed = true;
+    QCOMPARE(report(), QByteArrayLiteral("\x1b[<32;3;2M"));
+    QVERIFY(report().isEmpty());
+    mouse.positionX += 10;
+    QCOMPARE(report(), QByteArrayLiteral("\x1b[<32;4;2M")); // Preserve button-drag reporting.
+    QVERIFY(!feed("\x1b[?1000;1003h"));
+    mouse.button = ztermy::terminal::TerminalMouseButton::none;
+    mouse.anyButtonPressed = false;
+    QCOMPARE(report(), QByteArrayLiteral("\x1b[<35;4;2M"));
+    QVERIFY(!feed("\x1b[?1000h")); // Raw mode bits stay on; effective tracking becomes normal.
+    QVERIFY(report().isEmpty());
+    QVERIFY(!feed("\x1b[?1003h")); // Reassert the already-enabled any-motion mode.
+    QCOMPARE(report(), QByteArrayLiteral("\x1b[<35;4;2M"));
+    QVERIFY(!feed("\x1b[?1005h"));
+    QVERIFY(!report().startsWith("\x1b[<"));
+    QVERIFY(!feed("\x1b[?1006h")); // Reassert SGR although its raw bit never changed.
+    QCOMPARE(report(), QByteArrayLiteral("\x1b[<35;4;2M"));
 }
 
 void TerminalEngineTests::stopsHoverReportsAfterTrackingReset_data()

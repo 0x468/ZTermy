@@ -21,6 +21,8 @@
 #include <string_view>
 #include <utility>
 
+extern "C" GhosttyResult ztermy_ghostty_sync_mouse_encoder(GhosttyMouseEncoder encoder, GhosttyTerminal terminal);
+
 namespace
 {
 
@@ -425,6 +427,12 @@ struct GhosttyTerminalEngine::Impl
         return true;
     }
 
+    [[nodiscard]] std::error_code synchronizeMouseModes()
+    {
+        const auto result = ztermy_ghostty_sync_mouse_encoder(mouseEncoder, terminal);
+        return result == GHOSTTY_SUCCESS ? std::error_code{} : ghosttyError(result);
+    }
+
     GhosttyTerminal terminal = nullptr;
     GhosttyRenderState renderState = nullptr;
     GhosttyRenderStateRowIterator rowIterator = nullptr;
@@ -438,6 +446,7 @@ struct GhosttyTerminalEngine::Impl
     GhosttyKeyEvent keyEvent = nullptr;
     GhosttyMouseEncoder mouseEncoder = nullptr;
     GhosttyMouseEvent mouseEvent = nullptr;
+    std::optional<std::array<std::uint32_t, 8>> mouseSize;
     std::string lastSearchQuery;
     std::vector<std::byte> pendingPtyWrite;
     std::optional<std::string> pendingClipboardWrite;
@@ -632,7 +641,7 @@ std::error_code GhosttyTerminalEngine::feed(const std::span<const std::byte> byt
         const auto content = normalized ? std::as_bytes(std::span(*normalized)) : bytes;
         m_impl->sixelBridge.feed({reinterpret_cast<const char *>(content.data()), content.size()}, m_impl->geometry);
     }
-    return {};
+    return m_impl->synchronizeMouseModes();
 }
 
 bool GhosttyTerminalEngine::synchronizedOutput() const noexcept
@@ -663,6 +672,7 @@ std::error_code GhosttyTerminalEngine::resize(const TerminalGeometry geometry)
     if (result != GHOSTTY_SUCCESS)
         return ghosttyError(result);
     m_impl->geometry = geometry;
+    m_impl->mouseSize.reset();
     return {};
 }
 
@@ -1654,7 +1664,8 @@ GhosttyTerminalEngine::encodeMouse(const TerminalMouseEvent &event)
         return std::unexpected(invalidArgument());
     }
 
-    ghostty_mouse_encoder_setopt_from_terminal(m_impl->mouseEncoder, m_impl->terminal);
+    if (const auto error = m_impl->synchronizeMouseModes())
+        return std::unexpected(error);
     const GhosttyMouseEncoderSize size{
         .size = sizeof(GhosttyMouseEncoderSize),
         .screen_width = event.screenWidthPixels,
@@ -1666,7 +1677,13 @@ GhosttyTerminalEngine::encodeMouse(const TerminalMouseEvent &event)
         .padding_right = event.paddingRightPixels,
         .padding_left = event.paddingLeftPixels,
     };
-    ghostty_mouse_encoder_setopt(m_impl->mouseEncoder, GHOSTTY_MOUSE_ENCODER_OPT_SIZE, &size);
+    const std::array geometry{size.screen_width, size.screen_height,  size.cell_width,    size.cell_height,
+                              size.padding_top,  size.padding_bottom, size.padding_right, size.padding_left};
+    if (!m_impl->mouseSize || *m_impl->mouseSize != geometry)
+    {
+        ghostty_mouse_encoder_setopt(m_impl->mouseEncoder, GHOSTTY_MOUSE_ENCODER_OPT_SIZE, &size);
+        m_impl->mouseSize = geometry;
+    }
     ghostty_mouse_encoder_setopt(m_impl->mouseEncoder, GHOSTTY_MOUSE_ENCODER_OPT_ANY_BUTTON_PRESSED,
                                  &event.anyButtonPressed);
     ghostty_mouse_event_set_action(m_impl->mouseEvent, ghosttyMouseAction(event.action));

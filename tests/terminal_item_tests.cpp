@@ -113,6 +113,8 @@ private slots:
     void routesDroppedFilesWithoutPastingLocalPaths();
     void accumulatesWheelDeltasIntoScrollRows();
     void routesTrackedMouseAndWheelToTerminal();
+    void ignoresStationaryHoverRedraws();
+    void ignoresFrameSynchronousHoverReports();
     void keepsReadOnlyMouseSelectionLocal();
     void exposesScrollbarAndRequestsAbsoluteScroll();
     void preservesNativeMonospaceCellAdvance();
@@ -1541,6 +1543,56 @@ void TerminalItemTests::keepsReadOnlyMouseSelectionLocal()
     item.setReadOnly(false);
     item.mousePressEvent(&press);
     QCOMPARE(mouse.size(), 1);
+}
+
+void TerminalItemTests::ignoresStationaryHoverRedraws()
+{
+    TestableTerminalItem item;
+    item.setSize({800, 480});
+    auto snapshot = snapshotAt(0, 0);
+    snapshot->mouseTrackingActive = true;
+    item.setSnapshot(snapshot);
+    QSignalSpy reports(&item, &ztermy::ui::TerminalItem::mouseEventGenerated);
+    const QPointF point{40, 40};
+    for (int frame = 0; frame < 3; ++frame)
+    {
+        QHoverEvent stationary(QEvent::HoverMove, point, point, point, Qt::NoModifier);
+        stationary.setTimestamp(0);
+        item.hoverMoveEvent(&stationary);
+        QVERIFY(stationary.isAccepted());
+    }
+    QCOMPARE(reports.size(), 0);
+    QHoverEvent moved(QEvent::HoverMove, point, point, point - QPointF{10, 0}, Qt::NoModifier);
+    item.hoverMoveEvent(&moved);
+    QCOMPARE(reports.size(), 1);
+    QHoverEvent shifted(QEvent::HoverMove, point, point, point - QPointF{10, 0}, Qt::ShiftModifier);
+    item.hoverMoveEvent(&shifted);
+    QCOMPARE(reports.size(), 1);
+}
+
+void TerminalItemTests::ignoresFrameSynchronousHoverReports()
+{
+    QQuickWindow window;
+    auto *item = new TestableTerminalItem(window.contentItem());
+    window.resize(800, 480);
+    item->setSize({800, 480});
+    auto snapshot = snapshotAt(0, 0);
+    snapshot->mouseTrackingActive = true;
+    item->setSnapshot(snapshot);
+    QSignalSpy reports(item, &ztermy::ui::TerminalItem::mouseEventGenerated);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    QTest::mouseMove(&window, {40, 40});
+    QTest::mouseMove(&window, {60, 40});
+    QTRY_VERIFY(!reports.isEmpty());
+    reports.clear();
+    for (int frame = 0; frame < 3; ++frame)
+    {
+        item->update();
+        window.update();
+        QTest::qWait(40);
+    }
+    QCOMPARE(reports.size(), 0);
 }
 
 void TerminalItemTests::routesTrackedMouseAndWheelToTerminal()

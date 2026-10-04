@@ -1216,8 +1216,12 @@ void TerminalItem::hoverMoveEvent(QHoverEvent *event)
     updateHoveredLink(event->position(), modifiers);
     if (terminalOwnsMouse(event->modifiers()))
     {
-        emit mouseEventGenerated(mouseEvent(terminal::TerminalMouseAction::motion, terminal::TerminalMouseButton::none,
-                                            event->position(), event->modifiers(), Qt::NoButton));
+        // Qt Quick also sends same-position hover events while repainting.
+        // Update local hover state, but do not turn a redraw into remote input.
+        if (event->position() != event->oldPosF())
+            emit mouseEventGenerated(mouseEvent(terminal::TerminalMouseAction::motion,
+                                                terminal::TerminalMouseButton::none, event->position(),
+                                                event->modifiers(), Qt::NoButton));
         event->accept();
         return;
     }

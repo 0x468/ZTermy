@@ -133,6 +133,11 @@ foreach(entry IN ITEMS "insert|insert_image" "unicodePlacements|unicode_placemen
     string(REPLACE "${export_line}" "" updated_exports "${updated_exports}")
     string(APPEND owned_exports "${export_line}")
 endforeach()
+configure_file("${CMAKE_CURRENT_LIST_DIR}/ghostty/ztermy_mouse.zig"
+    "${GHOSTTY_SOURCE_DIR}/src/terminal/c/ztermy_mouse.zig" COPYONLY)
+set(mouse_export "        @export(&@import(\"terminal/c/ztermy_mouse.zig\").syncEncoder, .{ .name = \"ztermy_ghostty_sync_mouse_encoder\" });\n")
+string(REPLACE "${mouse_export}" "" updated_exports "${updated_exports}")
+string(APPEND owned_exports "${mouse_export}")
 set(export_anchor "        @export(&c.terminal_vt_write, .{ .name = \"ghostty_terminal_vt_write\" });")
 string(FIND "${updated_exports}" "${export_anchor}" export_offset)
 if(export_offset EQUAL -1)
@@ -167,6 +172,10 @@ string(REPLACE
     "\"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_command.zig\"\n"
     "\"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_command.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/c/ztermy_image_budget.zig\"\n"
     updated_wrapper "${updated_wrapper}")
+string(REPLACE
+    "\"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/c/ztermy_image_budget.zig\"\n"
+    "\"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/c/ztermy_image_budget.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/c/ztermy_mouse.zig\"\n"
+    updated_wrapper "${updated_wrapper}")
 if(NOT updated_wrapper STREQUAL wrapper)
     file(WRITE "${wrapper_path}" "${updated_wrapper}")
 endif()
@@ -175,4 +184,4 @@ endif()
 # Zig source changes. This dependency is specific to our patched policy file.
 ztermy_replace_ghostty_text("CMakeLists.txt"
     "    COMMENT \"Building libghostty-vt via zig build...\""
-    "    DEPENDS \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_image.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_exec.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/lib_vt.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/c/ztermy_image.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_storage.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_command.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/c/ztermy_image_budget.zig\"\n    COMMENT \"Building libghostty-vt via zig build...\"")
+    "    DEPENDS \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_image.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_exec.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/lib_vt.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/c/ztermy_image.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_storage.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/kitty/graphics_command.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/c/ztermy_image_budget.zig\" \"\${CMAKE_CURRENT_SOURCE_DIR}/src/terminal/c/ztermy_mouse.zig\"\n    COMMENT \"Building libghostty-vt via zig build...\"")

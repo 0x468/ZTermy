@@ -1465,6 +1465,25 @@ std::expected<int, SshTransportError> Libssh2Session::sendKeepalive() noexcept
     return secondsToNext;
 }
 
+std::expected<std::optional<std::size_t>, SshTransportError>
+Libssh2Session::pollTerminal(SshByteTransport &transport, const std::span<char> output,
+                             const std::stop_token &stopToken) noexcept
+{
+    if (output.empty())
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
+    if (m_session == nullptr || m_terminalChannel == nullptr || !usesTransport(transport))
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
+    if (stopToken.stop_requested())
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::Cancelled});
+    const auto result =
+        libssh2_channel_read(static_cast<LIBSSH2_CHANNEL *>(m_terminalChannel), output.data(), output.size());
+    if (result >= 0)
+        return static_cast<std::size_t>(result);
+    if (result == LIBSSH2_ERROR_EAGAIN)
+        return std::optional<std::size_t>{};
+    return std::unexpected(mapChannelError(static_cast<int>(result)));
+}
+
 std::expected<std::size_t, SshTransportError> Libssh2Session::readTerminal(SshByteTransport &transport,
                                                                            const std::span<char> output,
                                                                            const std::chrono::milliseconds timeout,
@@ -1489,19 +1508,14 @@ std::expected<std::size_t, SshTransportError> Libssh2Session::readTerminal(SshBy
     }
 
     auto *session = static_cast<LIBSSH2_SESSION *>(m_session);
-    auto *channel = static_cast<LIBSSH2_CHANNEL *>(m_terminalChannel);
     const auto deadline = std::chrono::steady_clock::now() + timeout;
     while (true)
     {
-        const auto result = libssh2_channel_read(channel, output.data(), output.size());
-        if (result >= 0)
-        {
-            return static_cast<std::size_t>(result);
-        }
-        if (result != LIBSSH2_ERROR_EAGAIN)
-        {
-            return std::unexpected(mapChannelError(static_cast<int>(result)));
-        }
+        const auto result = pollTerminal(transport, output, stopToken);
+        if (!result)
+            return std::unexpected(result.error());
+        if (*result)
+            return **result;
         auto ready = waitForSessionIo(transport, session, deadline, stopToken, interruptEvent);
         if (!ready)
         {

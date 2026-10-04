@@ -47,3 +47,13 @@ changing process I/O.
 - Dirty-row and scrollback performance
 - Unicode and IME behavior
 - Maintainability and license compatibility
+
+## Mouse encoder synchronization refinement
+
+The pinned C API clears motion deduplication on every terminal-state refresh.
+A private ztermy-owned shim refreshes it only when the engine's effective mouse
+tracking mode or output format changes. DECSET bits alone are not authoritative:
+reasserting an already-enabled mode can change those effective flags. Geometry
+changes separately invalidate last-cell tracking. Mouse coordinate conversion,
+packet encoding, and deduplication remain owned by libghostty, not a second
+ztermy protocol parser. The shim stays inside the terminal adapter boundary.
