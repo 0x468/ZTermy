@@ -79,3 +79,8 @@
   during iteration and reserve the full matrix for milestones.
 - UI and platform behavior require runtime evidence; unit tests alone are not
   sufficient for Snap Layouts, IME, DPI, transparency, or terminal latency.
+- After completing user-requested fixes, refresh the static Release EXE and
+  graphical installer EXE before handing off for acceptance. Provide exact
+  artifact paths and identify the included commit; never present an older
+  package as containing new fixes. Packaging does not authorize publication or
+  a version change. If packaging is blocked, explain the blocker explicitly.
