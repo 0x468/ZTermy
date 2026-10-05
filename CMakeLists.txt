@@ -1071,6 +1071,8 @@ qt_add_executable(ztermy WIN32
     src/platform/windows/NativeWindow.cpp
     src/platform/windows/NativeWindowPreferences.cpp
     src/platform/windows/NativeWindow.h
+    src/platform/windows/WindowsTaskbarIdentity.cpp
+    src/platform/windows/WindowsTaskbarIdentity.h
     src/platform/windows/WindowsGlobalShortcut.cpp
     src/platform/windows/WindowsGlobalShortcut.h
     src/platform/windows/WindowHitTest.cpp
@@ -1748,6 +1750,8 @@ target_link_libraries(ztermy PRIVATE
     dbghelp
     dwmapi
     shell32
+    propsys
+    ole32
 )
 
 add_custom_target(ztermy_window_runtime_smoke
@@ -4804,6 +4808,19 @@ if(BUILD_TESTING)
         target_compile_options(ztermy_explorer_command_tests PRIVATE /utf-8 /permissive- /W4)
     endif()
     add_test(NAME explorer-command COMMAND ztermy_explorer_command_tests)
+    qt_add_executable(ztermy_windows_taskbar_identity_tests
+        tests/windows_taskbar_identity_tests.cpp
+        src/platform/windows/WindowsTaskbarIdentity.cpp
+        src/platform/windows/WindowsTaskbarIdentity.h
+    )
+    target_include_directories(ztermy_windows_taskbar_identity_tests PRIVATE src)
+    target_compile_features(ztermy_windows_taskbar_identity_tests PRIVATE cxx_std_23)
+    target_compile_definitions(ztermy_windows_taskbar_identity_tests PRIVATE NOMINMAX UNICODE WIN32_LEAN_AND_MEAN _UNICODE)
+    target_link_libraries(ztermy_windows_taskbar_identity_tests PRIVATE Qt6::Test shell32 propsys ole32 uuid user32)
+    if(MSVC)
+        target_compile_options(ztermy_windows_taskbar_identity_tests PRIVATE /utf-8 /permissive- /W4)
+    endif()
+    add_test(NAME windows-taskbar-identity COMMAND ztermy_windows_taskbar_identity_tests)
     set_tests_properties(windows-global-shortcut PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
     set_tests_properties(application-instance PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 

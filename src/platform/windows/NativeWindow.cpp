@@ -4,6 +4,7 @@
 
 #include "core/windowing/WindowPresenter.h"
 #include "platform/windows/DetachedWindowNativeFrame.h"
+#include "platform/windows/WindowsTaskbarIdentity.h"
 
 #include <QCoreApplication>
 #include <QEvent>
@@ -923,6 +924,8 @@ void NativeWindow::uninstallWindowProcedure()
 void NativeWindow::configureNativeWindow()
 {
     const auto windowHandle = reinterpret_cast<HWND>(winId()); // NOLINT(performance-no-int-to-ptr)
+    if (!windowing::configureTaskbarIdentity(windowHandle))
+        qCWarning(windowLog) << "Could not configure the main window taskbar identity";
     LONG_PTR style = GetWindowLongPtrW(windowHandle, GWL_STYLE);
     // Keep the DWM-recognized frame metadata so Windows can provide modern
     // maximize/restore transitions and Snap Layout. Removing WS_SYSMENU keeps
@@ -1055,6 +1058,8 @@ bool NativeWindow::configureDetachedWindow(QQuickWindow *window)
     window->setProperty("nativeMaximizeButtonHovered", false);
     window->setProperty("nativeMaximizeButtonPressed", false);
     const WId id = window->winId();
+    if (!windowing::configureTaskbarIdentity(reinterpret_cast<HWND>(id))) // NOLINT(performance-no-int-to-ptr)
+        qCWarning(windowLog) << "Could not configure the detached window taskbar identity";
     if (!m_detachedWindows.contains(id))
     {
         m_detachedWindows.insert(id, window);

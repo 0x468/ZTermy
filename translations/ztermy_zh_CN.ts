@@ -11997,17 +11997,17 @@ Output:
 <context>
     <name>ztermy::NativeWindow</name>
     <message>
-        <location filename="../src/platform/windows/NativeWindow.cpp" line="999"/>
+        <location filename="../src/platform/windows/NativeWindow.cpp" line="1002"/>
         <source>Hide ztermy</source>
         <translation>隐藏 ztermy</translation>
     </message>
     <message>
-        <location filename="../src/platform/windows/NativeWindow.cpp" line="999"/>
+        <location filename="../src/platform/windows/NativeWindow.cpp" line="1002"/>
         <source>Show ztermy</source>
         <translation>显示 ztermy</translation>
     </message>
     <message>
-        <location filename="../src/platform/windows/NativeWindow.cpp" line="1000"/>
+        <location filename="../src/platform/windows/NativeWindow.cpp" line="1003"/>
         <source>Exit ztermy</source>
         <translation>退出 ztermy</translation>
     </message>

@@ -14,6 +14,7 @@
 #include "platform/windows/CrashDiagnostics.h"
 #include "platform/windows/LaunchFeedback.h"
 #include "platform/windows/NativeWindow.h"
+#include "platform/windows/WindowsTaskbarIdentity.h"
 #include "ui/AiLongContentRuntimeSmoke.h"
 #include "ui/AiMemoryDiagnostics.h"
 #include "ui/MemoryLifecycleRuntimeSmoke.h"
@@ -4492,6 +4493,8 @@ struct ResizeHitRuntimeCase
 // NOLINTNEXTLINE(bugprone-exception-escape)
 int main(int argc, char *argv[])
 {
+    if (!ztermy::windowing::initializeTaskbarIdentity())
+        qWarning() << "Could not initialize the application taskbar identity";
     // Materialize the pinned native runtime before a GUI/event loop exists.
     // A failure remains local-session-specific; SSH and settings still open.
     const auto conPtyError = ztermy::terminal::conPtyApi().error;
@@ -4671,6 +4674,17 @@ int main(int argc, char *argv[])
 
     if (QCoreApplication::arguments().contains(QStringLiteral("--smoke-test")))
     {
+        QQuickWindow detached;
+        if (!window.configureDetachedWindow(&detached)
+            || !ztermy::windowing::hasTaskbarIdentity(
+                reinterpret_cast<HWND>(window.winId())) // NOLINT(performance-no-int-to-ptr)
+            || !ztermy::windowing::hasTaskbarIdentity(
+                reinterpret_cast<HWND>(detached.winId()))) // NOLINT(performance-no-int-to-ptr)
+        {
+            qCritical() << "Main/detached native taskbar identity regression failed";
+            return EXIT_FAILURE;
+        }
+        qInfo() << "Main and detached native taskbar identities verified";
         QTimer::singleShot(50, &window, &QWindow::close);
         ztermy::ui::showForRuntimeSmoke(window);
         const int smokeExitCode = application.exec();
