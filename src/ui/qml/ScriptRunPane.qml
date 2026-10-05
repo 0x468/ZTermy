@@ -87,7 +87,9 @@ Item {
         spacing: 8
 
         RowLayout {
+            objectName: "scriptFormHeader"
             Layout.fillWidth: true
+            Layout.fillHeight: false
             spacing: 6
 
             AppIconButton {
@@ -136,6 +138,7 @@ Item {
 
         ColumnLayout {
             Layout.fillWidth: true
+            Layout.fillHeight: false
             spacing: 4
 
             Text {

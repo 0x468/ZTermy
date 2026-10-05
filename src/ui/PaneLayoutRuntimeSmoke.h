@@ -123,8 +123,19 @@ inline bool verifyScriptFormLayout(NativeWindow &window, AppController &controll
             processWindowEventsFor(std::chrono::milliseconds{350});
             auto *scroll = form->findChild<QQuickItem *>(QStringLiteral("scriptFormScroll"));
             auto *content = form->findChild<QQuickItem *>(QStringLiteral("scriptFormContent"));
+            auto *header = form->findChild<QQuickItem *>(QStringLiteral("scriptFormHeader"));
             bool valid = scroll && content && content->width() > width - 40
-                         && qAbs(content->width() - scroll->property("availableWidth").toReal()) < 1;
+                         && qAbs(content->width() - scroll->property("availableWidth").toReal()) < 1 && header
+                         && qAbs(header->y()) < 1 && header->height() < 48;
+            if (header)
+            {
+                const qreal compactHeight = header->height();
+                form->setHeight(1000);
+                processWindowEventsFor(std::chrono::milliseconds{100});
+                valid = valid && qAbs(header->height() - compactHeight) < 1;
+                form->setHeight(660);
+                processWindowEventsFor(std::chrono::milliseconds{100});
+            }
             if (QLatin1StringView{file} == QLatin1StringView{"ScriptEditor"})
             {
                 // Repeater delegates belong to the visual tree, not the form's QObject tree.
@@ -140,6 +151,9 @@ inline bool verifyScriptFormLayout(NativeWindow &window, AppController &controll
                     << "contentWidth=" << (content ? content->width() : -1)
                     << "availableWidth=" << (scroll ? scroll->property("availableWidth").toReal() : -1);
             passed = valid && passed;
+            if (width == 320)
+                passed = captureWindowSmokeItem(form, QStringLiteral("%1-narrow.png").arg(QLatin1StringView{file}))
+                         && passed;
         }
     }
     return passed;
