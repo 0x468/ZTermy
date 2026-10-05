@@ -62,6 +62,27 @@ Rectangle {
         return snippet.name + detail + "\n\n" + snippet.command + "\n\n" + qsTr("Click to insert · Shift+click to send");
     }
 
+    function activateSnippet(snippet, execute, focusItem) {
+        if (!activeTab || !activeTab.running || scriptDialog.visible)
+            return false;
+        const rendered = controller.renderScript(snippet.id, {});
+        const needsInput = (snippet.variables || []).length > 0;
+        const waits = (snippet.steps || []).some(step => step.continuation !== "immediate");
+        if (needsInput || !rendered.ok || (!execute && waits))
+            return scriptDialog.openFor(snippet, execute, focusItem);
+        if (execute)
+            return controller.runScript(snippet.id, {}, activeTab.sessionId);
+        insertSnippet(rendered.steps.map(step => step.command).join("\n"));
+        return true;
+    }
+
+    ScriptActionDialog {
+        id: scriptDialog
+        controller: composer.controller
+        activeTab: composer.activeTab
+        onInsertRequested: command => composer.insertSnippet(command)
+    }
+
     ResizeGrip {
         objectName: "terminalComposerResizeHandle"
         anchors.top: parent.top
@@ -113,9 +134,9 @@ Rectangle {
                     Keys.onPressed: event => {
                         if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && !event.isAutoRepeat) {
                             if ((event.modifiers & Qt.ShiftModifier) !== 0) {
-                                composer.sendCommand(snippetChip.modelData.command, false);
+                                composer.activateSnippet(snippetChip.modelData, true, snippetChip);
                             } else {
-                                composer.insertSnippet(snippetChip.modelData.command);
+                                composer.activateSnippet(snippetChip.modelData, false, snippetChip);
                             }
                             event.accepted = true;
                         }
@@ -154,9 +175,9 @@ Rectangle {
                         onPressed: snippetChip.forceActiveFocus()
                         onClicked: mouse => {
                             if ((mouse.modifiers & Qt.ShiftModifier) !== 0) {
-                                composer.sendCommand(snippetChip.modelData.command, false);
+                                composer.activateSnippet(snippetChip.modelData, true, snippetChip);
                             } else {
-                                composer.insertSnippet(snippetChip.modelData.command);
+                                composer.activateSnippet(snippetChip.modelData, false, snippetChip);
                             }
                         }
                     }

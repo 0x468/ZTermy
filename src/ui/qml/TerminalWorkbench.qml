@@ -165,6 +165,21 @@ SidePanelSurface {
         scriptSurface = "run";
     }
 
+    function insertScript(script, focusItem) {
+        const rendered = controller.renderScript(script.id, {});
+        if ((script.variables || []).length > 0 || !rendered.ok || script.steps.some(step => step.continuation !== "immediate"))
+            return scriptInsertDialog.openFor(script, false, focusItem);
+        insertRequested(rendered.steps.map(step => step.command).join("\n"));
+        return true;
+    }
+
+    ScriptActionDialog {
+        id: scriptInsertDialog
+        controller: workbench.controller
+        activeTab: workbench.activeTab
+        onInsertRequested: command => workbench.insertRequested(command)
+    }
+
     function requestDeleteCommand(command, focusItem) {
         pendingDeleteId = command.id;
         pendingDeleteName = command.name;
@@ -740,7 +755,7 @@ SidePanelSurface {
                             Keys.onPressed: event => {
                                 if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                                     if ((event.modifiers & Qt.ControlModifier) !== 0) {
-                                        workbench.insertRequested(commandDelegate.modelData.command);
+                                        workbench.insertScript(commandDelegate.modelData, commandDelegate);
                                     } else {
                                         workbench.beginRunScript(commandDelegate.modelData);
                                     }
@@ -848,7 +863,7 @@ SidePanelSurface {
                                 AppIconButton {
                                     width: 26
                                     height: 28
-                                    onClicked: workbench.insertRequested(commandDelegate.modelData.command)
+                                    onClicked: workbench.insertScript(commandDelegate.modelData, commandDelegate)
                                     label: qsTr("Insert script text")
                                     iconName: "compose"
                                     iconColor: Theme.textSoft

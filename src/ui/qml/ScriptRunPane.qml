@@ -12,6 +12,9 @@ Item {
     property var script: null
     property int valuesRevision: 0
     property string targetSessionId: ""
+    property bool insertOnly: false
+    property bool targetLocked: false
+    implicitHeight: formHeader.implicitHeight + targetSection.implicitHeight + executionPanel.implicitHeight + runContent.implicitHeight + 24
     readonly property var runningTargets: controller.terminalTabs.filter(tab => tab.running)
     readonly property var targetTab: {
         for (const tab of controller.terminalTabs) {
@@ -32,6 +35,24 @@ Item {
     }
 
     signal closed
+    signal submitted
+    signal insertRequested(string command)
+
+    function submit() {
+        if (!enabled || !preview.ok || !targetTab || !targetTab.running || executionActive)
+            return false;
+        if (insertOnly) {
+            if (preview.steps.some(step => step.continuation !== "immediate"))
+                return false;
+            insertRequested(preview.steps.map(step => step.command).join("\n"));
+            submitted();
+            return true;
+        }
+        if (!controller.runScript(script.id, variableValues(), targetSessionId))
+            return false;
+        submitted();
+        return true;
+    }
 
     function begin(scriptValue) {
         script = scriptValue;
@@ -43,7 +64,7 @@ Item {
                 "label": variable.label,
                 "type": variable.type,
                 "value": variable.defaultValue || "",
-                "choices": variable.choices || [],
+                "choicesJson": JSON.stringify(variable.choices || []),
                 "required": variable.required
             });
         }
@@ -87,6 +108,7 @@ Item {
         spacing: 8
 
         RowLayout {
+            id: formHeader
             objectName: "scriptFormHeader"
             Layout.fillWidth: true
             Layout.fillHeight: false
@@ -129,14 +151,16 @@ Item {
             }
 
             ActionButton {
-                text: root.executionActive ? qsTr("Running") : qsTr("Run")
+                objectName: "scriptSubmit"
+                text: root.insertOnly ? qsTr("Insert") : root.executionActive ? qsTr("Running") : qsTr("Run")
                 variant: "primary"
                 enabled: root.preview.ok && root.targetTab && root.targetTab.running && !root.executionActive
-                onClicked: root.controller.runScript(root.script.id, root.variableValues(), root.targetSessionId)
+                onClicked: root.submit()
             }
         }
 
         ColumnLayout {
+            id: targetSection
             Layout.fillWidth: true
             Layout.fillHeight: false
             spacing: 4
@@ -155,21 +179,18 @@ Item {
                 displayTextModel: root.runningTargets.map(tab => root.targetLabel(tab))
                 currentIndex: root.targetIndex()
                 accessibleName: qsTr("Script target terminal")
-                enabled: !root.executionActive && root.runningTargets.length > 0
+                enabled: !root.targetLocked && !root.executionActive && root.runningTargets.length > 0
                 onActivated: index => root.targetSessionId = root.runningTargets[index].sessionId
             }
 
-            Text {
+            StatusMessage {
                 Layout.fillWidth: true
-                text: root.targetTab ? qsTr("This target remains fixed while the script runs.") : qsTr("Open a running terminal before executing the script.")
-                color: Theme.textSubtle
-                wrapMode: Text.WordWrap
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.textCompact
+                text: root.targetTab ? "" : qsTr("Open a running terminal before executing the script.")
             }
         }
 
         Rectangle {
+            id: executionPanel
             Layout.fillWidth: true
             Layout.preferredHeight: executionStatus.visible ? 44 : 0
             visible: root.targetTab && root.targetTab.scriptExecutionState !== "idle"
@@ -234,6 +255,7 @@ Item {
             contentWidth: availableWidth
 
             ColumnLayout {
+                id: runContent
                 objectName: "scriptFormContent"
                 width: runScroll.availableWidth
                 spacing: 10
@@ -260,7 +282,8 @@ Item {
                         required property string label
                         required property string type
                         required property string value
-                        required property var choices
+                        required property string choicesJson
+                        readonly property var choices: JSON.parse(choicesJson)
                         required property bool required
 
                         Layout.fillWidth: true

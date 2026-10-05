@@ -6,6 +6,7 @@
 #include "ui/PaneLayoutRuntimeSmoke.h"
 #include "ui/ResizeRuntimeSmoke.h"
 #include "ui/RuntimeSmokeItems.h"
+#include "ui/ScriptComposerRuntimeSmoke.h"
 #include "ui/SideDrawerRuntimeSmoke.h"
 #include "ui/SidePanelLayoutRuntimeSmoke.h"
 #include "ui/TitleBarRuntimeSmoke.h"
@@ -169,6 +170,8 @@ inline std::optional<bool> runWorkbenchRuntimeCheck(NativeWindow &window, AppCon
         return verifyPaneScrollbarLayout(window, controller);
     if (arguments.contains(QStringLiteral("--script-form-layout-smoke")))
         return verifyScriptFormLayout(window, controller) && verifySidePanelLayout(window, controller);
+    if (arguments.contains(QStringLiteral("--script-composer-smoke")))
+        return verifyScriptComposer(window, controller);
     if (arguments.contains(QStringLiteral("--profile-card-icons-smoke")))
     {
         window.resize(1000, 760);

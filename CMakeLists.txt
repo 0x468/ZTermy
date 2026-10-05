@@ -1462,6 +1462,10 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS ScriptRunPane.qml
 )
 set_source_files_properties(
+    src/ui/qml/ScriptActionDialog.qml
+    PROPERTIES QT_RESOURCE_ALIAS ScriptActionDialog.qml
+)
+set_source_files_properties(
     src/ui/qml/TerminalWorkbench.qml
     PROPERTIES QT_RESOURCE_ALIAS TerminalWorkbench.qml
 )
@@ -1559,6 +1563,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/RemoteTelemetryStrip.qml
         src/ui/qml/ScriptEditor.qml
         src/ui/qml/ScriptRunPane.qml
+        src/ui/qml/ScriptActionDialog.qml
         src/ui/qml/AppSurface.qml
         src/ui/qml/Motion.qml
         src/ui/qml/MotionColor.qml
