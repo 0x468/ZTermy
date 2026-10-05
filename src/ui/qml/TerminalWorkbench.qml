@@ -239,6 +239,7 @@ SidePanelSurface {
         spacing: 0
 
         Rectangle {
+            objectName: "terminalWorkbenchToolbar"
             Layout.fillWidth: true
             Layout.preferredHeight: 34
             color: Theme.chromeBackground
@@ -609,6 +610,8 @@ SidePanelSurface {
                     Layout.fillHeight: true
                     spacing: 6
                     visible: workbench.currentPage === "scripts"
+                    headerVisible: workbench.scriptSurface === "library"
+                    toolsVisible: workbench.scriptSurface === "library"
 
                     header: RowLayout {
                         Layout.fillWidth: true
@@ -699,6 +702,7 @@ SidePanelSurface {
 
                     ScriptEditor {
                         id: scriptEditor
+                        objectName: "workbenchScriptEditor"
 
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -710,6 +714,7 @@ SidePanelSurface {
 
                     ScriptRunPane {
                         id: scriptRunPane
+                        objectName: "workbenchScriptRunPane"
 
                         Layout.fillWidth: true
                         Layout.fillHeight: true

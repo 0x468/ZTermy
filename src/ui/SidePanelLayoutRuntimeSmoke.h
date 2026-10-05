@@ -68,7 +68,43 @@ inline bool verifySidePanelLayout(NativeWindow &window, AppController &controlle
             QMetaObject::invokeMethod(create, "clicked");
             processWindowEventsFor(std::chrono::milliseconds{100});
             valid = valid && pane->property("scriptSurface").toString() == QStringLiteral("editor");
+            const auto checkForm = [&](const QString &name, const QString &state) {
+                auto *form = pane->findChild<QQuickItem *>(name);
+                auto *header = form ? form->findChild<QQuickItem *>(QStringLiteral("scriptFormHeader")) : nullptr;
+                auto *toolbar = pane->findChild<QQuickItem *>(QStringLiteral("terminalWorkbenchToolbar"));
+                const qreal top = header ? header->mapToItem(pane, QPointF{}).y() : -1;
+                const bool aligned =
+                    header && toolbar && form->isVisible() && qAbs(top - (toolbar->y() + toolbar->height() + 8)) < 1;
+                qInfo() << "Mounted script form" << state << "headerTop=" << top << "passed=" << aligned;
+                if (!captureRoot.isEmpty())
+                    window.grabWindow().save(QDir(captureRoot)
+                                                 .filePath(QStringLiteral("scripts-%1-%2x%3.png")
+                                                               .arg(state)
+                                                               .arg(size.width())
+                                                               .arg(size.height())));
+                return aligned;
+            };
+            valid = checkForm(QStringLiteral("workbenchScriptEditor"), QStringLiteral("new")) && valid;
+            const QVariant script =
+                QVariantMap{{QStringLiteral("id"), QStringLiteral("layout-fixture")},
+                            {QStringLiteral("name"), QStringLiteral("Layout fixture")},
+                            {QStringLiteral("description"), QString{}},
+                            {QStringLiteral("shell"), QStringLiteral("any")},
+                            {QStringLiteral("variables"), QVariantList{}},
+                            {QStringLiteral("steps"),
+                             QVariantList{QVariantMap{{QStringLiteral("command"), QStringLiteral("fixture")},
+                                                      {QStringLiteral("continuation"), QStringLiteral("immediate")},
+                                                      {QStringLiteral("outputMarker"), QString{}},
+                                                      {QStringLiteral("timeoutMs"), 30000}}}}};
+            QMetaObject::invokeMethod(pane, "beginEditCommand", Q_ARG(QVariant, script));
+            processWindowEventsFor(std::chrono::milliseconds{100});
+            valid = checkForm(QStringLiteral("workbenchScriptEditor"), QStringLiteral("edit")) && valid;
+            QMetaObject::invokeMethod(pane, "beginRunScript", Q_ARG(QVariant, script));
+            processWindowEventsFor(std::chrono::milliseconds{100});
+            valid = checkForm(QStringLiteral("workbenchScriptRunPane"), QStringLiteral("run")) && valid;
             pane->setProperty("scriptSurface", QStringLiteral("library"));
+            processWindowEventsFor(std::chrono::milliseconds{100});
+            valid = search->isVisible() && search->mapToItem(pane, QPointF{}).y() < 100 && valid;
         }
         qInfo() << "Side panel geometry" << size << "passed=" << valid;
         passed = valid && passed;

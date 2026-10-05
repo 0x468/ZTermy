@@ -8621,261 +8621,261 @@
     <name>TerminalWorkbench</name>
     <message>
         <location filename="../src/ui/qml/TerminalWorkbench.qml" line="93"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="289"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="292"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="290"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="293"/>
         <source>Command history</source>
         <translation>命令历史</translation>
     </message>
     <message>
         <location filename="../src/ui/qml/TerminalWorkbench.qml" line="93"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="310"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="313"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="627"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="311"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="314"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="630"/>
         <source>Scripts</source>
         <translation>脚本</translation>
     </message>
     <message>
         <location filename="../src/ui/qml/TerminalWorkbench.qml" line="93"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="331"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="332"/>
         <source>Terminal AI assistant</source>
         <translation>终端 AI 助手</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="335"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="336"/>
         <source>AI assistant</source>
         <translation>AI 助手</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="348"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="349"/>
         <source>Move terminal workbench right</source>
         <translation>将终端工作台移到右侧</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="348"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="349"/>
         <source>Move terminal workbench left</source>
         <translation>将终端工作台移到左侧</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="359"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="360"/>
         <source>Close terminal workbench</source>
         <translation>关闭终端工作台</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="408"/>
         <location filename="../src/ui/qml/TerminalWorkbench.qml" line="409"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="410"/>
         <source>Search command history</source>
         <translation>搜索命令历史</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="418"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="600"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="419"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="601"/>
         <source>Refresh command history</source>
         <translation>刷新命令历史</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="447"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="448"/>
         <source>%n command(s)</source>
         <translation>
             <numerusform>%n 条命令</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="546"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="547"/>
         <source>Run history command</source>
         <translation>运行历史命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="550"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="860"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="551"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="865"/>
         <source>Run</source>
         <translation>运行</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="557"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="558"/>
         <source>Insert history command</source>
         <translation>插入历史命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="561"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="871"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="562"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="876"/>
         <source>Insert</source>
         <translation>插入</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="568"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="569"/>
         <source>Save history command</source>
         <translation>保存历史命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="572"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="573"/>
         <source>Save as script</source>
         <translation>另存为脚本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="595"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="596"/>
         <source>Only this session and its Shell history file are shown. Nothing is saved by ztermy.</source>
         <translation>仅显示本次会话与对应的 Shell 历史文件，ztermy 不会将其保存到本地。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="686"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="687"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="689"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="690"/>
         <source>Search scripts</source>
         <translation>搜索脚本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="694"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="923"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="697"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="928"/>
         <source>New script</source>
         <translation>新建脚本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="829"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="834"/>
         <source>Move script up</source>
         <translation>上移脚本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="856"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="861"/>
         <source>Review and run script</source>
         <translation>预览并运行脚本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="867"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="872"/>
         <source>Insert script text</source>
         <translation>插入脚本文本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="878"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="883"/>
         <source>Edit script</source>
         <translation>编辑脚本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="891"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="896"/>
         <source>Delete script</source>
         <translation>删除脚本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="918"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="923"/>
         <source>No matching scripts</source>
         <translation>没有匹配的脚本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="918"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="923"/>
         <source>No scripts</source>
         <translation>暂无脚本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="919"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="924"/>
         <source>Build reusable, typed command sequences and run them against one explicit terminal.</source>
         <translation>创建可复用的类型化命令序列，并在明确指定的终端中运行。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="924"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="929"/>
         <source>Create the first script</source>
         <translation>创建第一个脚本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="936"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="941"/>
         <source>Delete script?</source>
         <translation>删除脚本？</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="639"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="642"/>
         <source>%n item(s)</source>
         <translation>
             <numerusform>%n 项</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="436"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="437"/>
         <source>Session + Shell history file</source>
         <translation>本次会话 + Shell 历史文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="651"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="654"/>
         <source>Script library actions</source>
         <translation>脚本库操作</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="662"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="665"/>
         <source>Import library</source>
         <translation>导入脚本库</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="667"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="670"/>
         <source>Export library</source>
         <translation>导出脚本库</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="882"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="887"/>
         <source>Edit</source>
         <translation>编辑</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="594"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="595"/>
         <source>Loading history</source>
         <translation>正在加载历史记录</translation>
     </message>
     <message>
         <location filename="../src/ui/qml/TerminalWorkbench.qml" line="93"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="267"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="271"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="268"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="272"/>
         <source>Remote files</source>
         <translation>远程文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="594"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="595"/>
         <source>No matching history</source>
         <translation>没有匹配的历史记录</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="594"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="595"/>
         <source>No command history</source>
         <translation>没有命令历史</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="595"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="596"/>
         <source>Reading a bounded snapshot outside the interface thread.</source>
         <translation>正在界面线程之外读取有大小限制的快照。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="595"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="919"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="596"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="924"/>
         <source>Try a different search term.</source>
         <translation>请尝试其他搜索词。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="598"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="599"/>
         <source>Refresh history</source>
         <translation>刷新历史记录</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="939"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="944"/>
         <source>Cancel</source>
         <translation>取消</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="833"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="838"/>
         <source>Move up</source>
         <translation>上移</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="843"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="848"/>
         <source>Move script down</source>
         <translation>下移脚本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="847"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="852"/>
         <source>Move down</source>
         <translation>下移</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="937"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="942"/>
         <source>%1 will be removed from every terminal.</source>
         <translation>将从所有终端中移除“%1”。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="895"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="938"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="900"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="943"/>
         <source>Delete</source>
         <translation>删除</translation>
     </message>
