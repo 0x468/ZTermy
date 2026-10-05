@@ -5203,11 +5203,22 @@ list(APPEND ZTERMY_TIDY_SOURCES ${ZTERMY_TIDY_TOOL_SOURCES})
 list(SORT ZTERMY_FORMAT_SOURCES)
 list(SORT ZTERMY_TIDY_SOURCES)
 
+# Keep the complete file set without exceeding Windows' command-line limit.
+# Ninja wraps long custom commands in CMD, whose limit is smaller than CreateProcess.
+set(ZTERMY_FORMAT_RESPONSE_CONTENT "--dry-run\n--Werror\n")
+foreach(format_source IN LISTS ZTERMY_FORMAT_SOURCES)
+    string(APPEND ZTERMY_FORMAT_RESPONSE_CONTENT "\"${format_source}\"\n")
+endforeach()
+file(GENERATE
+    OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/format-check.rsp"
+    CONTENT "${ZTERMY_FORMAT_RESPONSE_CONTENT}"
+)
+unset(ZTERMY_FORMAT_RESPONSE_CONTENT)
+unset(format_source)
+
 add_custom_target(ztermy_format_check
     COMMAND "${ZTERMY_CLANG_FORMAT_EXECUTABLE}"
-            --dry-run
-            --Werror
-            ${ZTERMY_FORMAT_SOURCES}
+            "@${CMAKE_CURRENT_BINARY_DIR}/format-check.rsp"
     COMMENT "Checking C++ formatting"
     USES_TERMINAL
     VERBATIM
