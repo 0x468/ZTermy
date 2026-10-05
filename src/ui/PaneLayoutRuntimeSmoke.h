@@ -146,6 +146,44 @@ inline bool verifyScriptFormLayout(NativeWindow &window, AppController &controll
                             step = child;
                 auto *fields = step ? step->findChild<QQuickItem *>(QStringLiteral("scriptStepFields")) : nullptr;
                 valid = valid && step && fields && step->height() >= fields->implicitHeight() + 15;
+                auto *command = quickItem(form, "scriptStepCommand-0");
+                auto *commandScroll = quickItem(form, "scriptCommandScroll-0");
+                const QString longCommand =
+                    QStringLiteral("Write-Output '%1'\n").arg(QString(160, QLatin1Char{'x'})).repeated(12);
+                valid = valid && command && commandScroll && commandScroll->height() >= 132
+                        && command->setProperty("text", longCommand);
+                processWindowEventsFor(std::chrono::milliseconds{100});
+                valid = valid && commandScroll && commandScroll->height() <= 261
+                        && command->width() <= commandScroll->width() + 1
+                        && command->property("text").toString() == longCommand;
+                if (width == 320)
+                {
+                    auto *expand = quickItem(form, "scriptExpandStep-0");
+                    auto *dialog = form->findChild<QObject *>(QStringLiteral("scriptExpandedEditor"));
+                    auto *draft = form->findChild<QQuickItem *>(QStringLiteral("scriptExpandedCommand"));
+                    valid = valid && expand && dialog && draft && QMetaObject::invokeMethod(expand, "clicked");
+                    processWindowEventsFor(std::chrono::milliseconds{250});
+                    valid = valid && dialog->property("opened").toBool()
+                            && draft->property("text").toString() == longCommand
+                            && draft->setProperty("text", QStringLiteral("cancelled edit"));
+                    QMetaObject::invokeMethod(dialog, "close");
+                    processWindowEventsFor(std::chrono::milliseconds{250});
+                    valid = valid && command->property("text").toString() == longCommand;
+                    QMetaObject::invokeMethod(expand, "clicked");
+                    processWindowEventsFor(std::chrono::milliseconds{250});
+                    const QString edited = QStringLiteral("Write-Output 'edited'\nWrite-Output 'kept'");
+                    auto *apply = form->findChild<QQuickItem *>(QStringLiteral("scriptExpandedApply"));
+                    valid = valid && draft->setProperty("text", edited) && apply
+                            && QMetaObject::invokeMethod(apply, "clicked");
+                    processWindowEventsFor(std::chrono::milliseconds{250});
+                    valid = valid && command->property("text").toString() == edited;
+                    command->setProperty("text", QString{});
+                    processWindowEventsFor(std::chrono::milliseconds{50});
+                    valid = valid && !form->property("canSave").toBool();
+                    command->setProperty("text", edited);
+                    processWindowEventsFor(std::chrono::milliseconds{50});
+                    valid = valid && form->property("canSave").toBool();
+                }
             }
             qInfo() << "Script form layout" << file << "width=" << width << "passed=" << valid
                     << "contentWidth=" << (content ? content->width() : -1)

@@ -94,7 +94,30 @@ Item {
         }
     }
 
-    readonly property bool canSave: scriptName.text.trim().length > 0 && stepModel.count > 0
+    readonly property bool canSave: {
+        if (scriptName.text.trim().length === 0 || stepModel.count === 0)
+            return false;
+        const names = new Set();
+        for (let index = 0; index < variableModel.count; ++index) {
+            const variable = variableModel.get(index);
+            if (!/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(variable.name) || names.has(variable.name) || variable.label.trim().length === 0)
+                return false;
+            names.add(variable.name);
+        }
+        for (let index = 0; index < stepModel.count; ++index) {
+            const step = stepModel.get(index);
+            if (step.command.trim().length === 0 || (step.continuation === "literal-output" && step.outputMarker.trim().length === 0))
+                return false;
+        }
+        return true;
+    }
+
+    function expandStep(index, focusItem) {
+        expandedEditor.stepIndex = index;
+        expandedEditor.focusRestoreItem = focusItem;
+        expandedCommand.text = stepModel.get(index).command;
+        expandedEditor.open();
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -187,7 +210,7 @@ Item {
 
                     Text {
                         Layout.fillWidth: true
-                        text: qsTr("Variables")
+                        text: qsTr("Input parameters")
                         color: Theme.textSoft
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.textCompact
@@ -206,16 +229,6 @@ Item {
                             "required": false
                         })
                     }
-                }
-
-                Text {
-                    Layout.fillWidth: true
-                    visible: variableModel.count === 0
-                    text: qsTr("Variables turn ${name} placeholders into reusable, typed inputs.")
-                    color: Theme.textSubtle
-                    wrapMode: Text.Wrap
-                    font.family: Theme.uiFont
-                    font.pixelSize: Theme.textCompact
                 }
 
                 Repeater {
@@ -263,7 +276,7 @@ Item {
                                     Layout.fillWidth: true
                                     compact: true
                                     text: variableCard.label
-                                    placeholderText: qsTr("Label")
+                                    placeholderText: qsTr("Display name")
                                     accessibleName: qsTr("Variable label")
                                     onTextEdited: variableModel.setProperty(variableCard.index, "label", text)
                                 }
@@ -386,6 +399,16 @@ Item {
                                 }
 
                                 AppIconButton {
+                                    id: expandStepButton
+                                    objectName: "scriptExpandStep-" + stepCard.index
+                                    Layout.preferredWidth: 28
+                                    Layout.preferredHeight: 28
+                                    label: qsTr("Expand command editor")
+                                    iconName: "window-maximize"
+                                    onClicked: root.expandStep(stepCard.index, expandStepButton)
+                                }
+
+                                AppIconButton {
                                     id: removeStepButton
                                     Layout.preferredWidth: 28
                                     Layout.preferredHeight: 28
@@ -398,18 +421,24 @@ Item {
                             }
 
                             ScrollView {
+                                id: commandScroll
+                                objectName: "scriptCommandScroll-" + stepCard.index
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 68
+                                Layout.preferredHeight: Math.max(132, Math.min(260, stepCommand.contentHeight + stepCommand.topPadding + stepCommand.bottomPadding + 4))
+                                Layout.fillHeight: false
+                                contentWidth: availableWidth
                                 clip: true
 
                                 TextArea {
+                                    id: stepCommand
+                                    objectName: "scriptStepCommand-" + stepCard.index
                                     text: stepCard.command
                                     placeholderText: qsTr("Command or multiline shell text")
                                     color: Theme.text
                                     placeholderTextColor: Theme.textMuted
                                     selectionColor: Theme.accent
                                     selectedTextColor: Theme.accentText
-                                    wrapMode: TextEdit.NoWrap
+                                    wrapMode: TextEdit.Wrap
                                     font.family: Theme.terminalFont
                                     font.pixelSize: Theme.textBody
                                     Accessible.name: qsTr("Script step command")
@@ -466,6 +495,93 @@ Item {
                     Layout.fillWidth: true
                     kind: "error"
                     text: root.controller.quickCommandOperationError
+                }
+            }
+        }
+    }
+
+    Dialog {
+        id: expandedEditor
+        objectName: "scriptExpandedEditor"
+        property int stepIndex: -1
+        property Item focusRestoreItem: null
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.min(900, Math.max(0, parent.width - 48))
+        height: Math.min(620, Math.max(0, parent.height - 48))
+        padding: 16
+        modal: true
+        dim: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape
+        enter: MotionEnter {}
+        exit: MotionExit {}
+        onOpened: expandedCommand.forceActiveFocus(Qt.PopupFocusReason)
+        onClosed: {
+            const restoreItem = focusRestoreItem;
+            stepIndex = -1;
+            expandedCommand.clear();
+            focusRestoreItem = null;
+            if (restoreItem && restoreItem.visible)
+                Qt.callLater(() => restoreItem.forceActiveFocus());
+        }
+        Overlay.modal: Rectangle {
+            color: Theme.modalScrim
+        }
+        background: AppSurface {
+            elevation: 3
+        }
+        contentItem: ColumnLayout {
+            spacing: 12
+            Text {
+                Layout.fillWidth: true
+                text: qsTr("Step %1").arg(expandedEditor.stepIndex + 1)
+                color: Theme.text
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.textBody
+                font.weight: Font.DemiBold
+            }
+            ScrollView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                contentWidth: availableWidth
+                clip: true
+                TextArea {
+                    id: expandedCommand
+                    objectName: "scriptExpandedCommand"
+                    color: Theme.text
+                    selectionColor: Theme.accent
+                    selectedTextColor: Theme.accentText
+                    wrapMode: TextEdit.Wrap
+                    font.family: Theme.terminalFont
+                    font.pixelSize: Theme.textBody
+                    Accessible.name: qsTr("Script step command")
+                    background: Rectangle {
+                        radius: Theme.radiusSmall
+                        color: Theme.fieldBackground
+                        border.color: parent.activeFocus ? Theme.focus : Theme.border
+                    }
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: false
+                Item {
+                    Layout.fillWidth: true
+                }
+                ActionButton {
+                    text: qsTr("Cancel")
+                    onClicked: expandedEditor.close()
+                }
+                ActionButton {
+                    objectName: "scriptExpandedApply"
+                    text: qsTr("Apply")
+                    variant: "primary"
+                    onClicked: {
+                        if (expandedEditor.stepIndex >= 0)
+                            stepModel.setProperty(expandedEditor.stepIndex, "command", expandedCommand.text);
+                        expandedEditor.close();
+                    }
                 }
             }
         }

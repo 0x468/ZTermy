@@ -4583,219 +4583,231 @@
 <context>
     <name>ScriptEditor</name>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="113"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="213"/>
+        <source>Input parameters</source>
+        <translation>输入参数</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="279"/>
+        <source>Display name</source>
+        <translation>显示名称</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="406"/>
+        <source>Expand command editor</source>
+        <translation>展开命令编辑器</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="573"/>
+        <source>Cancel</source>
+        <translation>取消</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="578"/>
+        <source>Apply</source>
+        <translation>应用</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="138"/>
         <source>Back to script library</source>
         <translation>返回脚本库</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="120"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="145"/>
         <source>Edit script</source>
         <translation>编辑脚本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="120"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="145"/>
         <source>New script</source>
         <translation>新建脚本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="128"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="153"/>
         <source>Save</source>
         <translation>保存</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="149"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="174"/>
         <source>Details</source>
         <translation>详细信息</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="161"/>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="162"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="186"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="187"/>
         <source>Script name</source>
         <translation>脚本名称</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="170"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="195"/>
         <source>Description (optional)</source>
         <translation>说明（可选）</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="171"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="196"/>
         <source>Script description</source>
         <translation>脚本说明</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="179"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="204"/>
         <source>Any shell</source>
         <translation>任意 Shell</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="179"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="204"/>
         <source>POSIX shell</source>
         <translation>POSIX Shell</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="179"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="204"/>
         <source>PowerShell</source>
         <translation>PowerShell</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="180"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="205"/>
         <source>Script shell scope</source>
         <translation>脚本 Shell 范围</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="188"/>
-        <source>Variables</source>
-        <translation>变量</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="196"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="221"/>
         <source>Add variable</source>
         <translation>添加变量</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="200"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="225"/>
         <source>Variable %1</source>
         <translation>变量 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="212"/>
-        <source>Variables turn ${name} placeholders into reusable, typed inputs.</source>
-        <translation>变量可将 ${name} 占位符转换为可复用的类型化输入。</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="255"/>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="256"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="270"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="271"/>
         <source>Variable name</source>
         <translation>变量名称</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="264"/>
-        <source>Label</source>
-        <translation>标签</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="265"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="280"/>
         <source>Variable label</source>
         <translation>变量标签</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="274"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="289"/>
         <source>Remove variable</source>
         <translation>移除变量</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="287"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="302"/>
         <source>Text</source>
         <translation>文本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="287"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="302"/>
         <source>Integer</source>
         <translation>整数</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="287"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="302"/>
         <source>Boolean</source>
         <translation>布尔值</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="287"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="302"/>
         <source>Choice</source>
         <translation>选项</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="289"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="304"/>
         <source>Variable type</source>
         <translation>变量类型</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="297"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="312"/>
         <source>Default value</source>
         <translation>默认值</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="298"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="313"/>
         <source>Default variable value</source>
         <translation>变量默认值</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="303"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="318"/>
         <source>Required</source>
         <translation>必填</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="314"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="329"/>
         <source>Choices separated by commas</source>
         <translation>使用逗号分隔选项</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="315"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="330"/>
         <source>Variable choices</source>
         <translation>变量选项</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="327"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="342"/>
         <source>Steps</source>
         <translation>步骤</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="335"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="350"/>
         <source>Add step</source>
         <translation>添加步骤</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="379"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="394"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="538"/>
         <source>Step %1</source>
         <translation>步骤 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="392"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="417"/>
         <source>Remove script step</source>
         <translation>移除脚本步骤</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="405"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="436"/>
         <source>Command or multiline shell text</source>
         <translation>命令或多行 Shell 文本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="413"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="444"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="558"/>
         <source>Script step command</source>
         <translation>脚本步骤命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="426"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="457"/>
         <source>Continue immediately</source>
         <translation>立即继续</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="426"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="457"/>
         <source>Wait for literal output</source>
         <translation>等待字面输出</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="428"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="459"/>
         <source>Step continuation</source>
         <translation>步骤继续条件</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="441"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="472"/>
         <source>Literal output marker</source>
         <translation>字面输出标记</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="442"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="473"/>
         <source>Output marker</source>
         <translation>输出标记</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="450"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="481"/>
         <source>Timeout ms</source>
         <translation>超时（毫秒）</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptEditor.qml" line="451"/>
+        <location filename="../src/ui/qml/ScriptEditor.qml" line="482"/>
         <source>Output timeout in milliseconds</source>
         <translation>输出等待超时（毫秒）</translation>
     </message>
@@ -4813,117 +4825,117 @@
         <translation>终端</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptRunPane.qml" line="99"/>
+        <location filename="../src/ui/qml/ScriptRunPane.qml" line="101"/>
         <source>Back to script library</source>
         <translation>返回脚本库</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptRunPane.qml" line="130"/>
+        <location filename="../src/ui/qml/ScriptRunPane.qml" line="132"/>
         <source>Running</source>
         <translation>运行中</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptRunPane.qml" line="130"/>
+        <location filename="../src/ui/qml/ScriptRunPane.qml" line="132"/>
         <source>Run</source>
         <translation>运行</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptRunPane.qml" line="142"/>
+        <location filename="../src/ui/qml/ScriptRunPane.qml" line="145"/>
         <source>Target terminal</source>
         <translation>目标终端</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptRunPane.qml" line="154"/>
+        <location filename="../src/ui/qml/ScriptRunPane.qml" line="157"/>
         <source>Script target terminal</source>
         <translation>脚本目标终端</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptRunPane.qml" line="161"/>
+        <location filename="../src/ui/qml/ScriptRunPane.qml" line="164"/>
         <source>This target remains fixed while the script runs.</source>
         <translation>脚本运行期间将固定使用此目标。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptRunPane.qml" line="161"/>
+        <location filename="../src/ui/qml/ScriptRunPane.qml" line="164"/>
         <source>Open a running terminal before executing the script.</source>
         <translation>请先打开正在运行的终端，再执行脚本。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptRunPane.qml" line="198"/>
+        <location filename="../src/ui/qml/ScriptRunPane.qml" line="201"/>
         <source>Waiting for output · %1/%2 steps sent</source>
         <translation>正在等待输出 · 已发送 %1/%2 个步骤</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptRunPane.qml" line="201"/>
+        <location filename="../src/ui/qml/ScriptRunPane.qml" line="204"/>
         <source>Running · %1/%2 steps sent</source>
         <translation>正在运行 · 已发送 %1/%2 个步骤</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptRunPane.qml" line="204"/>
+        <location filename="../src/ui/qml/ScriptRunPane.qml" line="207"/>
         <source>Script completed</source>
         <translation>脚本已完成</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptRunPane.qml" line="207"/>
+        <location filename="../src/ui/qml/ScriptRunPane.qml" line="210"/>
         <source>Script cancelled</source>
         <translation>脚本已取消</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptRunPane.qml" line="209"/>
+        <location filename="../src/ui/qml/ScriptRunPane.qml" line="212"/>
         <source>Script timed out while waiting for output</source>
         <translation>脚本等待输出时超时</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptRunPane.qml" line="218"/>
+        <location filename="../src/ui/qml/ScriptRunPane.qml" line="221"/>
         <source>Cancel</source>
         <translation>取消</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptRunPane.qml" line="240"/>
+        <location filename="../src/ui/qml/ScriptRunPane.qml" line="243"/>
         <source>Inputs</source>
         <translation>输入</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptRunPane.qml" line="267"/>
+        <location filename="../src/ui/qml/ScriptRunPane.qml" line="270"/>
         <source>%1 · required</source>
         <translation>%1 · 必填</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptRunPane.qml" line="294"/>
+        <location filename="../src/ui/qml/ScriptRunPane.qml" line="297"/>
         <source>Integer value</source>
         <translation>整数值</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptRunPane.qml" line="294"/>
+        <location filename="../src/ui/qml/ScriptRunPane.qml" line="297"/>
         <source>Value</source>
         <translation>值</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptRunPane.qml" line="307"/>
+        <location filename="../src/ui/qml/ScriptRunPane.qml" line="310"/>
         <source>Review</source>
         <translation>预览</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptRunPane.qml" line="317"/>
+        <location filename="../src/ui/qml/ScriptRunPane.qml" line="320"/>
         <source>Complete the required inputs before running this script.</source>
         <translation>请先填写有效的必填输入，再运行此脚本。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptRunPane.qml" line="344"/>
+        <location filename="../src/ui/qml/ScriptRunPane.qml" line="347"/>
         <source>Step %1</source>
         <translation>步骤 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptRunPane.qml" line="355"/>
+        <location filename="../src/ui/qml/ScriptRunPane.qml" line="358"/>
         <source>wait</source>
         <translation>等待</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptRunPane.qml" line="355"/>
+        <location filename="../src/ui/qml/ScriptRunPane.qml" line="358"/>
         <source>immediate</source>
         <translation>立即</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/ScriptRunPane.qml" line="375"/>
+        <location filename="../src/ui/qml/ScriptRunPane.qml" line="378"/>
         <source>Wait for “%1” · %2 s timeout</source>
         <translation>等待“%1” · %2 秒超时</translation>
     </message>
@@ -12160,45 +12172,45 @@ Output:
         <translation>SSH 启动命令执行失败</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="927"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="992"/>
         <source>SSH command wake event failed</source>
         <translation>SSH 命令唤醒事件失败</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="951"/>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="991"/>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1065"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1016"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1056"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1134"/>
         <source>SSH terminal selection clear failed: %1</source>
         <translation>清除 SSH 终端选区失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="959"/>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1000"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1024"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1065"/>
         <source>Terminal input could not be converted to the selected encoding.</source>
         <translation>终端输入无法转换为所选编码。</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="979"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1044"/>
         <source>SSH terminal key encoding failed: %1</source>
         <translation>SSH 终端按键编码失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1018"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1087"/>
         <source>SSH terminal mouse encoding failed: %1</source>
         <translation>SSH 终端鼠标编码失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1041"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1110"/>
         <source>SSH terminal focus encoding failed: %1</source>
         <translation>SSH 终端焦点编码失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1074"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1143"/>
         <source>SSH terminal paste failed: %1</source>
         <translation>SSH 终端粘贴失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1084"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1153"/>
         <source>Terminal paste could not be converted to the selected encoding.</source>
         <translation>终端粘贴内容无法转换为所选编码。</translation>
     </message>
@@ -12243,7 +12255,7 @@ Output:
         <translation>SSH 终端搜索失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1106"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1175"/>
         <source>SSH terminal color scheme failed: %1</source>
         <translation>SSH 终端配色应用失败：%1</translation>
     </message>
@@ -12254,28 +12266,28 @@ Output:
     </message>
     <message>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="856"/>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1159"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1228"/>
         <source>SSH terminal state resize failed</source>
         <translation>调整 SSH 终端状态大小失败</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1266"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1335"/>
         <source>SSH keepalive failed</source>
         <translation>SSH 保活失败</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1313"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="926"/>
         <source>SSH terminal parser failed</source>
         <translation>SSH 终端解析器失败</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1355"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1383"/>
         <source>SSH terminal closed without a complete channel shutdown</source>
         <translation>SSH 终端已关闭，但通道未完整关闭</translation>
     </message>
     <message>
         <location filename="../src/application/AppController.cpp" line="2363"/>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1359"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1387"/>
         <source>SSH terminal disconnected</source>
         <translation>SSH 终端已断开连接</translation>
     </message>
