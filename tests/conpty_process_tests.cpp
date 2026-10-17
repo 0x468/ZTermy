@@ -1,3 +1,4 @@
+#include "core/terminal/TerminalIdentity.h"
 #include "infrastructure/terminal/ConPtyProcess.h"
 #ifndef ZTERMY_CONPTY_REDISTRIBUTABLE_PROBE
 #include "infrastructure/terminal/ConPtyRuntime.h"
@@ -20,6 +21,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 using namespace std::chrono_literals;
@@ -39,6 +41,7 @@ private slots:
     void capturesUtf8OutputFromChildProcess();
     void drainsFinalOutputAfterNaturalExit();
     void preservesInlineImageProtocolsFromChildProcess();
+    void declaresOwnIdentityWithoutParentTerminalMarkers();
 #ifndef ZTERMY_CONPTY_REDISTRIBUTABLE_PROBE
     void pinsRuntimeBinariesAgainstReplacement();
 #endif
@@ -139,6 +142,54 @@ void ConPtyProcessTests::drainsFinalOutputAfterNaturalExit()
         QVERIFY(output.contains("ZTERMY_TAIL_80"));
         process.close();
     }
+}
+
+void ConPtyProcessTests::declaresOwnIdentityWithoutParentTerminalMarkers()
+{
+    std::vector<std::pair<QByteArray, QByteArray>> previous;
+    const auto restore = qScopeGuard([&] {
+        for (const auto &[name, value] : previous)
+            value.isNull() ? qunsetenv(name.constData()) : qputenv(name.constData(), value);
+    });
+    for (const auto name : ztermy::terminal::foreignTerminalMarkers)
+    {
+        const QByteArray key(name.data(), static_cast<qsizetype>(name.size()));
+        previous.emplace_back(key, qgetenv(key.constData()));
+        qputenv(key.constData(), "PARENT_TERMINAL_SENTINEL");
+    }
+    for (const auto *name : {"TERM_PROGRAM", "TERM_PROGRAM_VERSION"})
+    {
+        previous.emplace_back(name, qgetenv(name));
+        qputenv(name, "PARENT_TERMINAL_SENTINEL");
+    }
+    ztermy::terminal::ConPtyProcess process;
+    const auto executable = QCoreApplication::applicationFilePath().toStdWString();
+    QVERIFY(
+        !process.start(executable, L"\"" + executable + L"\" --emit-terminal-identity", {.columns = 120, .rows = 30}));
+    auto reader = std::async(std::launch::async, [&] {
+        QByteArray output;
+        std::array<std::byte, 4096> buffer{};
+        while (output.size() < qsizetype{64} * 1024 && !output.contains("IDENTITY_DONE"))
+        {
+            const auto read = process.read(buffer);
+            if (!read || !*read)
+                break;
+            output.append(reinterpret_cast<const char *>(buffer.data()), static_cast<qsizetype>(*read));
+        }
+        return output;
+    });
+    const auto exited = process.waitForExit(5s);
+    if (!exited || !*exited || reader.wait_for(5s) != std::future_status::ready)
+        process.close();
+    QCOMPARE(reader.wait_for(0s), std::future_status::ready);
+    const auto output = reader.get();
+    process.close();
+    QVERIFY(output.contains("TERM_PROGRAM=ztermy"));
+    QVERIFY(output.contains("TERM_PROGRAM_VERSION=" ZTERMY_VERSION_STRING));
+    QVERIFY(output.contains("TERM=xterm-256color"));
+    QVERIFY(output.contains("COLORTERM=truecolor"));
+    QVERIFY(output.contains("IDENTITY_DONE"));
+    QVERIFY(!output.contains("PARENT_TERMINAL_SENTINEL"));
 }
 
 void ConPtyProcessTests::preservesInlineImageProtocolsFromChildProcess()
@@ -390,6 +441,24 @@ void ConPtyProcessTests::wakeEventInterruptsExitWait()
 
 int main(int argc, char **argv)
 {
+    if (argc == 2 && std::string_view(argv[1]) == "--emit-terminal-identity")
+    {
+        QByteArray output;
+        for (const auto name : ztermy::terminal::foreignTerminalMarkers)
+        {
+            const QByteArray key(name.data(), static_cast<qsizetype>(name.size()));
+            output += key + '=' + qgetenv(key.constData()) + "\r\n";
+        }
+        for (const auto *name : {"TERM", "COLORTERM", "TERM_PROGRAM", "TERM_PROGRAM_VERSION"})
+            output += QByteArray(name) + '=' + qgetenv(name) + "\r\n";
+        output += "IDENTITY_DONE\r\n";
+        DWORD written = 0;
+        return WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), output.constData(), static_cast<DWORD>(output.size()),
+                         &written, nullptr)
+                       && std::cmp_equal(written, output.size())
+                   ? 0
+                   : 3;
+    }
     if (argc == 2 && std::string_view(argv[1]) == "--emit-inline-images")
     {
         const HANDLE output = GetStdHandle(STD_OUTPUT_HANDLE);

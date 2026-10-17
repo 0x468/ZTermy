@@ -7,6 +7,7 @@
 #include "domain/terminal/GhosttyInputMapping.h"
 #include "domain/terminal/GhosttySixelBridge.h"
 #include "domain/terminal/GhosttyStatusEvents.h"
+#include "domain/terminal/GhosttyTerminalIdentity.h"
 #include "domain/terminal/TerminalLinkDetector.h"
 
 #include <ghostty/vt.h>
@@ -523,6 +524,9 @@ GhosttyTerminalEngine::create(const TerminalGeometry geometry, const TerminalHis
     if (const auto statusResult = GhosttyStatusEvents::install<Impl, validUtf8>(engine->m_impl->terminal);
         statusResult != GHOSTTY_SUCCESS)
         return std::unexpected(ghosttyError(statusResult));
+    if (const auto identityResult = detail::installTerminalIdentity(engine->m_impl->terminal);
+        identityResult != GHOSTTY_SUCCESS)
+        return std::unexpected(ghosttyError(identityResult));
     if (const GhosttyResult writeResult =
             ghostty_terminal_set(engine->m_impl->terminal, GHOSTTY_TERMINAL_OPT_WRITE_PTY,
                                  reinterpret_cast<const void *>(&GhosttyTerminalEngine::Impl::writePty));

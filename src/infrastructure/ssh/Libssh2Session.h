@@ -72,6 +72,7 @@ struct SshTerminalEnvironment final
 {
     std::string_view name;
     std::string_view value;
+    bool required = true;
 };
 
 struct SshForwardingChannel final

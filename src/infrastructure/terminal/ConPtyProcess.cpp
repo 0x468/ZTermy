@@ -1,4 +1,5 @@
 #include "infrastructure/terminal/ConPtyProcess.h"
+#include "core/terminal/TerminalIdentity.h"
 
 #include <Windows.h>
 #include <TlHelp32.h>
@@ -373,13 +374,14 @@ std::error_code ConPtyProcess::start(const std::wstring &applicationName, std::w
     mergeEnvironmentEntries(entries, currentEnvironment.get());
     mergeEnvironmentEntries(entries, static_cast<const wchar_t *>(freshEnvironment.get()));
     // The child is attached to ztermy's ConPTY, not the terminal that launched ztermy.
-    for (const wchar_t *name :
-         {L"WT_SESSION", L"WT_PROFILE_ID", L"WT_WINDOWID", L"TERM_PROGRAM", L"TERM_PROGRAM_VERSION"})
+    for (const auto name : ztermy::terminal::foreignTerminalMarkers)
     {
-        entries.erase(name);
+        entries.erase(std::wstring(name.begin(), name.end()));
     }
     entries.insert_or_assign(L"TERM", L"xterm-256color");
-    entries.insert_or_assign(L"COLORTERM", L"truecolor");
+    for (const auto &entry : ztermy::terminal::identityEnvironment)
+        entries.insert_or_assign(std::wstring(entry.name.begin(), entry.name.end()),
+                                 std::wstring(entry.value.begin(), entry.value.end()));
     std::vector<wchar_t> childEnvironment = environmentBlock(entries);
 
     const BOOL processCreated =

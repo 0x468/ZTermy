@@ -1396,7 +1396,7 @@ Libssh2Session::openTerminal(SshByteTransport &transport, const std::uint32_t co
             const int result = libssh2_channel_setenv_ex(
                 channel, variable.name.data(), static_cast<unsigned int>(variable.name.size()), variable.value.data(),
                 static_cast<unsigned int>(variable.value.size()));
-            if (result == 0)
+            if (result == 0 || (!variable.required && result == LIBSSH2_ERROR_CHANNEL_REQUEST_DENIED))
             {
                 break;
             }

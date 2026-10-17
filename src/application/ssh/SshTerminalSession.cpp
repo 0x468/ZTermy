@@ -1,4 +1,5 @@
 #include "application/ssh/SshTerminalSession.h"
+#include "application/ssh/TerminalEnvironment.h"
 
 #include "domain/ssh/SshHostKey.h"
 #include "domain/terminal/GhosttyTerminalEngine.h"
@@ -834,12 +835,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     auto session = std::move(connection->session);
     terminal::WindowsTerminalTextCodec textCodec;
 
-    std::vector<SshTerminalEnvironment> terminalEnvironment;
-    terminalEnvironment.reserve(request.sessionOptions.environment.size());
-    for (const SshEnvironmentVariable &variable : request.sessionOptions.environment)
-    {
-        terminalEnvironment.push_back({.name = variable.name, .value = variable.value});
-    }
+    const auto environment = terminalEnvironment(request.sessionOptions.environment);
 
     if (request.sessionOptions.keepaliveIntervalSeconds > 0)
     {
@@ -866,8 +862,8 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
         return;
     }
     auto open = session->openTerminal(
-        *transport, openingGeometry.columns, openingGeometry.rows, request.sessionOptions.terminalType,
-        terminalEnvironment, std::chrono::seconds(request.sessionOptions.terminalOpenTimeoutSeconds), stopToken);
+        *transport, openingGeometry.columns, openingGeometry.rows, request.sessionOptions.terminalType, environment,
+        std::chrono::seconds(request.sessionOptions.terminalOpenTimeoutSeconds), stopToken);
     if (!open)
     {
         const SshFailureKind failure = sshFailureFromTransport(open.error(), true);

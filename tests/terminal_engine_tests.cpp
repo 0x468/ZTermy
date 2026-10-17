@@ -1,3 +1,4 @@
+#include "core/terminal/TerminalIdentity.h"
 #include "domain/terminal/GhosttyHostAllocator.h"
 #include "domain/terminal/GhosttyImageBudget.h"
 #include "domain/terminal/GhosttyImageExtension.h"
@@ -89,6 +90,7 @@ private slots:
     void rejectsKittyAnimationWithIdentityAndRecovers();
     void placesAbsoluteSixelWithoutChangingCursorOrWrap();
     void reportsSixelCapabilitiesWithoutChangingScreen();
+    void reportsApplicationIdentityAlongsideGraphicsCapabilities();
     void decodesFragmentedSixelOverprintsAndDecColors();
     void preservesSixelBackgroundAndRasterExtent();
     void boundsSixelRepeatAndOverdrawWork();
@@ -625,6 +627,31 @@ void TerminalEngineTests::reportsSixelCapabilitiesWithoutChangingScreen()
     QCOMPARE(snapshot->cursor.row, std::uint16_t{0});
     QVERIFY(snapshot->images.empty());
     QVERIFY(engine.takePtyWrite().empty());
+}
+
+void TerminalEngineTests::reportsApplicationIdentityAlongsideGraphicsCapabilities()
+{
+    auto created = ztermy::terminal::GhosttyTerminalEngine::create(
+        {.columns = 80, .rows = 24, .cellWidthPixels = 8, .cellHeightPixels = 16});
+    QVERIFY(created);
+    auto &engine = **created;
+    const std::string_view queries = "\x1b[>q\x1b[>0q\x1b[c\x1b[16t\x1b_Gi=7331,a=q,t=d,f=32,s=1,v=1;AAAA/w==\x1b\\";
+    for (const char &byte : queries)
+        QVERIFY(!engine.feed(std::as_bytes(std::span(&byte, 1))));
+    const std::string version = "\x1bP>|ztermy(" ZTERMY_VERSION_STRING ")\x1b\\";
+    const auto replies = engine.takePtyWrite();
+    QCOMPARE(std::string(reinterpret_cast<const char *>(replies.data()), replies.size()),
+             version + version + "\x1b[?62;4;22c\x1b[6;16;8t\x1b_Gi=7331;OK\x1b\\");
+    const auto snapshot = engine.snapshot();
+    QVERIFY(snapshot);
+    QVERIFY(snapshot->images.empty());
+    QCOMPARE(snapshot->cursor.column, std::uint16_t{0});
+    QCOMPARE(snapshot->cursor.row, std::uint16_t{0});
+    const std::string_view resetAndQuery = "\x1b"
+                                           "c\x1b[>q";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(resetAndQuery))));
+    const auto afterReset = engine.takePtyWrite();
+    QCOMPARE(std::string(reinterpret_cast<const char *>(afterReset.data()), afterReset.size()), version);
 }
 
 void TerminalEngineTests::decodesFragmentedSixelOverprintsAndDecColors()

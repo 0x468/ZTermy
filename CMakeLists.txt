@@ -286,7 +286,7 @@ add_library(ztermy_terminal_transport STATIC
 )
 
 target_compile_features(ztermy_terminal_transport PUBLIC cxx_std_23)
-target_include_directories(ztermy_terminal_transport PUBLIC src)
+target_include_directories(ztermy_terminal_transport PUBLIC src "${ZTERMY_GENERATED_DIRECTORY}")
 target_compile_definitions(ztermy_terminal_transport PRIVATE
     NOMINMAX
     UNICODE
@@ -769,7 +769,7 @@ target_include_directories(ztermy_session_logging PUBLIC src)
 target_link_libraries(ztermy_session_logging PUBLIC Qt6::Core)
 
 target_compile_features(ztermy_terminal_engine PUBLIC cxx_std_23)
-target_include_directories(ztermy_terminal_engine PUBLIC src)
+target_include_directories(ztermy_terminal_engine PUBLIC src "${ZTERMY_GENERATED_DIRECTORY}")
 target_link_libraries(ztermy_terminal_engine PRIVATE ghostty-vt-static)
 
 add_library(ztermy_terminal_image_codec STATIC
@@ -3072,7 +3072,7 @@ if(BUILD_TESTING)
             tests/conpty_process_tests.cpp
             src/infrastructure/terminal/ConPtyProcess.cpp)
         target_compile_features(ztermy_conpty_runtime_probe PRIVATE cxx_std_23)
-        target_include_directories(ztermy_conpty_runtime_probe PRIVATE src "${ZTERMY_CONPTY_PROBE_PACKAGE}/inc")
+        target_include_directories(ztermy_conpty_runtime_probe PRIVATE src "${ZTERMY_GENERATED_DIRECTORY}" "${ZTERMY_CONPTY_PROBE_PACKAGE}/inc")
         target_compile_definitions(ztermy_conpty_runtime_probe PRIVATE
             ZTERMY_CONPTY_REDISTRIBUTABLE_PROBE NOMINMAX UNICODE _UNICODE WIN32_LEAN_AND_MEAN)
         target_compile_options(ztermy_conpty_runtime_probe PRIVATE /permissive- /utf-8 /W4 /Zc:__cplusplus)

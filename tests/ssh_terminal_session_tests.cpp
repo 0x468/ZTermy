@@ -7,6 +7,8 @@
 #include <Windows.h>
 
 #include "application/ssh/SshTerminalSession.h"
+#include "application/ssh/TerminalEnvironment.h"
+#include "core/terminal/TerminalIdentity.h"
 #include "domain/terminal/GhosttyTerminalEngine.h"
 
 #include <QCoreApplication>
@@ -278,6 +280,9 @@ class SshTerminalSessionTests final : public QObject
     Q_OBJECT
 
 private slots:
+    void mergesIdentityHintsWithoutOverwritingConfiguredEnvironment();
+    void advertisesIdentityOverLoopbackSsh_data();
+    void advertisesIdentityOverLoopbackSsh();
     void appliesHistoryLimitsToDisconnectedViews();
     void synchronizesOutputOverLoopbackSsh();
     void stopsQueuedMouseAfterRemoteExit_data();
@@ -411,6 +416,108 @@ void SshTerminalSessionTests::reconnectHistoryIsOptInAndResetsModes()
         session.stop();
         QVERIFY(!session.scrollbackPage({.lineCount = 10}));
     }
+}
+
+void SshTerminalSessionTests::mergesIdentityHintsWithoutOverwritingConfiguredEnvironment()
+{
+    const auto defaults = ztermy::ssh::terminalEnvironment({});
+    QCOMPARE(defaults.size(), std::size_t{3});
+    for (const auto &entry : defaults)
+        QVERIFY(!entry.required);
+    const std::vector<ztermy::ssh::SshEnvironmentVariable> configured{
+        {.name = "TERM_PROGRAM", .value = "profile-identity"},
+        {.name = "LANG", .value = "C"}};
+    const auto merged = ztermy::ssh::terminalEnvironment(configured);
+    QCOMPARE(merged.size(), std::size_t{4});
+    QCOMPARE(std::ranges::count_if(merged,
+                                   [](const auto &entry) {
+                                       return entry.name == "TERM_PROGRAM";
+                                   }),
+             1);
+    QCOMPARE(merged[0].name, std::string_view{"TERM_PROGRAM_VERSION"});
+    QCOMPARE(merged[0].value, ztermy::terminal::programVersion);
+    QCOMPARE(merged[2].name, std::string_view{"TERM_PROGRAM"});
+    QCOMPARE(merged[2].value, std::string_view{"profile-identity"});
+    QVERIFY(merged[2].required);
+    QVERIFY(merged[3].required);
+}
+
+void SshTerminalSessionTests::advertisesIdentityOverLoopbackSsh_data()
+{
+    QTest::addColumn<QString>("policy");
+    QTest::addColumn<bool>("requiredFailure");
+    QTest::newRow("accept-identity") << QStringLiteral("accept") << false;
+    QTest::newRow("reject-optional-identity") << QStringLiteral("reject-defaults") << false;
+    QTest::newRow("reject-required-user-variable") << QStringLiteral("reject-all") << true;
+}
+
+void SshTerminalSessionTests::advertisesIdentityOverLoopbackSsh()
+{
+    QFETCH(QString, policy);
+    QFETCH(bool, requiredFailure);
+    const auto python = qEnvironmentVariable("ZTERMY_TEST_SSH_FIXTURE_PYTHON");
+    if (python.isEmpty())
+        QSKIP("Set ZTERMY_TEST_SSH_FIXTURE_PYTHON to a Python environment with Paramiko");
+    QProcess server;
+    QByteArray events;
+    connect(&server, &QProcess::readyReadStandardOutput, this, [&] {
+        events += server.readAllStandardOutput();
+    });
+    server.start(python, {QFINDTESTDATA("fixtures/terminal_identity_ssh_server.py"), policy});
+    QVERIFY(server.waitForStarted(5000));
+    QTRY_VERIFY_WITH_TIMEOUT(events.contains('\n'), 10000);
+    bool validPort = false;
+    const auto port = events.split('\n').first().toUShort(&validPort);
+    QVERIFY(validPort && port != 0);
+    QTemporaryDir directory;
+    ztermy::ssh::SshTerminalSession session;
+    QSignalSpy hostKey(&session, &ztermy::ssh::SshTerminalSession::hostKeyConfirmationRequired);
+    QSignalSpy running(&session, &ztermy::ssh::SshTerminalSession::runningChanged);
+    QSignalSpy failures(&session, &ztermy::ssh::SshTerminalSession::failureOccurred);
+    ztermy::ssh::SshConnectionRequest request{
+        .host = QStringLiteral("127.0.0.1"),
+        .port = port,
+        .username = QStringLiteral("fixture"),
+        .authentication = ztermy::ssh::SshAuthenticationMethod::Password,
+        .secret = ztermy::security::SensitiveByteArray(QByteArrayLiteral("fixture-only")),
+        .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json")),
+        .sessionOptions = {.environment = {{.name = "LANG", .value = "C"}}},
+    };
+    QVERIFY(
+        !session.start(std::move(request), {.columns = 80, .rows = 24, .cellWidthPixels = 8, .cellHeightPixels = 16}));
+    QTRY_COMPARE_WITH_TIMEOUT(hostKey.count(), 1, 10000);
+    session.confirmHostKey(false);
+    if (requiredFailure)
+    {
+        QTRY_VERIFY_WITH_TIMEOUT(!failures.isEmpty(), 10000);
+        QVERIFY(!std::ranges::any_of(running, [](const auto &args) {
+            return args.first().toBool();
+        }));
+        QVERIFY(events.contains("ENV LANG=C REJECT"));
+        QVERIFY(std::ranges::none_of(events.split('\n'), [](const auto &line) {
+            return line.trimmed() == "SHELL";
+        }));
+    }
+    else
+    {
+        QTRY_VERIFY_WITH_TIMEOUT(events.contains("REPLIES "), 10000);
+        QVERIFY(std::ranges::any_of(running, [](const auto &args) {
+            return args.first().toBool();
+        }));
+        QVERIFY(failures.isEmpty());
+        const QByteArray outcome = policy == QStringLiteral("accept") ? " ACCEPT" : " REJECT";
+        QVERIFY(events.contains(QByteArrayLiteral("ENV TERM_PROGRAM=ztermy") + outcome));
+        QVERIFY(events.contains(QByteArrayLiteral("ENV TERM_PROGRAM_VERSION=" ZTERMY_VERSION_STRING) + outcome));
+        QVERIFY(events.contains(QByteArrayLiteral("ENV COLORTERM=truecolor") + outcome));
+        QVERIFY(events.contains("ENV LANG=C ACCEPT"));
+        const QByteArray expectedVersion("\x1bP>|ztermy(" ZTERMY_VERSION_STRING ")\x1b\\");
+        QVERIFY(events.contains(expectedVersion.toHex()));
+        QVERIFY(!events.contains("67686f73747479")); // No backend brand in the identity response.
+    }
+    server.write(QByteArrayLiteral("finish\n"));
+    QTRY_VERIFY_WITH_TIMEOUT(server.state() == QProcess::NotRunning, 10000);
+    QCOMPARE(server.exitCode(), 0);
+    session.stop();
 }
 
 void SshTerminalSessionTests::retainsViewportSizeDuringConnectionAndReconnect()

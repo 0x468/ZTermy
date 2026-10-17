@@ -6,6 +6,10 @@ Release assets are published through GitHub Releases.
 
 ## Unreleased
 
+- Advertise Ztermy's own terminal identity/version locally and through XTVERSION.
+  Request identity/color hints over SSH without failing on optional server
+  rejections; preserve explicitly configured environment values and policy.
+
 - Add configurable terminal history (10,000 lines by default) with an
   independent 64 MiB terminal-page budget per pane. Apply changes to existing
   and new local/SSH sessions; preserve schema-44 preferences when migrating.
