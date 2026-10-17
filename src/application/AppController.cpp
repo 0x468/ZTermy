@@ -3822,6 +3822,11 @@ int AppController::terminalScrollRows() const noexcept
     return m_settings.terminalScrollRows;
 }
 
+int AppController::terminalHistoryLines() const noexcept
+{
+    return m_settings.terminalHistoryLines;
+}
+
 QString AppController::localShellPreference() const
 {
     return config::localShellPreferenceToken(m_settings.localShell);
@@ -9172,7 +9177,7 @@ bool AppController::saveApplicationSettings(
     const bool shouldConfirmMultilinePaste, const QString &language, const bool shouldShowHiddenSftpFiles,
     const bool shouldConfirmSftpDelete, const bool shouldCloseToTray, const bool shouldPreferPerformance,
     const QString &terminalRightClickBehavior, const QString &terminalMiddleClickBehavior,
-    const QString &terminalWordDelimiters, const int terminalScrollRows)
+    const QString &terminalWordDelimiters, const int terminalScrollRows, const int terminalHistoryLines)
 {
     const auto parsedTheme = config::parseThemePreference(theme);
     const auto parsedBackdrop = config::parseBackdropPreference(backdrop);
@@ -9202,6 +9207,7 @@ bool AppController::saveApplicationSettings(
     updated.terminalWordDelimiters = terminalWordDelimiters;
     updated.terminalFontSize = fontSize;
     updated.terminalScrollRows = terminalScrollRows;
+    updated.terminalHistoryLines = terminalHistoryLines;
     updated.theme = *parsedTheme;
     updated.backdrop = *parsedBackdrop;
     updated.accent = *parsedAccent;
@@ -16990,6 +16996,10 @@ bool AppController::persistApplicationSettings(const config::ApplicationSettings
         {
             tab->sftpModel->setShowHidden(m_settings.sftpShowHiddenFiles);
         }
+        if (tab->local)
+            tab->local->setHistoryLines(m_settings.terminalHistoryLines);
+        if (tab->ssh)
+            tab->ssh->setHistoryLines(m_settings.terminalHistoryLines);
     }
     if (terminalThemeChanged && m_previewTerminalThemeId.isEmpty())
     {

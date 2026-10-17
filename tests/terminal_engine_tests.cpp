@@ -75,6 +75,7 @@ class TerminalEngineTests final : public QObject
     Q_OBJECT
 
 private slots:
+    void boundsScrollbackByLinesAndMemory();
     void preservesHostAllocationAlignmentAndFailedResizeContents();
     void separatesSixelWithoutChangingOtherVtOrUtf8();
     void recoversFromCancelledOrIncompleteGraphicsStrings();
@@ -276,6 +277,55 @@ void TerminalEngineTests::observesGraphicsModesWithoutConsumingTerminalControls(
         QCOMPARE(sink.resets, 1);
         QVERIFY(sink.headers.empty());
     }
+}
+
+void TerminalEngineTests::boundsScrollbackByLinesAndMemory()
+{
+    using ztermy::terminal::GhosttyTerminalEngine;
+    using ztermy::terminal::TerminalHistoryLimits;
+    auto created =
+        GhosttyTerminalEngine::create({.columns = 80, .rows = 4}, {.lines = 200, .bytes = std::size_t{256} * 1024});
+    QVERIFY(created);
+    auto &engine = **created;
+    const std::string row = std::string(70, 'x') + "\r\n";
+    const auto output = [&](const int count) {
+        for (int index = 0; index < count; ++index)
+            if (engine.feed(std::as_bytes(std::span(row))))
+                return false;
+        return true;
+    };
+    QVERIFY(output(5000));
+    auto page = engine.scrollbackPage({});
+    QVERIFY(page);
+    // The library prunes whole historical pages, not individual rows.
+    QVERIFY(page->scrollbackLines >= 200);
+    QVERIFY(page->scrollbackLines < 500);
+    // Use a budget above the engine's active-area minimum. Tiny byte budgets
+    // can be raised to fit its mandatory standard pages, independent of rows.
+    QVERIFY(!engine.setHistoryLimits({.lines = 1000000, .bytes = std::size_t{2} * 1024 * 1024}));
+    QVERIFY(output(50000));
+    page = engine.scrollbackPage({});
+    QVERIFY(page);
+    qInfo() << "Byte-limited history rows after 50000 writes:" << page->scrollbackLines;
+    QVERIFY(page->scrollbackLines < 25000); // Byte budget wins over a million requested rows.
+    QVERIFY(engine.setHistoryLimits({.lines = 1000000, .bytes = TerminalHistoryLimits::maximumBytes + 1}));
+    QVERIFY(!engine.setHistoryLimits({.lines = 0}));
+    QVERIFY(output(100));
+    page = engine.scrollbackPage({});
+    QVERIFY(page);
+    QCOMPARE(page->scrollbackLines, std::size_t{0});
+    QVERIFY(!engine.setHistoryLimits({.lines = 5000}));
+    QVERIFY(output(1000));
+    page = engine.scrollbackPage({});
+    QVERIFY(page);
+    QVERIFY(page->scrollbackLines >= 900);
+    auto defaults = GhosttyTerminalEngine::create({.columns = 80, .rows = 4});
+    QVERIFY(defaults);
+    for (int index = 0; index < 1000; ++index)
+        QVERIFY(!(*defaults)->feed(std::as_bytes(std::span(row))));
+    page = (*defaults)->scrollbackPage({});
+    QVERIFY(page);
+    QVERIFY(page->scrollbackLines >= 900);
 }
 
 void TerminalEngineTests::placesSixelAndPreservesSavedCursorAcrossScrolling()

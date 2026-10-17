@@ -65,6 +65,7 @@ struct FakeLocalSessionState final
     std::error_code startError;
     std::vector<ztermy::terminal::TerminalGeometry> startGeometries;
     int colorSchemes = 0;
+    int historyLines = 10000;
 };
 
 class FakeLocalTerminalSession final : public ztermy::terminal::LocalTerminalSessionBackend
@@ -132,6 +133,7 @@ public:
     void clearSelection() override {}
     void copySelection() override {}
     void setColorScheme(const ztermy::terminal::TerminalColorScheme &) override { ++m_state->colorSchemes; }
+    void setHistoryLines(const int lines) override { m_state->historyLines = lines; }
     void requestSelectedText() override
     {
         ++m_state->selectedTextRequests;
@@ -237,6 +239,7 @@ class AppControllerTests final : public QObject
     Q_OBJECT
 
 private slots:
+    void appliesHistorySettingsToExistingAndNewSessions();
     void publishesProgressAndDeduplicatesTerminalNotifications_data();
     void publishesProgressAndDeduplicatesTerminalNotifications();
     void keepsManualTitlesSeparateFromProgramTitles();
@@ -1020,6 +1023,38 @@ void AppControllerTests::loadsRecentProfilesAndParsesQuickTargets()
     QCOMPARE(cappedRecent.constLast().toMap().value(QStringLiteral("id")).toString(), QStringLiteral("capped-2"));
 }
 
+void AppControllerTests::appliesHistorySettingsToExistingAndNewSessions()
+{
+    QTemporaryDir directory;
+    const auto settingsPath = directory.filePath(QStringLiteral("settings.json"));
+    ztermy::config::ApplicationSettings settings;
+    settings.terminalHistoryLines = 12000;
+    QVERIFY(ztermy::config::ApplicationSettingsStore(settingsPath).save(settings));
+    std::vector<std::shared_ptr<FakeLocalSessionState>> sessions;
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")), settingsPath, [&] {
+                                         auto state = std::make_shared<FakeLocalSessionState>();
+                                         sessions.push_back(state);
+                                         return std::make_unique<FakeLocalTerminalSession>(state);
+                                     });
+    QVERIFY(!controller.startLocalTerminalWithShell(QStringLiteral("commandPrompt")).isEmpty());
+    QCOMPARE(sessions.size(), std::size_t{1});
+    QCOMPARE(sessions[0]->historyLines, 12000);
+    QVERIFY(controller.saveApplicationSettings(
+        QStringLiteral("system"), 1.0, QStringLiteral("solid"), QStringLiteral("ztermy"), QStringLiteral("#22C55E"), {},
+        QStringLiteral("Cascadia Mono"), 14, false, true, 0.0, QStringLiteral("terminal"), true, false, false, true,
+        QStringLiteral("system"), false, true, false, false, QStringLiteral("context-menu"), QStringLiteral("disabled"),
+        settings.terminalWordDelimiters, 3, 23000));
+    QCOMPARE(sessions[0]->historyLines, 23000);
+    QVERIFY(!controller.startLocalTerminalWithShell(QStringLiteral("commandPrompt")).isEmpty());
+    QCOMPARE(sessions.size(), std::size_t{2});
+    QCOMPARE(sessions[1]->historyLines, 23000);
+    QVERIFY(controller.resetApplicationSettings());
+    QCOMPARE(sessions[0]->historyLines, 10000);
+    QCOMPARE(sessions[1]->historyLines, 10000);
+    controller.shutdown();
+}
+
 void AppControllerTests::persistsApplicationSettings()
 {
     QTemporaryDir directory;
@@ -1146,7 +1181,7 @@ void AppControllerTests::persistsApplicationSettings()
         QStringLiteral("light"), 0.8, QStringLiteral("micaAlt"), QStringLiteral("custom"), QStringLiteral("#3366cc"),
         QStringLiteral("Microsoft YaHei UI"), QStringLiteral("Cascadia Code"), 18, true, false, 0.45,
         QStringLiteral("bar"), false, true, true, false, QStringLiteral("zh_CN"), true, false, true, true,
-        QStringLiteral("copy-paste"), QStringLiteral("paste"), QStringLiteral(" |,"), 7));
+        QStringLiteral("copy-paste"), QStringLiteral("paste"), QStringLiteral(" |,"), 7, 25000));
     QCOMPARE(settingsChanged.count(), 1);
     QCOMPARE(controller.themePreference(), QStringLiteral("light"));
     QCOMPARE(controller.backdropOpacity(), 0.8);
@@ -1168,6 +1203,7 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(controller.terminalMiddleClickBehavior(), QStringLiteral("paste"));
     QCOMPARE(controller.terminalWordDelimiters(), QStringLiteral(" |,"));
     QCOMPARE(controller.terminalScrollRows(), 7);
+    QCOMPARE(controller.terminalHistoryLines(), 25000);
     QVERIFY(controller.sftpShowHiddenFiles());
     QVERIFY(!controller.sftpConfirmDelete());
     QVERIFY(controller.closeToTray());
@@ -2253,7 +2289,8 @@ void AppControllerTests::persistsConnectionHistorySwitchWithoutStoppingSessions(
         QCOMPARE(reopened.terminalThemeId(), QStringLiteral("ztermy-dark"));
         // Per-row reset (UI V2 chapter 5) compares drafts against these tokens.
         const QVariantMap defaults = reopened.applicationSettingsDefaults();
-        QCOMPARE(defaults.size(), 34);
+        QCOMPARE(defaults.size(), 35);
+        QCOMPARE(defaults.value(QStringLiteral("terminalHistoryLines")).toInt(), 10000);
         QCOMPARE(defaults.value(QStringLiteral("windowsIntegration")).toMap(),
                  ztermy::config::WindowsIntegrationSettings{}.toJson().toVariantMap());
         QCOMPARE(defaults.value(QStringLiteral("terminalTheme")).toString(), QStringLiteral("ztermy-dark"));

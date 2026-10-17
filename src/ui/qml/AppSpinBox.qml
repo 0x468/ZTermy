@@ -7,6 +7,7 @@ SpinBox {
     id: control
 
     property string accessibleName: ""
+    property string toolTipText: ""
 
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
@@ -69,5 +70,11 @@ SpinBox {
 
     HoverHandler {
         cursorShape: control.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+    }
+
+    AppToolTip {
+        hoverTarget: control
+        text: control.toolTipText
+        visible: text.length > 0 && control.hovered
     }
 }

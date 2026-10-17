@@ -464,7 +464,7 @@ struct GhosttyTerminalEngine::Impl
 };
 
 std::expected<std::unique_ptr<GhosttyTerminalEngine>, std::error_code>
-GhosttyTerminalEngine::create(const TerminalGeometry geometry)
+GhosttyTerminalEngine::create(const TerminalGeometry geometry, const TerminalHistoryLimits history)
 {
     if (!geometry.valid())
     {
@@ -619,6 +619,8 @@ GhosttyTerminalEngine::create(const TerminalGeometry geometry)
         return std::unexpected(resizeError);
     }
     engine->m_impl->imageAccess->terminal = engine->m_impl->terminal;
+    if (const auto error = engine->setHistoryLimits(history))
+        return std::unexpected(error);
     registerImageEngine(engine->m_impl->imageAccess);
     return engine;
 }
@@ -626,6 +628,23 @@ GhosttyTerminalEngine::create(const TerminalGeometry geometry)
 GhosttyTerminalEngine::GhosttyTerminalEngine(std::unique_ptr<Impl> impl) : m_impl(std::move(impl)) {}
 
 GhosttyTerminalEngine::~GhosttyTerminalEngine() = default;
+
+std::error_code GhosttyTerminalEngine::setHistoryLimits(const TerminalHistoryLimits history)
+{
+    if (history.lines > TerminalHistoryLimits::maximumLines || history.bytes > TerminalHistoryLimits::maximumBytes
+        || history.bytes == 0)
+        return invalidArgument();
+    const std::scoped_lock imageLock(m_impl->imageAccess->mutex);
+    const std::size_t bytes = history.lines == 0 ? 0 : history.bytes;
+    if (const auto result = ghostty_terminal_set(m_impl->terminal, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES, &bytes);
+        result != GHOSTTY_SUCCESS)
+        return ghosttyError(result);
+    if (const auto result =
+            ghostty_terminal_set(m_impl->terminal, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES, &history.lines);
+        result != GHOSTTY_SUCCESS)
+        return ghosttyError(result);
+    return {};
+}
 
 std::error_code GhosttyTerminalEngine::feed(const std::span<const std::byte> bytes)
 {

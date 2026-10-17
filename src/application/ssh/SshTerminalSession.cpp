@@ -243,7 +243,8 @@ std::error_code SshTerminalSession::start(SshConnectionRequest request, const te
         return std::make_error_code(std::errc::not_enough_memory);
     }
 
-    auto engine = terminal::GhosttyTerminalEngine::create(geometry);
+    auto engine =
+        terminal::GhosttyTerminalEngine::create(geometry, {.lines = static_cast<std::size_t>(m_historyLines)});
     if (!engine)
     {
         return engine.error();
@@ -642,6 +643,14 @@ void SshTerminalSession::setColorScheme(const terminal::TerminalColorScheme &sch
     }
     m_colorScheme = scheme;
     queueCommand(ColorSchemeCommand{.scheme = scheme});
+}
+
+void SshTerminalSession::setHistoryLines(const int lines)
+{
+    if (lines < 0 || lines > 1000000 || m_historyLines == lines)
+        return;
+    m_historyLines = lines;
+    queueCommand(HistoryLimitCommand{.lines = lines});
 }
 
 void SshTerminalSession::queueCommand(Command command)

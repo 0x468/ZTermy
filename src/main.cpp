@@ -1978,7 +1978,8 @@ struct ResizeHitRuntimeCase
     }
 
     if (QCoreApplication::arguments().contains(QStringLiteral("--theme-settings-smoke")))
-        return ztermy::ui::verifyThemeSettings(window, controller, outputDirectory);
+        return ztermy::ui::verifyThemeSettings(window, controller, outputDirectory)
+               && ztermy::ui::verifyHistorySettings(window, controller, outputDirectory);
 
     constexpr std::array accessibleButtons{
         std::pair{"hostsTitleAction", "Workspace"},

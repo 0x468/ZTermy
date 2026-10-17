@@ -53,7 +53,8 @@ public:
         session.signalCommandWake();
     }
 
-    static bool finishWithPendingOutput(SshTerminalSession &session, const bool oldModes = false)
+    static bool finishWithPendingOutput(SshTerminalSession &session, const bool oldModes = false,
+                                        const int historyRows = 0)
     {
         auto engine = terminal::GhosttyTerminalEngine::create({.columns = 80, .rows = 24});
         if (!engine)
@@ -71,6 +72,12 @@ public:
         if (session.m_engine->feed(std::as_bytes(std::span(output))))
             return false;
         session.m_engineDirty.store(true);
+        for (int row = 0; row < historyRows; ++row)
+        {
+            constexpr std::string_view line = "history row\r\n";
+            if (session.m_engine->feed(std::as_bytes(std::span(line))))
+                return false;
+        }
         session.finishWorker(QStringLiteral("closed"), SshConnectionPhase::Disconnected);
         session.m_worker = std::jthread([&session](const std::stop_token &token) {
             session.readOnlyLoop(token);
@@ -271,6 +278,7 @@ class SshTerminalSessionTests final : public QObject
     Q_OBJECT
 
 private slots:
+    void appliesHistoryLimitsToDisconnectedViews();
     void synchronizesOutputOverLoopbackSsh();
     void stopsQueuedMouseAfterRemoteExit_data();
     void stopsQueuedMouseAfterRemoteExit();
@@ -298,6 +306,18 @@ private slots:
     void measuresInteractiveInputQueueLatency();
     void survivesRepeatedConnectDisconnectCycles();
 };
+
+void SshTerminalSessionTests::appliesHistoryLimitsToDisconnectedViews()
+{
+    ztermy::ssh::SshTerminalSession session;
+    QVERIFY(ztermy::ssh::SshTerminalSessionTestPeer::finishWithPendingOutput(session, false, 1000));
+    auto page = session.scrollbackPage({});
+    QVERIFY(page);
+    QVERIFY(page->scrollbackLines > 900);
+    session.setHistoryLines(0);
+    QTRY_VERIFY_WITH_TIMEOUT(session.scrollbackPage({})->scrollbackLines == 0, 3000);
+    session.stop();
+}
 
 void SshTerminalSessionTests::retainsReadOnlyInteractionAfterDisconnect()
 {

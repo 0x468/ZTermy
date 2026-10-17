@@ -60,6 +60,7 @@ public:
     virtual void setShellIntegrationNonce(const std::string &) {}
     virtual void setLaunchSpec(const LocalTerminalLaunchSpec &) {}
     virtual void setColorScheme(const ztermy::terminal::TerminalColorScheme &) {}
+    virtual void setHistoryLines(int) {}
 
 public slots:
     virtual void queueInput(const QByteArray &bytes) = 0;
@@ -110,6 +111,7 @@ public:
     void setShellIntegrationNonce(const std::string &nonce) override;
     void setLaunchSpec(const LocalTerminalLaunchSpec &spec) override;
     void setColorScheme(const ztermy::terminal::TerminalColorScheme &scheme) override;
+    void setHistoryLines(int lines) override;
     [[nodiscard]] diagnostics::LatencySummary inputQueueLatencySummary() const noexcept;
     [[nodiscard]] diagnostics::LatencySummary takeInputQueueLatencySummary() noexcept;
     struct SnapshotCounters
@@ -211,6 +213,10 @@ private:
     {
         TerminalColorScheme scheme;
     };
+    struct HistoryLimitCommand
+    {
+        int lines = 10000;
+    };
     // Queued by the delivery timer when output arrived while a snapshot was
     // still waiting for delivery, so the next frame is built off the timer
     // cadence instead of once per PTY read.
@@ -221,7 +227,7 @@ private:
     using Command = std::variant<InputCommand, PasteCommand, KeyCommand, MouseCommand, FocusCommand, TerminalGeometry,
                                  ScrollCommand, SelectionCommand, SelectionGestureCommand, CopyModeCommand,
                                  SelectAllCommand, CopyCommand, SelectedTextCommand, SearchCommand, ClearSearchCommand,
-                                 ColorSchemeCommand, SnapshotRequestCommand>;
+                                 ColorSchemeCommand, HistoryLimitCommand, SnapshotRequestCommand>;
 
     void queueByteCommand(Command command, std::size_t byteCount);
     void queueCommand(Command command);
@@ -248,6 +254,7 @@ private:
     std::string m_shellIntegrationNonce;
     LocalTerminalLaunchSpec m_launchSpec;
     std::optional<TerminalColorScheme> m_colorScheme;
+    int m_historyLines = 10000;
     std::jthread m_readThread;
     std::jthread m_writeThread;
     std::jthread m_exitThread;

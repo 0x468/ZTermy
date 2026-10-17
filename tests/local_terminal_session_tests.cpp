@@ -118,6 +118,7 @@ class LocalTerminalSessionTests final : public QObject
     Q_OBJECT
 
 private slots:
+    void appliesHistoryLimitsOnTheWorker();
     void isolatesTestShellsWithoutChangingNormalLaunches();
     void buildsEphemeralPowerShellIntegrationCommand();
     void emitsPowerShell5CompatibleOscSequences();
@@ -139,6 +140,29 @@ private slots:
     void processesLargeOutputWithoutStarvingEventLoop();
     void survivesSustainedInteractionWithoutLatencyGrowth();
 };
+
+void LocalTerminalSessionTests::appliesHistoryLimitsOnTheWorker()
+{
+    using ztermy::terminal::LocalTerminalSessionTestPeer;
+    ztermy::terminal::LocalTerminalSession session;
+    QVERIFY(LocalTerminalSessionTestPeer::start(session));
+    std::string output;
+    for (int line = 0; line < 1000; ++line)
+        output += "history row\r\n";
+    QVERIFY(LocalTerminalSessionTestPeer::output(session, output));
+    auto page = session.scrollbackPage({});
+    QVERIFY(page);
+    QVERIFY(page->scrollbackLines > 900);
+    session.setHistoryLines(0);
+    QTRY_VERIFY_WITH_TIMEOUT(session.scrollbackPage({})->scrollbackLines == 0, 3000);
+    session.setHistoryLines(5000);
+    QTest::qWait(100);
+    QVERIFY(LocalTerminalSessionTestPeer::output(session, output));
+    page = session.scrollbackPage({});
+    QVERIFY(page);
+    QVERIFY(page->scrollbackLines > 900);
+    session.stop();
+}
 
 void LocalTerminalSessionTests::isolatesTestShellsWithoutChangingNormalLaunches()
 {

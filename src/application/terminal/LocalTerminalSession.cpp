@@ -87,7 +87,7 @@ std::error_code LocalTerminalSession::start(const TerminalGeometry geometry)
         return std::make_error_code(std::errc::invalid_argument);
     }
 
-    auto engineResult = GhosttyTerminalEngine::create(geometry);
+    auto engineResult = GhosttyTerminalEngine::create(geometry, {.lines = static_cast<std::size_t>(m_historyLines)});
     if (!engineResult)
     {
         return engineResult.error();
@@ -493,6 +493,14 @@ void LocalTerminalSession::setColorScheme(const ztermy::terminal::TerminalColorS
     }
     m_colorScheme = scheme;
     queueCommand(ColorSchemeCommand{.scheme = scheme});
+}
+
+void LocalTerminalSession::setHistoryLines(const int lines)
+{
+    if (lines < 0 || lines > 1000000 || m_historyLines == lines)
+        return;
+    m_historyLines = lines;
+    queueCommand(HistoryLimitCommand{.lines = lines});
 }
 
 void LocalTerminalSession::queueCommand(Command command)
@@ -913,6 +921,19 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
                 continue;
             }
             emit searchResultReady(QString::fromUtf8(search->query), result->current, result->total, result->wrapped);
+            publishSnapshot();
+            continue;
+        }
+
+        if (const auto *history = std::get_if<HistoryLimitCommand>(&command))
+        {
+            std::error_code error;
+            {
+                const std::scoped_lock lock(m_engineMutex);
+                error = m_engine->setHistoryLimits({.lines = static_cast<std::size_t>(history->lines)});
+            }
+            if (error)
+                qCWarning(terminalSessionLog) << "Terminal history limit failed:" << error.message();
             publishSnapshot();
             continue;
         }

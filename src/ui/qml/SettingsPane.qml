@@ -558,6 +558,7 @@ Rectangle {
         middleClickBox.currentIndex = middleClickIndex(controller.terminalMiddleClickBehavior);
         wordDelimitersField.text = controller.terminalWordDelimiters;
         wheelRowsBox.value = controller.terminalScrollRows;
+        historyLinesBox.value = controller.terminalHistoryLines;
         loadSelectionActionDraft();
         sftpShowHiddenSwitch.checked = controller.sftpShowHiddenFiles;
         sftpConfirmDeleteSwitch.checked = controller.sftpConfirmDelete;
@@ -606,7 +607,7 @@ Rectangle {
         }
         const wantsOpaqueSurface = performanceModeDraft;
         const restartRequired = wantsOpaqueSurface !== windowChrome.opaqueSurface || performanceModeDraft !== windowChrome.performanceModeActive;
-        const applicationSaved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, 0.0, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, keepSelectionAfterCopySwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked, windowBehavior.closeToTray, performanceModeDraft, rightClickToken(), middleClickToken(), wordDelimitersField.text, wheelRowsBox.value);
+        const applicationSaved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, 0.0, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, keepSelectionAfterCopySwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked, windowBehavior.closeToTray, performanceModeDraft, rightClickToken(), middleClickToken(), wordDelimitersField.text, wheelRowsBox.value, historyLinesBox.value);
         const effectsSaved = applicationSaved && controller.saveEffectsTier(effectsBox.model[Math.max(0, effectsBox.currentIndex)]);
         const terminalThemeSaved = effectsSaved && themeEditor.save();
         const shellSaved = terminalThemeSaved && controller.saveLocalShellPreference(localShellTokens[Math.max(0, localShellBox.currentIndex)] || "automatic");
@@ -1377,6 +1378,25 @@ Rectangle {
                         editable: true
                         value: 3
                         accessibleName: qsTr("Rows per mouse wheel notch")
+                    }
+
+                    SettingsRowLabel {
+                        text: qsTr("History lines")
+                        dirty: historyLinesBox.value !== pane.defaults.terminalHistoryLines
+                        highlighted: pane.highlightedRow === "terminalHistoryLines"
+                        onReset: historyLinesBox.value = pane.defaults.terminalHistoryLines
+                    }
+                    AppSpinBox {
+                        id: historyLinesBox
+                        objectName: "settingsTerminalHistoryLines"
+                        Layout.fillWidth: true
+                        from: 0
+                        to: 1000000
+                        stepSize: 1000
+                        editable: true
+                        value: 10000
+                        accessibleName: qsTr("History lines")
+                        toolTipText: qsTr("0 disables history. Each terminal retains up to 64 MiB of history pages; the oldest history is discarded when either limit is reached.")
                     }
                 }
             }

@@ -55,6 +55,7 @@ public:
     [[nodiscard]] bool stopFinished() const noexcept { return m_stopFinished.load(); }
     void setOutputSink(const std::shared_ptr<terminal::TerminalOutputSink> &sink);
     void setColorScheme(const terminal::TerminalColorScheme &scheme);
+    void setHistoryLines(int lines);
     [[nodiscard]] diagnostics::LatencySummary inputQueueLatencySummary() const noexcept;
 
 public slots:
@@ -173,6 +174,10 @@ private:
     {
         terminal::TerminalColorScheme scheme;
     };
+    struct HistoryLimitCommand final
+    {
+        int lines = 10000;
+    };
     struct EncodingCommand final
     {
         terminal::TerminalEncoding encoding = terminal::TerminalEncoding::Utf8;
@@ -191,11 +196,11 @@ private:
     {
     };
 
-    using Command =
-        std::variant<InputCommand, PasteCommand, KeyCommand, MouseCommand, FocusCommand, terminal::TerminalGeometry,
-                     ScrollCommand, SelectionCommand, SelectionGestureCommand, CopyModeCommand, SelectAllCommand,
-                     CopyCommand, SelectedTextCommand, SearchCommand, ClearSearchCommand, ColorSchemeCommand,
-                     EncodingCommand, TelemetryVisibilityCommand, TelemetryRefreshCommand, SnapshotRequestCommand>;
+    using Command = std::variant<InputCommand, PasteCommand, KeyCommand, MouseCommand, FocusCommand,
+                                 terminal::TerminalGeometry, ScrollCommand, SelectionCommand, SelectionGestureCommand,
+                                 CopyModeCommand, SelectAllCommand, CopyCommand, SelectedTextCommand, SearchCommand,
+                                 ClearSearchCommand, ColorSchemeCommand, HistoryLimitCommand, EncodingCommand,
+                                 TelemetryVisibilityCommand, TelemetryRefreshCommand, SnapshotRequestCommand>;
 
     void queueByteCommand(Command command, std::size_t byteCount);
     void queueCommand(Command command);
@@ -231,6 +236,7 @@ private:
     std::unique_ptr<terminal::GhosttyTerminalEngine> m_engine;
     std::shared_ptr<terminal::TerminalOutputSink> m_outputSink;
     std::optional<terminal::TerminalColorScheme> m_colorScheme;
+    int m_historyLines = 10000;
     std::jthread m_worker;
     std::jthread m_stopThread;
     std::atomic_bool m_stopFinished = true;

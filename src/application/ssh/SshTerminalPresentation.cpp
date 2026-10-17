@@ -1,6 +1,7 @@
 #include "application/ssh/SshTerminalSession.h"
 #include "domain/terminal/GhosttyTerminalEngine.h"
 
+#include <QDebug>
 #include <QMetaObject>
 #include <chrono>
 #include <utility>
@@ -225,6 +226,14 @@ void SshTerminalSession::readOnlyLoop(const std::stop_token &stopToken)
 
 bool SshTerminalSession::handleViewCommand(const Command &command)
 {
+    if (const auto *history = std::get_if<HistoryLimitCommand>(&command))
+    {
+        const auto error = m_engine->setHistoryLimits({.lines = static_cast<std::size_t>(history->lines)});
+        if (error)
+            qWarning() << "SSH terminal history limit failed:" << error.message();
+        publishSnapshot();
+        return true;
+    }
     if (const auto *scroll = std::get_if<ScrollCommand>(&command))
     {
         m_engine->scrollViewport(scroll->rows);

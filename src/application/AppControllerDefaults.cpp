@@ -40,6 +40,7 @@ QVariantMap AppController::applicationSettingsDefaults() const
          config::terminalMiddleClickPreferenceToken(defaults.terminalMiddleClick)},
         {QStringLiteral("terminalWordDelimiters"), defaults.terminalWordDelimiters},
         {QStringLiteral("terminalScrollRows"), defaults.terminalScrollRows},
+        {QStringLiteral("terminalHistoryLines"), defaults.terminalHistoryLines},
         {QStringLiteral("sftpShowHiddenFiles"), defaults.sftpShowHiddenFiles},
         {QStringLiteral("sftpConfirmDelete"), defaults.sftpConfirmDelete},
         {QStringLiteral("closePaneOnSessionEnd"), defaults.closePaneOnSessionEnd},

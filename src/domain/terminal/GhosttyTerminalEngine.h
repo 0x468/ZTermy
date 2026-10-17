@@ -1,6 +1,7 @@
 #pragma once
 
 #include "domain/terminal/TerminalEngine.h"
+#include "domain/terminal/TerminalHistoryLimits.h"
 
 #include <memory>
 
@@ -14,7 +15,8 @@ public:
     [[nodiscard]] static bool initializeImageBudget() noexcept;
 
     [[nodiscard]] static std::expected<std::unique_ptr<GhosttyTerminalEngine>, std::error_code>
-    create(TerminalGeometry geometry);
+    create(TerminalGeometry geometry, TerminalHistoryLimits history = {});
+    [[nodiscard]] std::error_code setHistoryLimits(TerminalHistoryLimits history);
 
     ~GhosttyTerminalEngine() override;
 

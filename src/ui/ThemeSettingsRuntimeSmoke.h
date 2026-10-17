@@ -1,6 +1,7 @@
 #pragma once
 
 #include "application/AppController.h"
+#include "ui/HistorySettingsRuntimeSmoke.h"
 #include "ui/RuntimeSmokeItems.h"
 
 #include <QDir>

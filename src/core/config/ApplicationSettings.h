@@ -152,6 +152,7 @@ struct ApplicationSettings final
     QString aiProxyUsername;
     int terminalFontSize = 14;
     int terminalScrollRows = 3;
+    int terminalHistoryLines = 10000;
     QStringList terminalSelectionActionOrder = {QStringLiteral("copy"), QStringLiteral("ai"), QStringLiteral("search"),
                                                 QStringLiteral("highlight"), QStringLiteral("unhighlight")};
     QStringList terminalSelectionPrimaryActions = {QStringLiteral("copy"), QStringLiteral("ai")};

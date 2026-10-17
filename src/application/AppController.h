@@ -179,6 +179,7 @@ class AppController final : public QObject
     Q_PROPERTY(QString terminalMiddleClickBehavior READ terminalMiddleClickBehavior NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString terminalWordDelimiters READ terminalWordDelimiters NOTIFY applicationSettingsChanged)
     Q_PROPERTY(int terminalScrollRows READ terminalScrollRows NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(int terminalHistoryLines READ terminalHistoryLines NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString localShellPreference READ localShellPreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QVariantList availableLocalShells READ availableLocalShells NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool sftpShowHiddenFiles READ sftpShowHiddenFiles NOTIFY applicationSettingsChanged)
@@ -352,6 +353,7 @@ public:
     [[nodiscard]] QString terminalMiddleClickBehavior() const;
     [[nodiscard]] QString terminalWordDelimiters() const;
     [[nodiscard]] int terminalScrollRows() const noexcept;
+    [[nodiscard]] int terminalHistoryLines() const noexcept;
     [[nodiscard]] QString localShellPreference() const;
     [[nodiscard]] QVariantList availableLocalShells() const;
     [[nodiscard]] bool sftpShowHiddenFiles() const noexcept;
@@ -638,7 +640,7 @@ public:
         bool shouldConfirmMultilinePaste, const QString &language, bool shouldShowHiddenSftpFiles,
         bool shouldConfirmSftpDelete, bool shouldCloseToTray = false, bool shouldPreferPerformance = false,
         const QString &terminalRightClickBehavior = {}, const QString &terminalMiddleClickBehavior = {},
-        const QString &terminalWordDelimiters = {}, int terminalScrollRows = 3);
+        const QString &terminalWordDelimiters = {}, int terminalScrollRows = 3, int terminalHistoryLines = 10000);
     Q_INVOKABLE bool saveLocalShellPreference(const QString &preference);
     Q_INVOKABLE bool saveTerminalSelectionPopupSettings(bool enabled, const QVariantList &actions);
     Q_INVOKABLE void refreshLocalShells();

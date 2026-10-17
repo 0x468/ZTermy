@@ -123,10 +123,12 @@ void AppController::applyTerminalTheme(TerminalTab &tab) const
     if (tab.local)
     {
         tab.local->setColorScheme(theme.scheme);
+        tab.local->setHistoryLines(m_settings.terminalHistoryLines);
     }
     if (tab.ssh)
     {
         tab.ssh->setColorScheme(theme.scheme);
+        tab.ssh->setHistoryLines(m_settings.terminalHistoryLines);
     }
 }
 

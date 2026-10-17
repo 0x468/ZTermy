@@ -81,7 +81,8 @@ constexpr qint64 immersiveTitleBarSchemaVersion = 41;
 constexpr qint64 globalShortcutSchemaVersion = 42;
 constexpr qint64 explorerMenuSchemaVersion = 43;
 constexpr qint64 reconnectHistorySchemaVersion = 44;
-constexpr qint64 currentSchemaVersion = reconnectHistorySchemaVersion;
+constexpr qint64 terminalHistorySchemaVersion = 45;
+constexpr qint64 currentSchemaVersion = terminalHistorySchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -205,7 +206,9 @@ using ztermy::config::ThemePreference;
            && settings.aiEndpointPath.size() <= 512 && settings.aiModel.size() <= 256 && validCredentialReference
            && validAiProxy && settings.aiProxyUrl.size() <= 2048 && settings.aiProxyUsername.size() <= 256
            && settings.terminalWordDelimiters.size() <= 128 && settings.terminalScrollRows >= 1
-           && settings.terminalScrollRows <= 20 && validSelectionActionOrder(settings.terminalSelectionActionOrder)
+           && settings.terminalScrollRows <= 20 && settings.terminalHistoryLines >= 0
+           && settings.terminalHistoryLines <= 1000000
+           && validSelectionActionOrder(settings.terminalSelectionActionOrder)
            && validSelectionActionSubset(settings.terminalSelectionPrimaryActions)
            && validSelectionActionSubset(settings.terminalSelectionRetainActions);
 }
@@ -429,6 +432,12 @@ using ztermy::config::ThemePreference;
     const qint64 fontSize = fontSizeValue.toInteger(-1);
     const qint64 terminalScrollRows =
         version >= terminalSelectionSettingsSchemaVersion ? terminalScrollRowsValue.toInteger(-1) : 3;
+    const auto historyValue = root.value(QStringLiteral("terminalHistoryLines"));
+    const qint64 historyLines = version >= terminalHistorySchemaVersion ? historyValue.toInteger(-1) : 10000;
+    if (historyLines < 0 || historyLines > 1000000
+        || (version >= terminalHistorySchemaVersion
+            && (!historyValue.isDouble() || historyValue.toDouble() != static_cast<double>(historyLines))))
+        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     const auto selectionActionOrder = version >= terminalSelectionPopupSchemaVersion
                                           ? parseStringList(terminalSelectionActionOrderValue)
                                           : std::optional{defaultSelectionActionOrder()};
@@ -490,6 +499,7 @@ using ztermy::config::ThemePreference;
         .aiProxyUsername = version >= aiProxySchemaVersion ? aiProxyUsernameValue.toString() : QString{},
         .terminalFontSize = static_cast<int>(fontSize),
         .terminalScrollRows = static_cast<int>(terminalScrollRows),
+        .terminalHistoryLines = static_cast<int>(historyLines),
         .terminalSelectionActionOrder = *selectionActionOrder,
         .terminalSelectionPrimaryActions = *selectionPrimaryActions,
         .terminalSelectionRetainActions = *selectionRetainActions,
@@ -711,6 +721,7 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("terminalMiddleClick"), terminalMiddleClickPreferenceToken(settings.terminalMiddleClick)},
         {QStringLiteral("terminalWordDelimiters"), settings.terminalWordDelimiters},
         {QStringLiteral("terminalScrollRows"), settings.terminalScrollRows},
+        {QStringLiteral("terminalHistoryLines"), settings.terminalHistoryLines},
         {QStringLiteral("terminalSelectionPopupEnabled"), settings.terminalSelectionPopupEnabled},
         {QStringLiteral("terminalSelectionActionOrder"),
          QJsonArray::fromStringList(settings.terminalSelectionActionOrder)},
