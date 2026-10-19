@@ -3,6 +3,26 @@
 此目录是产品唯一安装器配置源。修改产品版本、品牌或行为后提交 product.toml。
 工具版本和摘要固定在 zinstaller-tools.lock.json；本机 SDK、staging、输出路径不提交。
 
+## 默认渲染与诊断
+
+对应安装器源码提交 `42fc9f3`，SDK 清单摘要
+`abc8cd1c5a8ebf82b716ab5aa8ee5b68797fd1e39d74441c4c9a662628e7a816`。
+
+2026-10-19 起，安装器默认和 `--renderer auto` 均使用软件渲染，不隐式切换到硬件。
+品牌背景和状态指示器保持静止，保留有限的页面进入与控件交互过渡；
+`--reduced-motion` / `--no-motion` 仍可使用。`--renderer hardware` 仅为显式诊断入口，
+不应在用户 GPU 高负载时作为自动验收路径。
+
+`%TEMP%/zinstaller-renderer-startup.log` 记录 renderer、motion、UI child PID、
+启动和运行时长、就绪后异常退出码，以及脱敏的 UI panic 位置和调用栈。
+就绪后异常不会触发自动重启或重放安装事务；需要用户重新打开并明确开始安装，
+再由既有 journal 恢复流程处理。日志不能替代系统故障转储，也不保证整机卡死期间可写入。
+
+软件渲染用于降低安装界面对 GPU 工作负载的依赖；不表示 Windows 桌面合成完全
+不使用 GPU。此次调整不等于已经确认或消除了具体显卡驱动/硬件故障。
+
+## 构建与系统集成
+
 安装前请求退出使用 `z-series-safe-close-v1`，不是普通 `WM_CLOSE`。
 Ztermy 接收 `ZSeries.SafeClose.v1` 后走托盘“退出”的完整清理流程，隐藏主窗口和
 独立窗口也会退出；平时关闭到托盘的设置保持不变。安装器发送请求后仍须重新检测
