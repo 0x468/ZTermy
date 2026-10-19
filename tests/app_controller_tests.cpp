@@ -4066,6 +4066,13 @@ void AppControllerTests::managesSessionAppearanceAndStructuredRecording()
     QCOMPARE(tab.value(QStringLiteral("sessionCursor")).toString(), QStringLiteral("bar"));
     QCOMPARE(tab.value(QStringLiteral("sessionForeground")).toString(), QStringLiteral("#ffeedd"));
     QCOMPARE(tab.value(QStringLiteral("sessionBackground")).toString(), QStringLiteral("#112233"));
+    QVERIFY(controller.setActiveTerminalAppearance(QStringLiteral("Cascadia Mono"), 12.0, true, 0.55,
+                                                   QStringLiteral("terminal"), {}, {}));
+    tab = controller.terminalTabs().constFirst().toMap();
+    QVERIFY(tab.value(QStringLiteral("sessionForeground")).toString().isEmpty());
+    QVERIFY(tab.value(QStringLiteral("sessionBackground")).toString().isEmpty());
+    QVERIFY(!controller.setActiveTerminalAppearance(QStringLiteral("Cascadia Mono"), 12.0, true, 0.55,
+                                                    QStringLiteral("terminal"), QStringLiteral("invalid"), {}));
     QVERIFY(!controller.setActiveTerminalAppearance(QString(), 16, false, 0.55, QStringLiteral("bar"),
                                                     QStringLiteral("#FFEEDD"), QStringLiteral("#112233")));
     QVERIFY(!controller.setActiveTerminalAppearance(QStringLiteral("Cascadia Mono"), 16, false, 1.1,

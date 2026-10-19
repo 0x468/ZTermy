@@ -11,6 +11,30 @@ Popup {
     required property var controller
     property var terminalTab: null
     property var anchorItem: null
+    property bool loading: true
+    property string editingTabId: ""
+
+    function scheduleLiveUpdate() {
+        if (!loading && visible)
+            liveUpdate.restart();
+    }
+
+    function applyLive() {
+        if (loading || !visible || editingTabId !== controller.activeTerminalTabId)
+            return;
+        controller.setActiveTerminalAppearance(fontField.text, sizeBox.realValue, ligatureSwitch.checked, opacitySlider.value, cursorBox.currentText, foregroundField.text, backgroundField.text, (weightBox.currentIndex + 1) * 100, lineBox.realValue, widthBox.realValue);
+    }
+
+    Timer {
+        id: liveUpdate
+        interval: 80
+        onTriggered: popover.applyLive()
+    }
+
+    onAboutToHide: {
+        liveUpdate.stop();
+        applyLive();
+    }
 
     function placeAtAnchor() {
         const item = anchorItem;
@@ -28,6 +52,9 @@ Popup {
     function openFor(item) {
         if (terminalTab === null)
             return;
+        liveUpdate.stop();
+        loading = true;
+        editingTabId = terminalTab.id;
         fontField.text = terminalTab.sessionFontFamily.length > 0 ? terminalTab.sessionFontFamily : controller.terminalFontFamily;
         sizeBox.value = Math.round((terminalTab.sessionFontSize > 0 ? terminalTab.sessionFontSize : controller.terminalFontSize) * 100);
         weightBox.currentIndex = (terminalTab.sessionFontSize > 0 ? terminalTab.sessionFontWeight : controller.terminalFontWeight) / 100 - 1;
@@ -37,12 +64,13 @@ Popup {
         opacitySlider.value = terminalTab.sessionBackgroundOpacity >= 0 ? terminalTab.sessionBackgroundOpacity : controller.terminalBackgroundOpacity;
         const cursor = terminalTab.sessionCursor.length > 0 ? terminalTab.sessionCursor : controller.cursorPreference;
         cursorBox.currentIndex = Math.max(0, cursorBox.model.indexOf(cursor));
-        foregroundField.text = terminalTab.sessionForeground.length > 0 ? terminalTab.sessionForeground : "#F8FAFC";
-        backgroundField.text = terminalTab.sessionBackground.length > 0 ? terminalTab.sessionBackground : "#0B1017";
+        foregroundField.text = terminalTab.sessionForeground;
+        backgroundField.text = terminalTab.sessionBackground;
         anchorItem = item;
         parent = item;
         placeAtAnchor();
         open();
+        loading = false;
         Qt.callLater(placeAtAnchor);
         fontField.forceActiveFocus();
     }
@@ -87,6 +115,7 @@ Popup {
                 Layout.fillWidth: true
                 placeholderText: qsTr("Font family")
                 maximumLength: 128
+                onTextEdited: popover.scheduleLiveUpdate()
             }
             RowLayout {
                 Layout.fillWidth: true
@@ -104,6 +133,7 @@ Popup {
                     objectName: "sessionFontSize"
                     from: 600
                     to: 4800
+                    onValueChanged: popover.scheduleLiveUpdate()
                 }
             }
             Text {
@@ -118,10 +148,11 @@ Popup {
                 Layout.fillWidth: true
                 model: [qsTr("Thin"), qsTr("Extra light"), qsTr("Light"), qsTr("Normal"), qsTr("Medium"), qsTr("Semi bold"), qsTr("Bold"), qsTr("Extra bold"), qsTr("Black")]
                 accessibleName: qsTr("Font weight")
+                onCurrentIndexChanged: popover.scheduleLiveUpdate()
             }
             RowLayout {
                 Text {
-                    text: qsTr("Line height (×)")
+                    text: qsTr("Line height (natural ×)")
                     color: Theme.text
                     font.family: Theme.uiFont
                     font.pixelSize: Theme.textBody
@@ -131,15 +162,17 @@ Popup {
                 }
                 AppDecimalSpinBox {
                     id: lineBox
+                    objectName: "sessionLineHeight"
                     from: 100
                     to: 300
                     stepSize: 5
-                    accessibleName: qsTr("Line height (×)")
+                    accessibleName: qsTr("Line height (natural ×)")
+                    onValueChanged: popover.scheduleLiveUpdate()
                 }
             }
             RowLayout {
                 Text {
-                    text: qsTr("Cell width (×)")
+                    text: qsTr("Cell width (natural ×)")
                     color: Theme.text
                     font.family: Theme.uiFont
                     font.pixelSize: Theme.textBody
@@ -149,24 +182,18 @@ Popup {
                 }
                 AppDecimalSpinBox {
                     id: widthBox
+                    objectName: "sessionCellWidth"
                     from: 50
                     to: 300
                     stepSize: 5
-                    accessibleName: qsTr("Cell width (×)")
+                    accessibleName: qsTr("Cell width (natural ×)")
+                    onValueChanged: popover.scheduleLiveUpdate()
                 }
-            }
-            TerminalFontSample {
-                Layout.fillWidth: true
-                fontFamily: fontField.text
-                fontPointSize: sizeBox.realValue
-                fontWeight: (weightBox.currentIndex + 1) * 100
-                lineHeightScale: lineBox.realValue
-                cellWidthScale: widthBox.realValue
-                ligaturesEnabled: ligatureSwitch.checked
             }
             AppSwitch {
                 id: ligatureSwitch
                 text: qsTr("Font ligatures")
+                onCheckedChanged: popover.scheduleLiveUpdate()
             }
             Text {
                 text: qsTr("Terminal background opacity: %1%").arg(Math.round(opacitySlider.value * 100))
@@ -180,11 +207,13 @@ Popup {
                 from: 0
                 to: 1
                 stepSize: 0.01
+                onValueChanged: popover.scheduleLiveUpdate()
             }
             AppComboBox {
                 id: cursorBox
                 Layout.fillWidth: true
                 model: ["terminal", "block", "bar", "underline"]
+                onCurrentIndexChanged: popover.scheduleLiveUpdate()
             }
             RowLayout {
                 Layout.fillWidth: true
@@ -194,12 +223,14 @@ Popup {
                     Layout.fillWidth: true
                     placeholderText: qsTr("Default text color")
                     maximumLength: 9
+                    onTextEdited: popover.scheduleLiveUpdate()
                 }
                 AppTextField {
                     id: backgroundField
                     Layout.fillWidth: true
                     placeholderText: qsTr("Default background color")
                     maximumLength: 9
+                    onTextEdited: popover.scheduleLiveUpdate()
                 }
             }
             RowLayout {
@@ -210,16 +241,19 @@ Popup {
                 ActionButton {
                     text: qsTr("Use global defaults")
                     onClicked: {
-                        popover.controller.resetActiveTerminalAppearance();
-                        popover.close();
+                        liveUpdate.stop();
+                        if (popover.editingTabId === popover.controller.activeTerminalTabId) {
+                            popover.controller.resetActiveTerminalAppearance();
+                            popover.openFor(popover.anchorItem);
+                        }
                     }
                 }
                 ActionButton {
-                    text: qsTr("Apply")
+                    text: qsTr("Done")
                     variant: "primary"
                     onClicked: {
-                        if (popover.controller.setActiveTerminalAppearance(fontField.text, sizeBox.realValue, ligatureSwitch.checked, opacitySlider.value, cursorBox.currentText, foregroundField.text, backgroundField.text, (weightBox.currentIndex + 1) * 100, lineBox.realValue, widthBox.realValue))
-                            popover.close();
+                        popover.applyLive();
+                        popover.close();
                     }
                 }
             }

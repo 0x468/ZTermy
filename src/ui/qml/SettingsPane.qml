@@ -821,12 +821,18 @@ Rectangle {
                         }
 
                         Text {
+                            objectName: "settingsRuntimeIdentity"
                             Layout.fillWidth: true
-                            text: qsTr("Windows 11 · Native Qt 6 · C++23")
+                            text: ApplicationInfo.platformDescription + " · " + ApplicationInfo.buildCommit
                             color: Theme.textSubtle
                             wrapMode: Text.WordWrap
                             font.family: Theme.uiFont
                             font.pixelSize: pane.compactLayout ? Theme.textCompact : Theme.textLabel
+
+                            TapHandler {
+                                objectName: "settingsBuildCommitCopy"
+                                onDoubleTapped: ApplicationInfo.copyBuildCommit()
+                            }
                         }
                     }
                 }
@@ -1195,7 +1201,7 @@ Rectangle {
                         accessibleName: qsTr("Font weight")
                     }
                     SettingsRowLabel {
-                        text: qsTr("Line height (×)")
+                        text: qsTr("Line height (natural ×)")
                         dirty: lineHeightBox.realValue !== pane.defaults.terminalLineHeight
                         highlighted: pane.highlightedRow === "terminalLineHeight"
                         onReset: lineHeightBox.value = Math.round(pane.defaults.terminalLineHeight * 100)
@@ -1207,10 +1213,10 @@ Rectangle {
                         from: 100
                         to: 300
                         stepSize: 5
-                        accessibleName: qsTr("Line height (×)")
+                        accessibleName: qsTr("Line height (natural ×)")
                     }
                     SettingsRowLabel {
-                        text: qsTr("Cell width (×)")
+                        text: qsTr("Cell width (natural ×)")
                         dirty: cellWidthBox.realValue !== pane.defaults.terminalCellWidth
                         highlighted: pane.highlightedRow === "terminalCellWidth"
                         onReset: cellWidthBox.value = Math.round(pane.defaults.terminalCellWidth * 100)
@@ -1222,7 +1228,7 @@ Rectangle {
                         from: 50
                         to: 300
                         stepSize: 5
-                        accessibleName: qsTr("Cell width (×)")
+                        accessibleName: qsTr("Cell width (natural ×)")
                     }
                     TerminalFontSample {
                         objectName: "settingsFontSample"

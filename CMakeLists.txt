@@ -118,6 +118,7 @@ qt_standard_project_setup(REQUIRES 6.8)
 
 set(ZTERMY_GENERATED_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 file(MAKE_DIRECTORY "${ZTERMY_GENERATED_DIRECTORY}")
+include(cmake/BuildIdentity.cmake)
 configure_file(
     cmake/ztermy_version.h.in
     "${ZTERMY_GENERATED_DIRECTORY}/ztermy_version.h"
@@ -1056,6 +1057,8 @@ endif()
 
 qt_add_executable(ztermy WIN32
     src/main.cpp
+    src/ui/ApplicationInfo.cpp
+    src/ui/ApplicationInfo.h
     src/ui/WindowStatusRuntimeSmoke.cpp
     src/ui/AiMemoryDiagnostics.h
     src/application/FontCatalog.cpp
@@ -2982,6 +2985,19 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME font-catalog COMMAND ztermy_font_catalog_tests)
+
+    qt_add_executable(ztermy_application_info_tests
+        tests/application_info_tests.cpp
+        src/ui/ApplicationInfo.cpp
+        src/ui/ApplicationInfo.h
+    )
+    target_compile_features(ztermy_application_info_tests PRIVATE cxx_std_23)
+    target_include_directories(ztermy_application_info_tests PRIVATE src "${ZTERMY_GENERATED_DIRECTORY}")
+    target_link_libraries(ztermy_application_info_tests PRIVATE Qt6::Gui Qt6::Qml Qt6::Test)
+    if(MSVC)
+        target_compile_options(ztermy_application_info_tests PRIVATE /permissive- /utf-8 /W4)
+    endif()
+    add_test(NAME application-info COMMAND ztermy_application_info_tests)
 
     qt_add_executable(ztermy_credential_vault_tests
         tests/credential_vault_tests.cpp

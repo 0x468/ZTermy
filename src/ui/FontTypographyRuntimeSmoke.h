@@ -1,13 +1,17 @@
 #pragma once
 
 #include "application/AppController.h"
+#include "ui/ApplicationInfo.h"
 #include "ui/RuntimeSmokeItems.h"
 #include "ui/terminal/TerminalItem.h"
 
+#include <QClipboard>
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMimeData>
+#include <QScopeGuard>
 
 namespace ztermy::ui
 {
@@ -41,6 +45,12 @@ inline bool verifyFontTypography(NativeWindow &window, AppController &controller
     auto *sample = quickItem(root, "settingsFontSample");
     auto *preview = qobject_cast<TerminalItem *>(quickItem(sample, "terminalFontPreview"));
     if (!size || !weight || !line || !width || !preview)
+        return false;
+    auto *sampleViewport = quickItem(sample, "fontSampleViewport");
+    auto *sampleScrollBar = quickItem(sample, "fontSampleHorizontalScrollBar");
+    if (!sampleViewport || !sampleScrollBar
+        || sampleScrollBar->mapToItem(sample, QPointF{}).y()
+               < sampleViewport->mapToItem(sample, QPointF{0, sampleViewport->height()}).y())
         return false;
     const auto document = [&] {
         QFile file(QDir(directory).filePath(QStringLiteral("settings.json")));
@@ -142,11 +152,20 @@ inline bool verifyFontTypography(NativeWindow &window, AppController &controller
         auto *popupItem = popover->property("contentItem").value<QQuickItem *>();
         auto *sessionSize = quickItem(popupItem, "sessionFontSize");
         if (!sessionSize || sessionSize->property("value").toInt() != 1250
-            || popover->property("opacity").toReal() != 1.0
+            || quickItem(popupItem, "terminalFontPreview") != nullptr || popover->property("opacity").toReal() != 1.0
             || popover->property("height").toReal() > window.height() - 16 || (motion && !entering))
         {
             qWarning() << "Session typography enter" << effects << "entering=" << entering
                        << "opacity=" << popover->property("opacity") << "height=" << popover->property("height");
+            return false;
+        }
+        const auto beforeLivePreview = document();
+        sessionSize->setProperty("value", 1425);
+        processWindowEventsFor(180ms);
+        if (viewport->fontPointSize() != 14.25 || document() != beforeLivePreview
+            || controller.terminalFontSize() != 12.5)
+        {
+            qWarning() << "Session live typography changed durable global state or failed to update the pane";
             return false;
         }
         if (QLatin1StringView{effects} == QLatin1StringView{"full"}
@@ -170,6 +189,36 @@ inline bool verifyFontTypography(NativeWindow &window, AppController &controller
             qWarning() << "Session typography exit did not finish" << effects;
             return false;
         }
+        if (!controller.resetActiveTerminalAppearance())
+            return false;
+        processWindowEventsFor(100ms);
+    }
+    if (!QMetaObject::invokeMethod(root, "openSettingsTab"))
+        return false;
+    pane->setProperty("currentCategory", QStringLiteral("about"));
+    processWindowEventsFor(250ms);
+    auto *identity = quickItem(root, "settingsRuntimeIdentity");
+    const ApplicationInfo info;
+    if (!identity || !identity->property("text").toString().contains(info.platformDescription())
+        || !identity->property("text").toString().contains(info.buildCommit())
+        || identity->property("text").toString().contains(QStringLiteral("C++23")))
+        return false;
+    auto *clipboard = QGuiApplication::clipboard();
+    auto previousClipboard = std::make_unique<QMimeData>();
+    if (const auto *previous = clipboard->mimeData())
+        for (const auto &format : previous->formats())
+            previousClipboard->setData(format, previous->data(format));
+    const QScopeGuard restoreClipboard([&] {
+        clipboard->setMimeData(previousClipboard.release());
+    });
+    clipboard->setText(QStringLiteral("build-identity-copy-probe"));
+    const QPointF copyPoint{identity->width() / 2.0, identity->height() / 2.0};
+    sendMouseClick(window, *identity, copyPoint);
+    sendMouseClick(window, *identity, copyPoint);
+    if (clipboard->text() != info.buildCommit())
+    {
+        qWarning() << "About build revision double-click did not copy the short commit";
+        return false;
     }
     qInfo() << "Typography: fractional input, real renderer preview, discard, apply, persistence, live pane, override, "
                "reset, themes and breakpoints passed";

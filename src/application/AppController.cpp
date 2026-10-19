@@ -6122,7 +6122,8 @@ bool AppController::setActiveTerminalAppearance(const QString &fontFamily, const
         || backgroundOpacity > 1.0
         || (normalizedCursor != QStringLiteral("terminal") && normalizedCursor != QStringLiteral("block")
             && normalizedCursor != QStringLiteral("bar") && normalizedCursor != QStringLiteral("underline"))
-        || !foregroundColor.isValid() || !backgroundColor.isValid())
+        || (!foreground.isEmpty() && !foregroundColor.isValid())
+        || (!background.isEmpty() && !backgroundColor.isValid()))
     {
         return false;
     }
@@ -6134,8 +6135,8 @@ bool AppController::setActiveTerminalAppearance(const QString &fontFamily, const
     tab->sessionLigatures = ligatures;
     tab->sessionBackgroundOpacity = backgroundOpacity;
     tab->sessionCursor = normalizedCursor;
-    tab->sessionForeground = foregroundColor.name(QColor::HexRgb);
-    tab->sessionBackground = backgroundColor.name(QColor::HexRgb);
+    tab->sessionForeground = foreground.isEmpty() ? QString{} : foregroundColor.name(QColor::HexRgb);
+    tab->sessionBackground = background.isEmpty() ? QString{} : backgroundColor.name(QColor::HexRgb);
     emit terminalTabsChanged();
     return true;
 }
