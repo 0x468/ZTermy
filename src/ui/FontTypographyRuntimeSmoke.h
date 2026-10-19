@@ -141,6 +141,17 @@ inline bool verifyFontTypography(NativeWindow &window, AppController &controller
     auto *popover = root->findChild<QObject *>(QStringLiteral("terminalSessionSettingsPopover"));
     if (!popover)
         return false;
+    if (!QMetaObject::invokeMethod(popover, "openFor", Q_ARG(QVariant, QVariant::fromValue(viewport))))
+        return false;
+    processWindowEventsFor(300ms);
+    if (!QMetaObject::invokeMethod(popover, "close"))
+        return false;
+    processWindowEventsFor(300ms);
+    if (controller.terminalTabs().constFirst().toMap().value(QStringLiteral("sessionFontSize")).toDouble() != 0)
+    {
+        qWarning() << "Unedited session settings created an appearance override";
+        return false;
+    }
     for (const auto *effects : {"full", "reduced", "off"})
     {
         if (!controller.saveEffectsTier(QString::fromLatin1(effects))
@@ -171,8 +182,14 @@ inline bool verifyFontTypography(NativeWindow &window, AppController &controller
         if (QLatin1StringView{effects} == QLatin1StringView{"full"}
             && !window.grabWindow().save(QDir(directory).filePath(QStringLiteral("font-session-popover.png"))))
             return false;
+        sessionSize->setProperty("value", 1475);
         if (!QMetaObject::invokeMethod(popover, "close"))
             return false;
+        if (controller.terminalTabs().constFirst().toMap().value(QStringLiteral("sessionFontSize")).toDouble() != 14.75)
+        {
+            qWarning() << "Closing session settings lost the pending live adjustment";
+            return false;
+        }
         auto *shield = popupItem->parentItem();
         const auto shieldVisible = [&] {
             return shield && shield->window() == &window && shield->parentItem() && shield->isVisible();
@@ -184,7 +201,8 @@ inline bool verifyFontTypography(NativeWindow &window, AppController &controller
         }
         for (int frame = 0; frame < 40 && (popover->property("visible").toBool() || shieldVisible()); ++frame)
             processWindowEventsFor(50ms);
-        if (popover->property("visible").toBool() || shieldVisible())
+        processWindowEventsFor(50ms);
+        if (popover->property("visible").toBool() || shieldVisible() || viewport->fontPointSize() != 14.75)
         {
             qWarning() << "Session typography exit did not finish" << effects;
             return false;

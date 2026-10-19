@@ -13,16 +13,20 @@ Popup {
     property var anchorItem: null
     property bool loading: true
     property string editingTabId: ""
+    property bool hasPendingChanges: false
 
     function scheduleLiveUpdate() {
-        if (!loading && visible)
+        if (!loading && visible) {
+            hasPendingChanges = true;
             liveUpdate.restart();
+        }
     }
 
     function applyLive() {
-        if (loading || !visible || editingTabId !== controller.activeTerminalTabId)
+        if (loading || !hasPendingChanges || editingTabId !== controller.activeTerminalTabId)
             return;
-        controller.setActiveTerminalAppearance(fontField.text, sizeBox.realValue, ligatureSwitch.checked, opacitySlider.value, cursorBox.currentText, foregroundField.text, backgroundField.text, (weightBox.currentIndex + 1) * 100, lineBox.realValue, widthBox.realValue);
+        if (controller.setActiveTerminalAppearance(fontField.text, sizeBox.realValue, ligatureSwitch.checked, opacitySlider.value, cursorBox.currentText, foregroundField.text, backgroundField.text, (weightBox.currentIndex + 1) * 100, lineBox.realValue, widthBox.realValue))
+            hasPendingChanges = false;
     }
 
     Timer {
@@ -54,6 +58,7 @@ Popup {
             return;
         liveUpdate.stop();
         loading = true;
+        hasPendingChanges = false;
         editingTabId = terminalTab.id;
         fontField.text = terminalTab.sessionFontFamily.length > 0 ? terminalTab.sessionFontFamily : controller.terminalFontFamily;
         sizeBox.value = Math.round((terminalTab.sessionFontSize > 0 ? terminalTab.sessionFontSize : controller.terminalFontSize) * 100);
