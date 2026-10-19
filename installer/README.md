@@ -15,7 +15,7 @@
 
 `%TEMP%/zinstaller-renderer-startup.log` 记录 renderer、motion、UI child PID、
 启动和运行时长、就绪后异常退出码，以及脱敏的 UI panic 位置和调用栈。
-同时记录实际图形后端、首次重绘、关闭时的重绘总数及有界的图形驱动错误。
+同时记录实际图形后端、首次重绘及有界的图形驱动错误。
 已限定 Freya 的软件初始化失败路径：报错而非隐式尝试 GPU；Release 保留应用的
 脱敏 panic hook，不先弹出框架的原始 panic 对话框。
 就绪后异常不会触发自动重启或重放安装事务；需要用户重新打开并明确开始安装，
