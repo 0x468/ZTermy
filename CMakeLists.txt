@@ -4974,6 +4974,13 @@ if(BUILD_TESTING)
     )
     set_tests_properties(title-bar-immersive-runtime PROPERTIES RUN_SERIAL TRUE TIMEOUT 60)
     add_test(
+        NAME title-tab-top-edge-runtime
+        COMMAND ztermy
+            --title-bar-immersive-smoke --title-tab-top-edge-only
+            --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/title-tab-top-edge-runtime"
+    )
+    set_tests_properties(title-tab-top-edge-runtime PROPERTIES RUN_SERIAL TRUE TIMEOUT 90)
+    add_test(
         NAME title-trigger-material-runtime
         COMMAND ztermy
             --title-trigger-material-smoke

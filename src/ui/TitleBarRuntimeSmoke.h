@@ -5,6 +5,7 @@
 #include <QWheelEvent>
 #include "ui/RuntimeSmokeItems.h"
 #include "ui/TitleBarInputRuntimeSmoke.h"
+#include "ui/TitleTabTopEdgeRuntimeSmoke.h"
 
 namespace ztermy::ui
 {
@@ -71,6 +72,8 @@ inline bool verifyImmersiveTitleBar(NativeWindow &window, AppController &control
     }
     if (stableSamples < 5)
         return false;
+    if (args.contains(QStringLiteral("--title-tab-top-edge-only")))
+        return verifyTitleTabTopEdge(window, controller, ids);
     if (!verifySessionStripWindowControls(window))
         return false;
     if (args.contains(QStringLiteral("--session-strip-desktop-review")))

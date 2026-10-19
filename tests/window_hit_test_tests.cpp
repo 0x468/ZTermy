@@ -99,6 +99,9 @@ void WindowHitTestTests::immersiveStripPreservesDragResizeAndTerminalInput()
         revealed.caption = {.x = 320 * scale, .y = 0, .width = 500 * scale, .height = 38 * scale};
         revealed.maximizeButton = {.x = 908 * scale, .y = 0, .width = 46 * scale, .height = 38 * scale};
         QCOMPARE(classifyHitTest({180 * scale, 5 * scale}, size, revealed, false), Client);
+        // A revealed tab reaches the physical top edge when no resize frame is active.
+        QCOMPARE(classifyHitTest({180 * scale, 0}, size, revealed, true), Client);
+        QCOMPARE(classifyHitTest({180 * scale, scale}, size, revealed, false), Top);
         QCOMPARE(classifyHitTest({500 * scale, 5 * scale}, size, revealed, false), Caption);
         QCOMPARE(classifyHitTest({930 * scale, 5 * scale}, size, revealed, false), MaximizeButton);
         QCOMPARE(classifyHitTest({930 * scale, 24 * scale}, size, revealed, false), MaximizeButton);

@@ -760,9 +760,9 @@ LRESULT NativeWindow::nativeHitTest(const HWND windowHandle, const LPARAM lParam
         .dragStripHeight = qRound(m_dragStripHeight * scale),
     };
 
-    const auto area =
-        windowing::classifyHitTest({.x = clientPoint.x, .y = clientPoint.y},
-                                   {.width = clientRect.right, .height = clientRect.bottom}, metrics, maximized());
+    const auto area = windowing::classifyHitTest({.x = clientPoint.x, .y = clientPoint.y},
+                                                 {.width = clientRect.right, .height = clientRect.bottom}, metrics,
+                                                 maximized() || windowStates().testFlag(Qt::WindowFullScreen));
 
     if (area == windowing::HitArea::MaximizeButton)
     {

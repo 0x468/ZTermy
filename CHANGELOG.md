@@ -6,6 +6,9 @@ Release assets are published through GitHub Releases.
 
 ## Unreleased
 
+- Extend title-tab hit targets to the top edge in maximized/fullscreen windows,
+  including revealed auto-hidden chrome, without changing their visual shape.
+
 - Advertise Ztermy's own terminal identity/version locally and through XTVERSION.
   Request identity/color hints over SSH without failing on optional server
   rejections; preserve explicitly configured environment values and policy.

@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 
 // Title-bar tab (UI V2 chapter 6). One treatment for the Workspace, SFTP,
 // Settings and terminal tabs: a hover pill inset from the bar, a material-aware
@@ -32,6 +33,7 @@ Item {
     readonly property bool visualFocus: action.visualFocus
     readonly property bool titleVisible: !compact && title.length > 0
     readonly property Item iconSlot: iconHost
+    readonly property bool topEdgeHitEnabled: Window.window !== null && (Window.window.visibility === Window.Maximized || Window.window.visibility === Window.FullScreen)
 
     signal activated
     signal doubleActivated
@@ -66,6 +68,7 @@ Item {
     // Selected card: drawn over the bar's bottom hairline so it
     // joins the page below.
     Rectangle {
+        objectName: "tabSelectedBackground"
         anchors.fill: parent
         anchors.topMargin: 4
         topLeftRadius: Theme.radiusControl
@@ -158,7 +161,11 @@ Item {
         objectName: control.actionObjectName
         anchors.fill: parent
         anchors.margins: 2
-        anchors.rightMargin: control.trailingInset + 2
+        // Drawing stays inset; a screen-edge target must not inherit that gap.
+        // The derived tab's close action remains above this full-width target.
+        anchors.topMargin: control.topEdgeHitEnabled ? 0 : 2
+        anchors.leftMargin: control.topEdgeHitEnabled ? 0 : 2
+        anchors.rightMargin: control.topEdgeHitEnabled ? 0 : control.trailingInset + 2
         accessibleName: control.accessibleName
         doubleClickEnabled: control.doubleClickEnabled
         onActivated: control.activated()
