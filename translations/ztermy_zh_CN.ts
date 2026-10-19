@@ -5056,11 +5056,6 @@
     </message>
     <message>
         <location filename="../src/ui/qml/SettingsCategoryRail.qml" line="28"/>
-        <source>Font size</source>
-        <translation>字号</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/qml/SettingsCategoryRail.qml" line="28"/>
         <source>Ligatures</source>
         <translation>连字</translation>
     </message>
@@ -5194,6 +5189,26 @@
         <location filename="../src/ui/qml/SettingsCategoryRail.qml" line="349"/>
         <source>Stored locally</source>
         <translation>存储在本地</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsCategoryRail.qml" line="28"/>
+        <source>Font size (pt)</source>
+        <translation>字号（磅）</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsCategoryRail.qml" line="28"/>
+        <source>Font weight</source>
+        <translation>字重</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsCategoryRail.qml" line="28"/>
+        <source>Line height (×)</source>
+        <translation>行高（倍）</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsCategoryRail.qml" line="28"/>
+        <source>Cell width (×)</source>
+        <translation>单元格宽度（倍）</translation>
     </message>
 </context>
 <context>
@@ -5552,16 +5567,6 @@
         <location filename="../src/ui/qml/SettingsPane.qml" line="1158"/>
         <source>This is not a monospaced font. Terminal columns remain fixed, so some glyphs may overlap or leave extra spacing.</source>
         <translation>这不是等宽字体。终端列宽仍保持固定，因此部分字形可能重叠或留下额外间距。</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1166"/>
-        <source>Font size</source>
-        <translation>字号</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1178"/>
-        <source>Terminal font size</source>
-        <translation>终端字号</translation>
     </message>
     <message>
         <location filename="../src/ui/qml/SettingsPane.qml" line="1193"/>
@@ -7321,6 +7326,75 @@
         <source>Retained credential copies were removed from the selected store.</source>
         <translation>已从所选存储中移除保留的凭据副本。</translation>
     </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1169"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1181"/>
+        <source>Font size (pt)</source>
+        <translation>字号（磅）</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1185"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1195"/>
+        <source>Font weight</source>
+        <translation>字重</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1194"/>
+        <source>Thin</source>
+        <translation>极细</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1194"/>
+        <source>Extra light</source>
+        <translation>特细</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1194"/>
+        <source>Light</source>
+        <translation>细</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1194"/>
+        <source>Normal</source>
+        <translation>常规</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1194"/>
+        <source>Medium</source>
+        <translation>中等</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1194"/>
+        <source>Semi bold</source>
+        <translation>半粗</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1194"/>
+        <source>Bold</source>
+        <translation>粗</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1194"/>
+        <source>Extra bold</source>
+        <translation>特粗</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1194"/>
+        <source>Black</source>
+        <translation>极粗</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1198"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1210"/>
+        <source>Line height (×)</source>
+        <translation>行高（倍）</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1213"/>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1225"/>
+        <source>Cell width (×)</source>
+        <translation>单元格宽度（倍）</translation>
+    </message>
 </context>
 <context>
     <name>SettingsRowLabel</name>
@@ -8291,19 +8365,9 @@
         <translation>会话终端设置</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="60"/>
-        <source>Overrides apply only to this tab and are discarded when it closes.</source>
-        <translation>覆盖设置仅应用于此标签页，并会在关闭时丢弃。</translation>
-    </message>
-    <message>
         <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="70"/>
         <source>Font family</source>
         <translation>字体</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="76"/>
-        <source>Font size</source>
-        <translation>字号</translation>
     </message>
     <message>
         <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="92"/>
@@ -8334,6 +8398,73 @@
         <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="141"/>
         <source>Apply</source>
         <translation>应用</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="76"/>
+        <source>Font size (pt)</source>
+        <translation>字号（磅）</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="93"/>
+        <source>Thin</source>
+        <translation>极细</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="93"/>
+        <source>Extra light</source>
+        <translation>特细</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="93"/>
+        <source>Light</source>
+        <translation>细</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="93"/>
+        <source>Normal</source>
+        <translation>常规</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="93"/>
+        <source>Medium</source>
+        <translation>中等</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="93"/>
+        <source>Semi bold</source>
+        <translation>半粗</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="93"/>
+        <source>Bold</source>
+        <translation>粗</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="93"/>
+        <source>Extra bold</source>
+        <translation>特粗</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="93"/>
+        <source>Black</source>
+        <translation>极粗</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="94"/>
+        <source>Font weight</source>
+        <translation>字重</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="98"/>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="109"/>
+        <source>Line height (×)</source>
+        <translation>行高（倍）</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="114"/>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="125"/>
+        <source>Cell width (×)</source>
+        <translation>单元格宽度（倍）</translation>
     </message>
 </context>
 <context>

@@ -17,6 +17,7 @@
 #include "platform/windows/WindowsTaskbarIdentity.h"
 #include "ui/AiLongContentRuntimeSmoke.h"
 #include "ui/AiMemoryDiagnostics.h"
+#include "ui/FontTypographyRuntimeSmoke.h"
 #include "ui/MemoryLifecycleRuntimeSmoke.h"
 #include "ui/RuntimeSmokeItems.h"
 #include "ui/SystemIntegrationRuntimeSmoke.h"
@@ -1953,7 +1954,7 @@ struct ResizeHitRuntimeCase
     }
     const int fontSizeAfterReset = fontSize->property("value").toInt();
     if (matchCount != 1 || highlightedRow != QStringLiteral("terminalFontSize") || !searchCleared || reset == nullptr
-        || fontSizeAfterReset != 14)
+        || fontSizeAfterReset != 1200)
     {
         qCWarning(applicationLog) << "Settings search or row reset contract failed" << "matches=" << matchCount
                                   << "highlightedRow=" << highlightedRow << "searchCleared=" << searchCleared
@@ -2208,7 +2209,7 @@ struct ResizeHitRuntimeCase
         return false;
     }
     sendKey(window, Qt::Key_Up);
-    // The row reset puts the font size back to 14; bump it again so Apply below sees 15.
+    // The row reset puts the font size back to 12 pt; bump by half a point.
     if (!verifySettingsSearchAndRowReset(window, rootObject)
         || !focusItem(window, fontSize, QStringLiteral("settingsFontSize")))
     {
@@ -2239,7 +2240,7 @@ struct ResizeHitRuntimeCase
         && qAbs(rootObject->property("previewBackdropOpacity").toReal() - 0.95) < 0.001;
     const bool draftMatches = themeSelected && accent->property("currentIndex").toInt() == 1
                               && qAbs(opacity->property("value").toReal() - 0.95) < 0.001
-                              && fontSize->property("value").toInt() == 15 && switchesChanged && livePreviewMatches;
+                              && fontSize->property("value").toInt() == 1250 && switchesChanged && livePreviewMatches;
     if (!draftMatches)
     {
         qCWarning(applicationLog) << "Settings keyboard edits did not produce the expected draft"
@@ -2261,7 +2262,7 @@ struct ResizeHitRuntimeCase
     QQuickItem *settingsStatusMessage = quickItem(rootObject, "settingsStatusMessage");
     const bool settingsApplied =
         controller.themePreference() == QStringLiteral("light") && qAbs(controller.backdropOpacity() - 0.95) < 0.001
-        && controller.accentPreference() == QStringLiteral("system") && controller.terminalFontSize() == 15
+        && controller.accentPreference() == QStringLiteral("system") && controller.terminalFontSize() == 12.5
         && !controller.cursorBlink() && controller.copyOnSelect() && !controller.confirmMultilinePaste()
         && settingsStatusMessage != nullptr && settingsStatusMessage->isVisible();
     if (!settingsApplied)
@@ -4783,6 +4784,13 @@ int main(int argc, char *argv[])
         return EXIT_SUCCESS;
     }
 
+    if (QCoreApplication::arguments().contains(QStringLiteral("--font-typography-smoke")))
+    {
+        const bool passed = ztermy::ui::verifyFontTypography(window, appController, paths->dataDirectory);
+        appController.shutdown();
+        window.releaseQmlResources();
+        return passed ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
     if (uiLayoutSmoke)
     {
         const bool passed = runUiLayoutRuntimeSmoke(window, appController, paths->dataDirectory);

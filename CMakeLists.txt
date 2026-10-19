@@ -1269,6 +1269,8 @@ set_source_files_properties(
     src/ui/qml/AppSpinBox.qml
     PROPERTIES QT_RESOURCE_ALIAS AppSpinBox.qml
 )
+set_source_files_properties(src/ui/qml/AppDecimalSpinBox.qml PROPERTIES QT_RESOURCE_ALIAS AppDecimalSpinBox.qml)
+set_source_files_properties(src/ui/qml/TerminalFontSample.qml PROPERTIES QT_RESOURCE_ALIAS TerminalFontSample.qml)
 set_source_files_properties(
     src/ui/qml/AppSwitch.qml
     PROPERTIES QT_RESOURCE_ALIAS AppSwitch.qml
@@ -1545,6 +1547,8 @@ qt_add_qml_module(ztermy
         src/ui/qml/AppMenuSeparator.qml
         src/ui/qml/AppSlider.qml
         src/ui/qml/AppSpinBox.qml
+        src/ui/qml/AppDecimalSpinBox.qml
+        src/ui/qml/TerminalFontSample.qml
         src/ui/qml/AppSwitch.qml
         src/ui/qml/AppTextField.qml
         src/ui/qml/AppToolTip.qml
@@ -4896,6 +4900,9 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME terminal-item COMMAND ztermy_terminal_item_tests)
+    add_test(NAME font-typography-runtime COMMAND ztermy --font-typography-smoke
+        --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/font-typography-runtime")
+    set_tests_properties(font-typography-runtime PROPERTIES RUN_SERIAL TRUE TIMEOUT 60)
 
     qt_add_executable(ztermy_svg_icon_image_provider_tests
         tests/svg_icon_image_provider_tests.cpp

@@ -1,4 +1,5 @@
 #include "ui/terminal/TerminalItem.h"
+#include "core/config/TerminalTypography.h"
 #include "ui/terminal/TerminalLayoutMetrics.h"
 
 #include "platform/windows/WindowsTerminalInput.h"
@@ -106,9 +107,10 @@ TerminalItem::TerminalItem(QQuickItem *parent) : QQuickItem(parent)
     setActiveFocusOnTab(true);
 
     m_font.setFamilies({QStringLiteral("Cascadia Mono"), QStringLiteral("Consolas")});
-    m_font.setPixelSize(14);
+    m_font.setPointSizeF(12.0);
     m_font.setStyleHint(QFont::Monospace);
     m_font.setFixedPitch(true);
+    configureLigatures(m_font, m_ligaturesEnabled);
     refreshFontMetrics();
 
     initializeBlinkTimers();
@@ -164,7 +166,12 @@ QString TerminalItem::fontFamily() const
 
 int TerminalItem::fontPixelSize() const noexcept
 {
-    return m_font.pixelSize();
+    return m_font.pixelSize() > 0 ? m_font.pixelSize() : qRound(fontPointSize() * config::terminalPixelsPerPoint);
+}
+
+qreal TerminalItem::fontPointSize() const noexcept
+{
+    return m_font.pointSizeF() > 0 ? m_font.pointSizeF() : m_font.pixelSize() / config::terminalPixelsPerPoint;
 }
 
 bool TerminalItem::ligaturesEnabled() const noexcept
@@ -486,6 +493,62 @@ void TerminalItem::setFontPixelSize(const int pixelSize)
     refreshFontMetrics();
     m_reportedColumns = 0;
     m_reportedRows = 0;
+    invalidateRenderer(true);
+    reportTerminalSize();
+    notifyInputMethod();
+    emit fontChanged();
+}
+
+void TerminalItem::setFontPointSize(const qreal points)
+{
+    if (!config::validTerminalTypography(points, fontWeight(), m_lineHeightScale, m_cellWidthScale)
+        || qFuzzyCompare(fontPointSize(), points))
+        return;
+    m_font.setPointSizeF(points);
+    refreshFontMetrics();
+    m_reportedColumns = m_reportedRows = 0;
+    invalidateRenderer(true);
+    reportTerminalSize();
+    notifyInputMethod();
+    emit fontChanged();
+}
+
+void TerminalItem::setFontWeight(const int weight)
+{
+    if (!config::validTerminalTypography(fontPointSize(), weight, m_lineHeightScale, m_cellWidthScale)
+        || fontWeight() == weight)
+        return;
+    m_font.setWeight(static_cast<QFont::Weight>(weight));
+    refreshFontMetrics();
+    m_reportedColumns = m_reportedRows = 0;
+    invalidateRenderer(true);
+    reportTerminalSize();
+    notifyInputMethod();
+    emit fontChanged();
+}
+
+void TerminalItem::setLineHeightScale(const qreal scale)
+{
+    if (!config::validTerminalTypography(fontPointSize(), fontWeight(), scale, m_cellWidthScale)
+        || qFuzzyCompare(m_lineHeightScale, scale))
+        return;
+    m_lineHeightScale = scale;
+    refreshFontMetrics();
+    m_reportedColumns = m_reportedRows = 0;
+    invalidateRenderer(true);
+    reportTerminalSize();
+    notifyInputMethod();
+    emit fontChanged();
+}
+
+void TerminalItem::setCellWidthScale(const qreal scale)
+{
+    if (!config::validTerminalTypography(fontPointSize(), fontWeight(), m_lineHeightScale, scale)
+        || qFuzzyCompare(m_cellWidthScale, scale))
+        return;
+    m_cellWidthScale = scale;
+    refreshFontMetrics();
+    m_reportedColumns = m_reportedRows = 0;
     invalidateRenderer(true);
     reportTerminalSize();
     notifyInputMethod();
@@ -2209,10 +2272,14 @@ terminal::TerminalCursorStyle TerminalItem::effectiveCursorStyle() const noexcep
 
 void TerminalItem::refreshFontMetrics()
 {
+    m_font.setLetterSpacing(QFont::AbsoluteSpacing, 0.0);
     const QFontMetricsF metrics(m_font);
-    m_cellWidth = metrics.horizontalAdvance(QLatin1Char('M'));
-    m_cellHeight = std::ceil(metrics.height());
-    m_fontAscent = metrics.ascent();
+    const qreal naturalWidth = metrics.horizontalAdvance(QLatin1Char('M'));
+    m_cellWidth = naturalWidth * m_cellWidthScale;
+    m_font.setLetterSpacing(QFont::AbsoluteSpacing, m_cellWidth - naturalWidth);
+    const qreal naturalHeight = std::ceil(metrics.height());
+    m_cellHeight = std::ceil(naturalHeight * m_lineHeightScale);
+    m_fontAscent = metrics.ascent() + (m_cellHeight - naturalHeight) / 2.0;
     m_styledFontsReady.reset();
 }
 
@@ -2222,7 +2289,8 @@ const QFont &TerminalItem::styledFont(const std::size_t styleBits)
     if (!m_styledFontsReady.test(styleBits))
     {
         font = m_font;
-        font.setBold((styleBits & styleBold) != 0);
+        if ((styleBits & styleBold) != 0)
+            font.setWeight(static_cast<QFont::Weight>(std::max(700, static_cast<int>(m_font.weight()))));
         font.setItalic((styleBits & styleItalic) != 0);
         font.setUnderline((styleBits & styleUnderline) != 0);
         font.setStrikeOut((styleBits & styleStrikeOut) != 0);
@@ -2254,6 +2322,47 @@ void TerminalItem::refreshSearchStyles()
         .caseSensitive = m_searchCaseSensitive,
     }};
     m_searchStyles = highlightTerminalKeywords(*m_snapshot, searchRules);
+}
+
+TerminalFontPreview::TerminalFontPreview(QQuickItem *parent) : TerminalItem(parent)
+{
+    setReadOnly(true);
+    setActiveFocusOnTab(false);
+    setAcceptedMouseButtons(Qt::NoButton);
+    setTerminalCursorVisible(false);
+    setTextBlinkEnabled(false);
+    auto sample = std::make_shared<terminal::TerminalSnapshot>();
+    sample->columns = 64;
+    sample->rows = 4;
+    sample->defaultForeground = {.red = 220, .green = 220, .blue = 220};
+    sample->defaultBackground = {.red = 20, .green = 20, .blue = 20};
+    sample->cells.resize(static_cast<std::size_t>(sample->columns) * sample->rows);
+    const std::array<std::u32string_view, 4> lines{
+        U"PS C:\\Projects> git status --short",
+        U"AaBb 0123456789  {} [] ()  -> => != ===",
+        U"问君能有几多愁  Underneath the Stars",
+        U"Regular  Bold  Italic  https://example.com",
+    };
+    for (std::uint16_t row = 0; row < sample->rows; ++row)
+    {
+        std::uint16_t column = 0;
+        for (const char32_t character : lines[row])
+        {
+            const std::uint8_t width = character >= 0x2e80 && character <= 0x9fff ? 2 : 1;
+            if (column + width > sample->columns)
+                break;
+            auto &cell = sample->cell(column, row);
+            cell.grapheme = character;
+            cell.foreground = sample->defaultForeground;
+            cell.displayWidth = width;
+            cell.bold = row == 3 && column >= 9 && column < 13;
+            cell.italic = (row == 2 && column >= 16) || (row == 3 && column >= 15 && column < 21);
+            if (width == 2)
+                sample->cell(column + 1, row).displayWidth = 0;
+            column += width;
+        }
+    }
+    setSnapshot(std::move(sample));
 }
 
 } // namespace ztermy::ui

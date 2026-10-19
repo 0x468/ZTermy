@@ -150,7 +150,10 @@ struct ApplicationSettings final
     QString aiCredentialReference = QStringLiteral("ai-default");
     QString aiProxyUrl;
     QString aiProxyUsername;
-    int terminalFontSize = 14;
+    double terminalFontSize = 12.0;
+    int terminalFontWeight = 400;
+    double terminalLineHeight = 1.0;
+    double terminalCellWidth = 1.0;
     int terminalScrollRows = 3;
     int terminalHistoryLines = 10000;
     QStringList terminalSelectionActionOrder = {QStringLiteral("copy"), QStringLiteral("ai"), QStringLiteral("search"),

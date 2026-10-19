@@ -1,5 +1,6 @@
 #include "core/config/ApplicationSettings.h"
 #include "core/config/TerminalThemeCatalog.h"
+#include "core/config/TerminalTypography.h"
 
 #include "core/persistence/LastKnownGoodFile.h"
 
@@ -82,7 +83,8 @@ constexpr qint64 globalShortcutSchemaVersion = 42;
 constexpr qint64 explorerMenuSchemaVersion = 43;
 constexpr qint64 reconnectHistorySchemaVersion = 44;
 constexpr qint64 terminalHistorySchemaVersion = 45;
-constexpr qint64 currentSchemaVersion = terminalHistorySchemaVersion;
+constexpr qint64 terminalTypographySchemaVersion = 46;
+constexpr qint64 currentSchemaVersion = terminalTypographySchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -201,10 +203,12 @@ using ztermy::config::ThemePreference;
     return settings.backdropOpacity >= 0.0 && settings.backdropOpacity <= 1.0
            && settings.terminalBackgroundOpacity >= 0.0 && settings.terminalBackgroundOpacity <= 1.0
            && uiFontFamily.size() <= 128 && !fontFamily.isEmpty() && fontFamily.size() <= 128
-           && settings.terminalFontSize >= 8 && settings.terminalFontSize <= 32 && validCustomAccent && validShortcuts
-           && validTerminalTheme && validAiBaseUrl && settings.aiBaseUrl.size() <= 2048
-           && settings.aiEndpointPath.size() <= 512 && settings.aiModel.size() <= 256 && validCredentialReference
-           && validAiProxy && settings.aiProxyUrl.size() <= 2048 && settings.aiProxyUsername.size() <= 256
+           && ztermy::config::validTerminalTypography(settings.terminalFontSize, settings.terminalFontWeight,
+                                                      settings.terminalLineHeight, settings.terminalCellWidth)
+           && validCustomAccent && validShortcuts && validTerminalTheme && validAiBaseUrl
+           && settings.aiBaseUrl.size() <= 2048 && settings.aiEndpointPath.size() <= 512
+           && settings.aiModel.size() <= 256 && validCredentialReference && validAiProxy
+           && settings.aiProxyUrl.size() <= 2048 && settings.aiProxyUsername.size() <= 256
            && settings.terminalWordDelimiters.size() <= 128 && settings.terminalScrollRows >= 1
            && settings.terminalScrollRows <= 20 && settings.terminalHistoryLines >= 0
            && settings.terminalHistoryLines <= 1000000
@@ -429,7 +433,18 @@ using ztermy::config::ThemePreference;
     const auto aiProxy = version >= aiProxySchemaVersion
                              ? ztermy::config::parseAiProxyPreference(aiProxyValue.toString())
                              : std::optional{AiProxyPreference::system};
-    const qint64 fontSize = fontSizeValue.toInteger(-1);
+    const double storedFontSize = fontSizeValue.toDouble(-1);
+    const bool legacyTypography = version < terminalTypographySchemaVersion;
+    if (legacyTypography && (storedFontSize < 8 || storedFontSize > 32 || std::floor(storedFontSize) != storedFontSize))
+        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+    const double fontSize = legacyTypography ? storedFontSize / ztermy::config::terminalPixelsPerPoint : storedFontSize;
+    const auto weightValue = root.value(QStringLiteral("terminalFontWeight"));
+    const auto lineHeightValue = root.value(QStringLiteral("terminalLineHeight"));
+    const auto cellWidthValue = root.value(QStringLiteral("terminalCellWidth"));
+    if (!legacyTypography
+        && (!weightValue.isDouble() || !lineHeightValue.isDouble() || !cellWidthValue.isDouble()
+            || weightValue.toDouble() != static_cast<double>(weightValue.toInt(-1))))
+        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     const qint64 terminalScrollRows =
         version >= terminalSelectionSettingsSchemaVersion ? terminalScrollRowsValue.toInteger(-1) : 3;
     const auto historyValue = root.value(QStringLiteral("terminalHistoryLines"));
@@ -450,7 +465,6 @@ using ztermy::config::ThemePreference;
     if (!theme || !backdrop || !effectsTier || !accent || !cursor || !terminalRightClick || !terminalMiddleClick
         || !localShell || !credentialStorage || !language || !aiProvider || !aiPermission || !aiReasoning || !aiProxy
         || !selectionActionOrder || !selectionPrimaryActions || !selectionRetainActions
-        || fontSizeValue.toDouble() != static_cast<double>(fontSize)
         || (version >= terminalSelectionSettingsSchemaVersion
             && terminalScrollRowsValue.toDouble() != static_cast<double>(terminalScrollRows)))
     {
@@ -497,7 +511,10 @@ using ztermy::config::ThemePreference;
             version >= aiProviderSchemaVersion ? aiCredentialReferenceValue.toString() : QStringLiteral("ai-default"),
         .aiProxyUrl = version >= aiProxySchemaVersion ? aiProxyUrlValue.toString() : QString{},
         .aiProxyUsername = version >= aiProxySchemaVersion ? aiProxyUsernameValue.toString() : QString{},
-        .terminalFontSize = static_cast<int>(fontSize),
+        .terminalFontSize = fontSize,
+        .terminalFontWeight = legacyTypography ? 400 : weightValue.toInt(-1),
+        .terminalLineHeight = legacyTypography ? 1.0 : lineHeightValue.toDouble(-1),
+        .terminalCellWidth = legacyTypography ? 1.0 : cellWidthValue.toDouble(-1),
         .terminalScrollRows = static_cast<int>(terminalScrollRows),
         .terminalHistoryLines = static_cast<int>(historyLines),
         .terminalSelectionActionOrder = *selectionActionOrder,
@@ -709,6 +726,9 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("uiFontFamily"), settings.uiFontFamily.trimmed()},
         {QStringLiteral("terminalFontFamily"), settings.terminalFontFamily.trimmed()},
         {QStringLiteral("terminalFontSize"), settings.terminalFontSize},
+        {QStringLiteral("terminalFontWeight"), settings.terminalFontWeight},
+        {QStringLiteral("terminalLineHeight"), settings.terminalLineHeight},
+        {QStringLiteral("terminalCellWidth"), settings.terminalCellWidth},
         {QStringLiteral("showAllTerminalFonts"), settings.showAllTerminalFonts},
         {QStringLiteral("terminalLigatures"), settings.terminalLigatures},
         {QStringLiteral("terminalBackgroundOpacity"), settings.terminalBackgroundOpacity},

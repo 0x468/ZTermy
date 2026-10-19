@@ -188,7 +188,10 @@ struct TerminalSessionState final
     std::uint32_t searchCurrent = 0;
     std::uint32_t searchTotal = 0;
     std::uint8_t reconnectAttempt = 0;
-    int sessionFontSize = 0;
+    double sessionFontSize = 0;
+    int sessionFontWeight = 400;
+    double sessionLineHeight = 1.0;
+    double sessionCellWidth = 1.0;
     TerminalSessionKind kind = TerminalSessionKind::Local;
     TerminalSelectionAction pendingSelectionAction = TerminalSelectionAction::None;
     ssh::SshConnectionPhase sshPhase = ssh::SshConnectionPhase::Disconnected;

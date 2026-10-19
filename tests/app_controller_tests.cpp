@@ -2289,14 +2289,17 @@ void AppControllerTests::persistsConnectionHistorySwitchWithoutStoppingSessions(
         QCOMPARE(reopened.terminalThemeId(), QStringLiteral("ztermy-dark"));
         // Per-row reset (UI V2 chapter 5) compares drafts against these tokens.
         const QVariantMap defaults = reopened.applicationSettingsDefaults();
-        QCOMPARE(defaults.size(), 35);
+        QCOMPARE(defaults.size(), 38);
         QCOMPARE(defaults.value(QStringLiteral("terminalHistoryLines")).toInt(), 10000);
         QCOMPARE(defaults.value(QStringLiteral("windowsIntegration")).toMap(),
                  ztermy::config::WindowsIntegrationSettings{}.toJson().toVariantMap());
         QCOMPARE(defaults.value(QStringLiteral("terminalTheme")).toString(), QStringLiteral("ztermy-dark"));
         QCOMPARE(defaults.value(QStringLiteral("theme")).toString(), reopened.themePreference());
         QCOMPARE(defaults.value(QStringLiteral("effectsTier")).toString(), QStringLiteral("full"));
-        QCOMPARE(defaults.value(QStringLiteral("terminalFontSize")).toInt(), reopened.terminalFontSize());
+        QCOMPARE(defaults.value(QStringLiteral("terminalFontSize")).toDouble(), reopened.terminalFontSize());
+        QCOMPARE(defaults.value(QStringLiteral("terminalFontWeight")).toInt(), reopened.terminalFontWeight());
+        QCOMPARE(defaults.value(QStringLiteral("terminalLineHeight")).toDouble(), reopened.terminalLineHeight());
+        QCOMPARE(defaults.value(QStringLiteral("terminalCellWidth")).toDouble(), reopened.terminalCellWidth());
         QCOMPARE(defaults.value(QStringLiteral("terminalWordDelimiters")).toString(),
                  reopened.terminalWordDelimiters());
         QVERIFY(defaults.value(QStringLiteral("confirmMultilinePaste")).toBool());
@@ -4048,13 +4051,16 @@ void AppControllerTests::managesSessionAppearanceAndStructuredRecording()
 
     QVERIFY(!controller.startLocalTerminal().isEmpty());
     QVERIFY(!controller.setActiveTerminalEncoding(QStringLiteral("gb18030")));
-    QVERIFY(controller.setActiveTerminalAppearance(QStringLiteral("Cascadia Mono"), 16, false, 0.55,
+    QVERIFY(controller.setActiveTerminalAppearance(QStringLiteral("Cascadia Mono"), 11.25, false, 0.55,
                                                    QStringLiteral("bar"), QStringLiteral("#FFEEDD"),
-                                                   QStringLiteral("#112233")));
+                                                   QStringLiteral("#112233"), 600, 1.25, 1.1));
 
     QVariantMap tab = controller.terminalTabs().constFirst().toMap();
     QCOMPARE(tab.value(QStringLiteral("sessionFontFamily")).toString(), QStringLiteral("Cascadia Mono"));
-    QCOMPARE(tab.value(QStringLiteral("sessionFontSize")).toInt(), 16);
+    QCOMPARE(tab.value(QStringLiteral("sessionFontSize")).toDouble(), 11.25);
+    QCOMPARE(tab.value(QStringLiteral("sessionFontWeight")).toInt(), 600);
+    QCOMPARE(tab.value(QStringLiteral("sessionLineHeight")).toDouble(), 1.25);
+    QCOMPARE(tab.value(QStringLiteral("sessionCellWidth")).toDouble(), 1.1);
     QVERIFY(!tab.value(QStringLiteral("sessionLigatures")).toBool());
     QCOMPARE(tab.value(QStringLiteral("sessionBackgroundOpacity")).toDouble(), 0.55);
     QCOMPARE(tab.value(QStringLiteral("sessionCursor")).toString(), QStringLiteral("bar"));

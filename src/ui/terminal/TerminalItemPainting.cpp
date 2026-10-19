@@ -705,7 +705,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         {
             QFont labelFont = m_font;
             labelFont.setBold(true);
-            labelFont.setPixelSize(std::max(10, m_font.pixelSize() - 1));
+            labelFont.setPixelSize(std::max(10, fontPixelSize() - 1));
             painter.setFont(labelFont);
             const QFontMetricsF labelMetrics(labelFont);
             for (const TerminalQuickSelectTarget &target : m_quickSelectTargets)
@@ -733,7 +733,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         {
             QFont modeFont = m_font;
             modeFont.setBold(true);
-            modeFont.setPixelSize(std::max(10, m_font.pixelSize() - 2));
+            modeFont.setPixelSize(std::max(10, fontPixelSize() - 2));
             painter.setFont(modeFont);
             const QString label = tr("COPY MODE  ·  Esc cancel  ·  Y copy");
             const QFontMetricsF modeMetrics(modeFont);
@@ -832,7 +832,9 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                         QPainter glyphPainter(&glyphImage);
                         glyphPainter.setRenderHint(QPainter::TextAntialiasing);
                         QFont cursorFont = m_font;
-                        cursorFont.setBold(cell.bold);
+                        if (cell.bold)
+                            cursorFont.setWeight(
+                                static_cast<QFont::Weight>(std::max(700, static_cast<int>(m_font.weight()))));
                         cursorFont.setItalic(cell.italic);
                         cursorFont.setUnderline(cell.underlineStyle == terminal::TerminalUnderlineStyle::single
                                                 && !cell.underlineColor);

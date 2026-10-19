@@ -1,6 +1,7 @@
 #include "application/AppController.h"
 #include "application/terminal/TabLifecycleTiming.h"
 #include "application/workbench/RemoteShellHistoryReader.h"
+#include "core/config/TerminalTypography.h"
 
 #include "application/ai/AiNativeToolCatalog.h"
 #include "application/ai/AiPrivacyDiagnostics.h"
@@ -3092,6 +3093,9 @@ QVariantMap AppController::terminalTabValue(const TerminalTab &tab, const QStrin
         {QStringLiteral("terminalEncoding"), tab.terminalEncoding},
         {QStringLiteral("sessionFontFamily"), tab.sessionFontFamily},
         {QStringLiteral("sessionFontSize"), tab.sessionFontSize},
+        {QStringLiteral("sessionFontWeight"), tab.sessionFontWeight},
+        {QStringLiteral("sessionLineHeight"), tab.sessionLineHeight},
+        {QStringLiteral("sessionCellWidth"), tab.sessionCellWidth},
         {QStringLiteral("sessionLigatures"), tab.sessionLigatures},
         {QStringLiteral("sessionBackgroundOpacity"), tab.sessionBackgroundOpacity},
         {QStringLiteral("sessionCursor"), tab.sessionCursor},
@@ -3706,9 +3710,22 @@ QString AppController::terminalFontFamily() const
     return m_settings.terminalFontFamily;
 }
 
-int AppController::terminalFontSize() const noexcept
+qreal AppController::terminalFontSize() const noexcept
 {
     return m_settings.terminalFontSize;
+}
+
+int AppController::terminalFontWeight() const noexcept
+{
+    return m_settings.terminalFontWeight;
+}
+qreal AppController::terminalLineHeight() const noexcept
+{
+    return m_settings.terminalLineHeight;
+}
+qreal AppController::terminalCellWidth() const noexcept
+{
+    return m_settings.terminalCellWidth;
 }
 
 bool AppController::showAllTerminalFonts() const noexcept
@@ -6091,15 +6108,17 @@ bool AppController::setActiveTerminalEncoding(const QString &encoding)
     return true;
 }
 
-bool AppController::setActiveTerminalAppearance(const QString &fontFamily, const int fontSize, const bool ligatures,
+bool AppController::setActiveTerminalAppearance(const QString &fontFamily, const qreal fontSize, const bool ligatures,
                                                 const qreal backgroundOpacity, const QString &cursor,
-                                                const QString &foreground, const QString &background)
+                                                const QString &foreground, const QString &background,
+                                                const int fontWeight, const qreal lineHeight, const qreal cellWidth)
 {
     TerminalTab *tab = activeTab();
     const QString normalizedCursor = cursor.trimmed().toLower();
     const QColor foregroundColor(foreground);
     const QColor backgroundColor(background);
-    if (tab == nullptr || fontFamily.trimmed().isEmpty() || fontSize < 8 || fontSize > 32 || backgroundOpacity < 0.0
+    if (tab == nullptr || fontFamily.trimmed().isEmpty()
+        || !config::validTerminalTypography(fontSize, fontWeight, lineHeight, cellWidth) || backgroundOpacity < 0.0
         || backgroundOpacity > 1.0
         || (normalizedCursor != QStringLiteral("terminal") && normalizedCursor != QStringLiteral("block")
             && normalizedCursor != QStringLiteral("bar") && normalizedCursor != QStringLiteral("underline"))
@@ -6109,6 +6128,9 @@ bool AppController::setActiveTerminalAppearance(const QString &fontFamily, const
     }
     tab->sessionFontFamily = fontFamily.trimmed();
     tab->sessionFontSize = fontSize;
+    tab->sessionFontWeight = fontWeight;
+    tab->sessionLineHeight = lineHeight;
+    tab->sessionCellWidth = cellWidth;
     tab->sessionLigatures = ligatures;
     tab->sessionBackgroundOpacity = backgroundOpacity;
     tab->sessionCursor = normalizedCursor;
@@ -9171,13 +9193,14 @@ bool AppController::connectQuick(const QString &target, const QString &authentic
 
 bool AppController::saveApplicationSettings(
     const QString &theme, const qreal backdropOpacity, const QString &backdrop, const QString &accent,
-    const QString &customAccent, const QString &uiFontFamily, const QString &fontFamily, const int fontSize,
+    const QString &customAccent, const QString &uiFontFamily, const QString &fontFamily, const qreal fontSize,
     const bool showAllFonts, const bool ligatures, const qreal terminalBackgroundOpacity, const QString &cursor,
     const bool cursorShouldBlink, const bool shouldCopyOnSelect, const bool shouldKeepSelectionAfterCopy,
     const bool shouldConfirmMultilinePaste, const QString &language, const bool shouldShowHiddenSftpFiles,
     const bool shouldConfirmSftpDelete, const bool shouldCloseToTray, const bool shouldPreferPerformance,
     const QString &terminalRightClickBehavior, const QString &terminalMiddleClickBehavior,
-    const QString &terminalWordDelimiters, const int terminalScrollRows, const int terminalHistoryLines)
+    const QString &terminalWordDelimiters, const int terminalScrollRows, const int terminalHistoryLines,
+    const int fontWeight, const qreal lineHeight, const qreal cellWidth)
 {
     const auto parsedTheme = config::parseThemePreference(theme);
     const auto parsedBackdrop = config::parseBackdropPreference(backdrop);
@@ -9206,6 +9229,9 @@ bool AppController::saveApplicationSettings(
     updated.terminalFontFamily = fontFamily;
     updated.terminalWordDelimiters = terminalWordDelimiters;
     updated.terminalFontSize = fontSize;
+    updated.terminalFontWeight = fontWeight == 0 ? m_settings.terminalFontWeight : fontWeight;
+    updated.terminalLineHeight = lineHeight == 0.0 ? m_settings.terminalLineHeight : lineHeight;
+    updated.terminalCellWidth = cellWidth == 0.0 ? m_settings.terminalCellWidth : cellWidth;
     updated.terminalScrollRows = terminalScrollRows;
     updated.terminalHistoryLines = terminalHistoryLines;
     updated.theme = *parsedTheme;

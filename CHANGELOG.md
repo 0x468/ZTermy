@@ -6,6 +6,11 @@ Release assets are published through GitHub Releases.
 
 ## Unreleased
 
+- Use points for terminal font size with a 12 pt default; preserve the visual
+  size of existing pixel-based settings during migration.
+- Add a live terminal-rendered font preview, font weight, line-height and
+  cell-width controls to global and session terminal appearance settings.
+
 - Extend title-tab hit targets to the top edge in maximized/fullscreen windows,
   including revealed auto-hidden chrome, without changing their visual shape.
 

@@ -20,7 +20,7 @@ Item {
     property string wordDelimiters: " \t'\"│`|;,()[]{}<>$"
     property int scrollRowsPerWheel: 3
     property string defaultFontFamily: "Cascadia Mono"
-    property int defaultFontSize: 14
+    property real defaultFontSize: 12
     property bool defaultLigatures: true
     property real defaultBackgroundOpacity: 1.0
     property string defaultCursor: "terminal"
@@ -397,7 +397,10 @@ Item {
                 readOnly: !leaf.tab.running
                 focus: !!leaf.node.active || activeFocus
                 fontFamily: leaf.tab.sessionFontFamily && leaf.tab.sessionFontFamily.length > 0 ? leaf.tab.sessionFontFamily : root.defaultFontFamily
-                fontPixelSize: leaf.tab.sessionFontSize > 0 ? leaf.tab.sessionFontSize : root.defaultFontSize
+                fontPointSize: leaf.tab.sessionFontSize > 0 ? leaf.tab.sessionFontSize : root.defaultFontSize
+                fontWeight: leaf.tab.sessionFontSize > 0 ? leaf.tab.sessionFontWeight : root.controller ? root.controller.terminalFontWeight : 400
+                lineHeightScale: leaf.tab.sessionFontSize > 0 ? leaf.tab.sessionLineHeight : root.controller ? root.controller.terminalLineHeight : 1.0
+                cellWidthScale: leaf.tab.sessionFontSize > 0 ? leaf.tab.sessionCellWidth : root.controller ? root.controller.terminalCellWidth : 1.0
                 ligaturesEnabled: leaf.tab.sessionFontSize > 0 ? leaf.tab.sessionLigatures : root.defaultLigatures
                 backgroundOpacity: leaf.tab.sessionBackgroundOpacity >= 0 ? leaf.tab.sessionBackgroundOpacity : root.defaultBackgroundOpacity
                 cursorPreference: leaf.tab.sessionCursor && leaf.tab.sessionCursor.length > 0 ? leaf.tab.sessionCursor : root.defaultCursor

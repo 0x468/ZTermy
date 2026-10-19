@@ -47,6 +47,12 @@ class TerminalItem : public QQuickItem
     Q_PROPERTY(QString statusText READ statusText NOTIFY statusTextChanged)
     Q_PROPERTY(QString fontFamily READ fontFamily WRITE setFontFamily NOTIFY fontChanged)
     Q_PROPERTY(int fontPixelSize READ fontPixelSize WRITE setFontPixelSize NOTIFY fontChanged)
+    Q_PROPERTY(qreal fontPointSize READ fontPointSize WRITE setFontPointSize NOTIFY fontChanged)
+    Q_PROPERTY(int fontWeight READ fontWeight WRITE setFontWeight NOTIFY fontChanged)
+    Q_PROPERTY(qreal lineHeightScale READ lineHeightScale WRITE setLineHeightScale NOTIFY fontChanged)
+    Q_PROPERTY(qreal cellWidthScale READ cellWidthScale WRITE setCellWidthScale NOTIFY fontChanged)
+    Q_PROPERTY(qreal cellPixelWidth READ cellWidth NOTIFY fontChanged)
+    Q_PROPERTY(qreal cellPixelHeight READ cellHeight NOTIFY fontChanged)
     Q_PROPERTY(bool ligaturesEnabled READ ligaturesEnabled WRITE setLigaturesEnabled NOTIFY fontChanged)
     Q_PROPERTY(
         qreal backgroundOpacity READ backgroundOpacity WRITE setBackgroundOpacity NOTIFY backgroundOpacityChanged)
@@ -112,6 +118,10 @@ public:
     [[nodiscard]] QString statusText() const;
     [[nodiscard]] QString fontFamily() const;
     [[nodiscard]] int fontPixelSize() const noexcept;
+    [[nodiscard]] qreal fontPointSize() const noexcept;
+    [[nodiscard]] int fontWeight() const noexcept { return m_font.weight(); }
+    [[nodiscard]] qreal lineHeightScale() const noexcept { return m_lineHeightScale; }
+    [[nodiscard]] qreal cellWidthScale() const noexcept { return m_cellWidthScale; }
     [[nodiscard]] bool hasPreeditText() const noexcept { return !m_preeditText.isEmpty(); }
     [[nodiscard]] bool ligaturesEnabled() const noexcept;
     [[nodiscard]] qreal backgroundOpacity() const noexcept;
@@ -161,6 +171,10 @@ public slots:
     void requestCurrentSize();
     void setFontFamily(const QString &family);
     void setFontPixelSize(int pixelSize);
+    void setFontPointSize(qreal points);
+    void setFontWeight(int weight);
+    void setLineHeightScale(qreal scale);
+    void setCellWidthScale(qreal scale);
     void setLigaturesEnabled(bool enabled);
     void setBackgroundOpacity(qreal opacity);
     void setCursorPreference(const QString &preference);
@@ -315,6 +329,8 @@ private:
 
     ztermy::terminal::TerminalSnapshotPtr m_snapshot;
     QFont m_font;
+    qreal m_lineHeightScale = 1.0;
+    qreal m_cellWidthScale = 1.0;
     qreal m_cellWidth = 1.0;
     qreal m_cellHeight = 1.0;
     qreal m_fontAscent = 0.0;
@@ -390,6 +406,17 @@ private:
     std::uint32_t m_pressedLinkId = 0;
     std::vector<TerminalQuickSelectTarget> m_quickSelectTargets;
     QPointF m_lastDoubleClickPosition;
+};
+
+// A bounded, immutable sample painted by the real terminal renderer. No PTY,
+// SSH session, worker, shell startup or per-cell QML objects are involved.
+class TerminalFontPreview : public TerminalItem
+{
+    Q_OBJECT
+    QML_NAMED_ELEMENT(TerminalFontPreview)
+
+public:
+    explicit TerminalFontPreview(QQuickItem *parent = nullptr);
 };
 
 } // namespace ztermy::ui

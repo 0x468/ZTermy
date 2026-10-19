@@ -164,7 +164,10 @@ class AppController final : public QObject
     Q_PROPERTY(QString customAccent READ customAccent NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString uiFontFamily READ uiFontFamily NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString terminalFontFamily READ terminalFontFamily NOTIFY applicationSettingsChanged)
-    Q_PROPERTY(int terminalFontSize READ terminalFontSize NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(qreal terminalFontSize READ terminalFontSize NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(int terminalFontWeight READ terminalFontWeight NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(qreal terminalLineHeight READ terminalLineHeight NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(qreal terminalCellWidth READ terminalCellWidth NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool showAllTerminalFonts READ showAllTerminalFonts NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool terminalLigatures READ terminalLigatures NOTIFY applicationSettingsChanged)
     Q_PROPERTY(qreal terminalBackgroundOpacity READ terminalBackgroundOpacity NOTIFY applicationSettingsChanged)
@@ -338,7 +341,10 @@ public:
     [[nodiscard]] QString customAccent() const;
     [[nodiscard]] QString uiFontFamily() const;
     [[nodiscard]] QString terminalFontFamily() const;
-    [[nodiscard]] int terminalFontSize() const noexcept;
+    [[nodiscard]] qreal terminalFontSize() const noexcept;
+    [[nodiscard]] int terminalFontWeight() const noexcept;
+    [[nodiscard]] qreal terminalLineHeight() const noexcept;
+    [[nodiscard]] qreal terminalCellWidth() const noexcept;
     [[nodiscard]] bool showAllTerminalFonts() const noexcept;
     [[nodiscard]] bool terminalLigatures() const noexcept;
     [[nodiscard]] qreal terminalBackgroundOpacity() const noexcept;
@@ -518,9 +524,10 @@ public:
                                                     bool caseSensitive);
     Q_INVOKABLE bool deleteActiveKeywordHighlightRule(const QString &id);
     Q_INVOKABLE bool setActiveTerminalEncoding(const QString &encoding);
-    Q_INVOKABLE bool setActiveTerminalAppearance(const QString &fontFamily, int fontSize, bool ligatures,
+    Q_INVOKABLE bool setActiveTerminalAppearance(const QString &fontFamily, qreal fontSize, bool ligatures,
                                                  qreal backgroundOpacity, const QString &cursor,
-                                                 const QString &foreground, const QString &background);
+                                                 const QString &foreground, const QString &background,
+                                                 int fontWeight = 400, qreal lineHeight = 1.0, qreal cellWidth = 1.0);
     Q_INVOKABLE bool resetActiveTerminalAppearance();
     Q_INVOKABLE bool startTerminalScriptRecording();
     Q_INVOKABLE bool pauseTerminalScriptRecording();
@@ -634,13 +641,14 @@ public:
                                   const QString &profileName, const QString &group);
     Q_INVOKABLE bool saveApplicationSettings(
         const QString &theme, qreal backdropOpacity, const QString &backdrop, const QString &accent,
-        const QString &customAccent, const QString &uiFontFamily, const QString &fontFamily, int fontSize,
+        const QString &customAccent, const QString &uiFontFamily, const QString &fontFamily, qreal fontSize,
         bool showAllFonts, bool ligatures, qreal terminalBackgroundOpacity, const QString &cursor,
         bool cursorShouldBlink, bool shouldCopyOnSelect, bool shouldKeepSelectionAfterCopy,
         bool shouldConfirmMultilinePaste, const QString &language, bool shouldShowHiddenSftpFiles,
         bool shouldConfirmSftpDelete, bool shouldCloseToTray = false, bool shouldPreferPerformance = false,
         const QString &terminalRightClickBehavior = {}, const QString &terminalMiddleClickBehavior = {},
-        const QString &terminalWordDelimiters = {}, int terminalScrollRows = 3, int terminalHistoryLines = 10000);
+        const QString &terminalWordDelimiters = {}, int terminalScrollRows = 3, int terminalHistoryLines = 10000,
+        int fontWeight = 0, qreal lineHeight = 0.0, qreal cellWidth = 0.0);
     Q_INVOKABLE bool saveLocalShellPreference(const QString &preference);
     Q_INVOKABLE bool saveTerminalSelectionPopupSettings(bool enabled, const QVariantList &actions);
     Q_INVOKABLE void refreshLocalShells();

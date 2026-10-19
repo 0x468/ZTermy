@@ -546,7 +546,10 @@ Rectangle {
         terminalFontDraft = controller.terminalFontFamily;
         localShellDraft = controller.localShellPreference;
         localShellBox.currentIndex = localShellIndex(localShellDraft);
-        fontSizeBox.value = controller.terminalFontSize;
+        fontSizeBox.value = Math.round(controller.terminalFontSize * 100);
+        fontWeightBox.currentIndex = controller.terminalFontWeight / 100 - 1;
+        lineHeightBox.value = Math.round(controller.terminalLineHeight * 100);
+        cellWidthBox.value = Math.round(controller.terminalCellWidth * 100);
         showAllFontsSwitch.checked = controller.showAllTerminalFonts;
         ligatureSwitch.checked = controller.terminalLigatures;
         cursorBox.currentIndex = cursorIndex(controller.cursorPreference);
@@ -607,7 +610,7 @@ Rectangle {
         }
         const wantsOpaqueSurface = performanceModeDraft;
         const restartRequired = wantsOpaqueSurface !== windowChrome.opaqueSurface || performanceModeDraft !== windowChrome.performanceModeActive;
-        const applicationSaved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, 0.0, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, keepSelectionAfterCopySwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked, windowBehavior.closeToTray, performanceModeDraft, rightClickToken(), middleClickToken(), wordDelimitersField.text, wheelRowsBox.value, historyLinesBox.value);
+        const applicationSaved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.realValue, showAllFontsSwitch.checked, ligatureSwitch.checked, 0.0, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, keepSelectionAfterCopySwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked, windowBehavior.closeToTray, performanceModeDraft, rightClickToken(), middleClickToken(), wordDelimitersField.text, wheelRowsBox.value, historyLinesBox.value, (fontWeightBox.currentIndex + 1) * 100, lineHeightBox.realValue, cellWidthBox.realValue);
         const effectsSaved = applicationSaved && controller.saveEffectsTier(effectsBox.model[Math.max(0, effectsBox.currentIndex)]);
         const terminalThemeSaved = effectsSaved && themeEditor.save();
         const shellSaved = terminalThemeSaved && controller.saveLocalShellPreference(localShellTokens[Math.max(0, localShellBox.currentIndex)] || "automatic");
@@ -1163,19 +1166,74 @@ Rectangle {
                     }
 
                     SettingsRowLabel {
-                        text: qsTr("Font size")
-                        dirty: fontSizeBox.value !== pane.defaults.terminalFontSize
+                        text: qsTr("Font size (pt)")
+                        dirty: fontSizeBox.realValue !== pane.defaults.terminalFontSize
                         highlighted: pane.highlightedRow === "terminalFontSize"
-                        onReset: fontSizeBox.value = pane.defaults.terminalFontSize
+                        onReset: fontSizeBox.value = Math.round(pane.defaults.terminalFontSize * 100)
                     }
-                    AppSpinBox {
+                    AppDecimalSpinBox {
                         id: fontSizeBox
                         objectName: "settingsFontSize"
                         Layout.fillWidth: true
-                        from: 8
-                        to: 32
+                        from: 600
+                        to: 4800
                         editable: true
-                        accessibleName: qsTr("Terminal font size")
+                        accessibleName: qsTr("Font size (pt)")
+                    }
+
+                    SettingsRowLabel {
+                        text: qsTr("Font weight")
+                        dirty: (fontWeightBox.currentIndex + 1) * 100 !== pane.defaults.terminalFontWeight
+                        highlighted: pane.highlightedRow === "terminalFontWeight"
+                        onReset: fontWeightBox.currentIndex = pane.defaults.terminalFontWeight / 100 - 1
+                    }
+                    AppComboBox {
+                        id: fontWeightBox
+                        objectName: "settingsFontWeight"
+                        Layout.fillWidth: true
+                        model: [qsTr("Thin"), qsTr("Extra light"), qsTr("Light"), qsTr("Normal"), qsTr("Medium"), qsTr("Semi bold"), qsTr("Bold"), qsTr("Extra bold"), qsTr("Black")]
+                        accessibleName: qsTr("Font weight")
+                    }
+                    SettingsRowLabel {
+                        text: qsTr("Line height (×)")
+                        dirty: lineHeightBox.realValue !== pane.defaults.terminalLineHeight
+                        highlighted: pane.highlightedRow === "terminalLineHeight"
+                        onReset: lineHeightBox.value = Math.round(pane.defaults.terminalLineHeight * 100)
+                    }
+                    AppDecimalSpinBox {
+                        id: lineHeightBox
+                        objectName: "settingsLineHeight"
+                        Layout.fillWidth: true
+                        from: 100
+                        to: 300
+                        stepSize: 5
+                        accessibleName: qsTr("Line height (×)")
+                    }
+                    SettingsRowLabel {
+                        text: qsTr("Cell width (×)")
+                        dirty: cellWidthBox.realValue !== pane.defaults.terminalCellWidth
+                        highlighted: pane.highlightedRow === "terminalCellWidth"
+                        onReset: cellWidthBox.value = Math.round(pane.defaults.terminalCellWidth * 100)
+                    }
+                    AppDecimalSpinBox {
+                        id: cellWidthBox
+                        objectName: "settingsCellWidth"
+                        Layout.fillWidth: true
+                        from: 50
+                        to: 300
+                        stepSize: 5
+                        accessibleName: qsTr("Cell width (×)")
+                    }
+                    TerminalFontSample {
+                        objectName: "settingsFontSample"
+                        Layout.fillWidth: true
+                        Layout.columnSpan: pane.compactLayout ? 1 : 2
+                        fontFamily: pane.terminalFontDraft
+                        fontPointSize: fontSizeBox.realValue
+                        fontWeight: (fontWeightBox.currentIndex + 1) * 100
+                        lineHeightScale: lineHeightBox.realValue
+                        cellWidthScale: cellWidthBox.realValue
+                        ligaturesEnabled: ligatureSwitch.checked
                     }
 
                     SettingsRowLabel {
@@ -1192,16 +1250,6 @@ Rectangle {
                         enabled: pane.terminalLigatureAvailable
                         text: qsTr("Programming ligatures")
                         accessibleName: qsTr("Enable terminal programming ligatures")
-                    }
-
-                    Text {
-                        Layout.columnSpan: terminalLayout.columns
-                        Layout.fillWidth: true
-                        text: pane.terminalLigatureAvailable ? qsTr("The selected font exposes OpenType ligature features. Ligatures are shaped only across compatible single-width terminal cells.") : qsTr("The selected font does not expose supported OpenType ligature features.")
-                        color: Theme.textMuted
-                        wrapMode: Text.WordWrap
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.textLabel
                     }
 
                     SettingsRowLabel {

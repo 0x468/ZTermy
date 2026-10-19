@@ -118,6 +118,7 @@ private slots:
     void keepsReadOnlyMouseSelectionLocal();
     void exposesScrollbarAndRequestsAbsoluteScroll();
     void preservesNativeMonospaceCellAdvance();
+    void appliesPointTypographyAndPreservesLegacyMetrics();
     void keepsShellPredictionReadableAndDistinctOnLightBackground_data();
     void keepsShellPredictionReadableAndDistinctOnLightBackground();
     void paintsColoredUnderlineStyles();
@@ -1700,6 +1701,44 @@ void TerminalItemTests::preservesNativeMonospaceCellAdvance()
 
     QCOMPARE(cursorRect.x() - originRect.x(), nativeAdvance);
     QCOMPARE(cursorRect.width(), nativeAdvance);
+}
+
+void TerminalItemTests::appliesPointTypographyAndPreservesLegacyMetrics()
+{
+    TestableTerminalItem item;
+    QCOMPARE(item.fontPointSize(), 12.0);
+    QCOMPARE(item.fontWeight(), 400);
+    item.setSnapshot(snapshotAt(1, 1));
+    for (const int pixels : {8, 14, 15, 16, 23, 32})
+    {
+        item.setFontPixelSize(pixels);
+        const auto legacy = item.inputMethodQuery(Qt::ImCursorRectangle).toRectF();
+        item.setFontPointSize(12.0); // Do not skip a same-size pixel-to-point transition.
+        item.setFontPointSize(pixels * 0.75);
+        QCOMPARE(item.fontPointSize(), pixels * 0.75);
+        QCOMPARE(item.inputMethodQuery(Qt::ImCursorRectangle).toRectF(), legacy);
+    }
+    item.setFontPointSize(12.5);
+    item.setFontWeight(600);
+    const auto natural = item.inputMethodQuery(Qt::ImCursorRectangle).toRectF();
+    item.setLineHeightScale(1.5);
+    item.setCellWidthScale(1.25);
+    const auto spaced = item.inputMethodQuery(Qt::ImCursorRectangle).toRectF();
+    QCOMPARE(spaced.width(), natural.width() * 1.25);
+    QCOMPARE(spaced.height(), std::ceil(natural.height() * 1.5));
+    QCOMPARE(item.fontWeight(), 600);
+    item.setFontPointSize(std::numeric_limits<qreal>::quiet_NaN());
+    item.setFontWeight(450);
+    item.setLineHeightScale(0.5);
+    item.setCellWidthScale(0);
+    QCOMPARE(item.fontPointSize(), 12.5);
+    QCOMPARE(item.fontWeight(), 600);
+    QCOMPARE(item.lineHeightScale(), 1.5);
+    QCOMPARE(item.cellWidthScale(), 1.25);
+    ztermy::ui::TerminalFontPreview preview;
+    QVERIFY(preview.readOnly());
+    QVERIFY(!preview.terminalCursorVisible());
+    QCOMPARE(preview.fontPointSize(), 12.0);
 }
 
 void TerminalItemTests::keepsShellPredictionReadableAndDistinctOnLightBackground_data()
