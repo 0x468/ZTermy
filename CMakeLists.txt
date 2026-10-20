@@ -4919,6 +4919,9 @@ if(BUILD_TESTING)
     add_test(NAME font-typography-runtime COMMAND ztermy --font-typography-smoke
         --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/font-typography-runtime")
     set_tests_properties(font-typography-runtime PROPERTIES RUN_SERIAL TRUE TIMEOUT 60)
+    add_test(NAME settings-reset-runtime COMMAND ztermy --settings-reset-smoke
+        --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/settings-reset-runtime")
+    set_tests_properties(settings-reset-runtime PROPERTIES RUN_SERIAL TRUE TIMEOUT 60)
 
     qt_add_executable(ztermy_svg_icon_image_provider_tests
         tests/svg_icon_image_provider_tests.cpp

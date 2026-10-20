@@ -8,10 +8,13 @@ namespace ztermy
 {
 
 // Draft defaults for the settings page (UI V2 chapter 5). Rows compare their
-// draft against these tokens to offer a per-row reset.
+// draft against these tokens to offer per-row and category resets.
 QVariantMap AppController::applicationSettingsDefaults() const
 {
     const config::ApplicationSettings defaults;
+    auto interaction = defaults.windowInteraction.toJson().toVariantMap();
+    interaction.insert(QStringLiteral("allowTerminalTitleChanges"), defaults.allowTerminalTitleChanges);
+    interaction.insert(QStringLiteral("restoreDetachedWindows"), defaults.restoreDetachedWindows);
     return {
         {QStringLiteral("theme"), config::themePreferenceToken(defaults.theme)},
         {QStringLiteral("backdrop"), config::backdropPreferenceToken(defaults.backdrop)},
@@ -46,6 +49,9 @@ QVariantMap AppController::applicationSettingsDefaults() const
         {QStringLiteral("terminalHistoryLines"), defaults.terminalHistoryLines},
         {QStringLiteral("sftpShowHiddenFiles"), defaults.sftpShowHiddenFiles},
         {QStringLiteral("sftpConfirmDelete"), defaults.sftpConfirmDelete},
+        {QStringLiteral("closeToTray"), defaults.closeToTray},
+        {QStringLiteral("performanceMode"), defaults.performanceMode},
+        {QStringLiteral("windowInteraction"), interaction},
         {QStringLiteral("closePaneOnSessionEnd"), defaults.closePaneOnSessionEnd},
         {QStringLiteral("retainHistoryOnReconnect"), defaults.retainHistoryOnReconnect},
         {QStringLiteral("preserveTerminalSessions"), defaults.preserveTerminalSessions},

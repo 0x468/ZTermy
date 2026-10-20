@@ -20,6 +20,7 @@
 #include "ui/FontTypographyRuntimeSmoke.h"
 #include "ui/MemoryLifecycleRuntimeSmoke.h"
 #include "ui/RuntimeSmokeItems.h"
+#include "ui/SettingsResetRuntimeSmoke.h"
 #include "ui/SystemIntegrationRuntimeSmoke.h"
 #include "ui/TerminalLifecycleRuntimeSmoke.h"
 #include "ui/ThemeSettingsRuntimeSmoke.h"
@@ -4784,6 +4785,13 @@ int main(int argc, char *argv[])
         return EXIT_SUCCESS;
     }
 
+    if (QCoreApplication::arguments().contains(QStringLiteral("--settings-reset-smoke")))
+    {
+        const bool passed = ztermy::ui::verifySettingsReset(window, appController, paths->dataDirectory);
+        appController.shutdown();
+        window.releaseQmlResources();
+        return passed ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
     if (QCoreApplication::arguments().contains(QStringLiteral("--font-typography-smoke")))
     {
         const bool passed = ztermy::ui::verifyFontTypography(window, appController, paths->dataDirectory);

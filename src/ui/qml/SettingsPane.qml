@@ -533,6 +533,67 @@ Rectangle {
         return null;
     }
 
+    function resetCategoryDraft() {
+        loadingDraft = true;
+        if (currentCategory === "application") {
+            windowBehavior.closeToTray = defaults.closeToTray;
+            windowBehavior.closePaneOnSessionEnd = defaults.closePaneOnSessionEnd;
+            windowBehavior.retainHistoryOnReconnect = defaults.retainHistoryOnReconnect;
+            windowBehavior.preserveTerminalSessions = defaults.preserveTerminalSessions;
+            windowBehavior.reopenLocalSessions = defaults.reopenLocalSessions;
+            windowBehavior.reconnectRemoteSessions = defaults.reconnectRemoteSessions;
+            windowBehavior.loadInteraction(defaults.windowInteraction);
+            performanceModeDraft = defaults.performanceMode;
+            windowBehavior.performanceMode = performanceModeDraft;
+        } else if (currentCategory === "appearance") {
+            controller.endTerminalThemePreview();
+            languageDraft = defaults.language;
+            uiFontDraft = defaults.uiFontFamily;
+            opacitySlider.value = defaults.backdropOpacity;
+            backdropBox.currentIndex = backdropIndex(defaults.backdrop);
+            effectsBox.currentIndex = effectsBox.model.indexOf(defaults.effectsTier);
+            accentBox.currentIndex = accentIndex(defaults.accent);
+            customAccentField.text = defaults.customAccent;
+            themeEditor.mode = defaults.theme === "system" ? "system" : "fixed";
+            themeEditor.fixedTheme = defaults.terminalTheme;
+            themeEditor.lightTheme = defaults.lightTheme;
+            themeEditor.darkTheme = defaults.darkTheme;
+            themeEditor.editingSlot = false;
+        } else if (currentCategory === "terminal") {
+            terminalFontDraft = defaults.terminalFontFamily;
+            fontSizeBox.value = Math.round(defaults.terminalFontSize * 100);
+            fontWeightBox.currentIndex = defaults.terminalFontWeight / 100 - 1;
+            lineHeightBox.value = Math.round(defaults.terminalLineHeight * 100);
+            cellWidthBox.value = Math.round(defaults.terminalCellWidth * 100);
+            showAllFontsSwitch.checked = defaults.showAllTerminalFonts;
+            ligatureSwitch.checked = defaults.terminalLigatures;
+            localShellDraft = defaults.localShell;
+            localShellBox.currentIndex = localShellIndex(localShellDraft);
+            cursorBox.currentIndex = cursorIndex(defaults.cursor);
+            cursorBlinkSwitch.checked = defaults.cursorBlink;
+            copyOnSelectSwitch.checked = defaults.copyOnSelect;
+            keepSelectionAfterCopySwitch.checked = defaults.keepSelectionAfterCopy;
+            multilinePasteSwitch.checked = defaults.confirmMultilinePaste;
+            rightClickBox.currentIndex = rightClickIndex(defaults.terminalRightClick);
+            middleClickBox.currentIndex = middleClickIndex(defaults.terminalMiddleClick);
+            wordDelimitersField.text = defaults.terminalWordDelimiters;
+            wheelRowsBox.value = defaults.terminalScrollRows;
+            historyLinesBox.value = defaults.terminalHistoryLines;
+            resetSelectionActionDraft();
+        } else if (currentCategory === "sftp") {
+            sftpShowHiddenSwitch.checked = defaults.sftpShowHiddenFiles;
+            sftpConfirmDeleteSwitch.checked = defaults.sftpConfirmDelete;
+        } else if (currentCategory === "windows") {
+            windowsIntegration.load(defaults.windowsIntegration);
+        }
+        loadingDraft = false;
+        if (currentCategory === "appearance")
+            themeEditor.previewDraft();
+        else
+            previewDraft();
+        presentStatus(qsTr("Defaults restored to the draft. Apply to save."), false, true);
+    }
+
     function loadDraft() {
         loadingDraft = true;
         controller.endTerminalThemePreview();
@@ -3363,17 +3424,8 @@ Rectangle {
                     objectName: "settingsReset"
                     Layout.fillWidth: pane.compactLayout
                     text: qsTr("Reset defaults")
-                    accessibleName: pane.currentCategory === "windows" ? qsTr("Reset Windows integration settings") : qsTr("Reset all application settings")
-                    onClicked: {
-                        if (pane.currentCategory === "windows") {
-                            windowsIntegration.load(pane.defaults.windowsIntegration);
-                            pane.presentStatus(qsTr("Defaults restored to the draft. Apply to save."), false, true);
-                            return;
-                        }
-                        const reset = pane.controller.resetApplicationSettings();
-                        pane.presentStatus(reset ? qsTr("Default settings restored.") : qsTr("Default settings could not be restored."), !reset, reset);
-                        pane.loadDraft();
-                    }
+                    accessibleName: qsTr("Reset current category settings")
+                    onClicked: pane.resetCategoryDraft()
                 }
 
                 Item {

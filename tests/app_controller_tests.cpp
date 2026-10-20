@@ -2289,7 +2289,10 @@ void AppControllerTests::persistsConnectionHistorySwitchWithoutStoppingSessions(
         QCOMPARE(reopened.terminalThemeId(), QStringLiteral("ztermy-dark"));
         // Per-row reset (UI V2 chapter 5) compares drafts against these tokens.
         const QVariantMap defaults = reopened.applicationSettingsDefaults();
-        QCOMPARE(defaults.size(), 38);
+        QCOMPARE(defaults.size(), 41);
+        QCOMPARE(defaults.value(QStringLiteral("windowInteraction")).toMap(), reopened.windowInteractionSettings());
+        QCOMPARE(defaults.value(QStringLiteral("closeToTray")).toBool(), reopened.closeToTray());
+        QCOMPARE(defaults.value(QStringLiteral("performanceMode")).toBool(), reopened.performanceMode());
         QCOMPARE(defaults.value(QStringLiteral("terminalHistoryLines")).toInt(), 10000);
         QCOMPARE(defaults.value(QStringLiteral("windowsIntegration")).toMap(),
                  ztermy::config::WindowsIntegrationSettings{}.toJson().toVariantMap());
