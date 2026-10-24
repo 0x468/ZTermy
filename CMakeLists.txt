@@ -1300,6 +1300,7 @@ set_source_files_properties(
     src/ui/qml/ConfirmationDialog.qml
     PROPERTIES QT_RESOURCE_ALIAS ConfirmationDialog.qml
 )
+set_source_files_properties(src/ui/qml/MultilinePasteDialog.qml PROPERTIES QT_RESOURCE_ALIAS MultilinePasteDialog.qml)
 set_source_files_properties(
     src/ui/qml/ThemeSettings.qml
     PROPERTIES QT_RESOURCE_ALIAS ThemeSettings.qml
@@ -1560,6 +1561,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/EditableSuggestionField.qml
         src/ui/qml/CaptionButton.qml
         src/ui/qml/ConfirmationDialog.qml
+        src/ui/qml/MultilinePasteDialog.qml
         src/ui/qml/ThemeSettings.qml
         src/ui/qml/ThemeWindowPreview.qml
         src/ui/qml/CommandPalette.qml

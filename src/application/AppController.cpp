@@ -3819,6 +3819,40 @@ bool AppController::confirmMultilinePaste() const noexcept
     return m_settings.confirmMultilinePaste;
 }
 
+bool AppController::multilinePasteConfirmationRequired() const noexcept
+{
+    return m_settings.confirmMultilinePaste && !m_multilinePasteSuppressedForRun;
+}
+
+bool AppController::applyMultilinePastePromptChoice(const QString &choice, const QString &windowId)
+{
+    if (choice == QStringLiteral("once"))
+        return true;
+    if (choice == QStringLiteral("run"))
+    {
+        if (!m_multilinePasteSuppressedForRun)
+        {
+            m_multilinePasteSuppressedForRun = true;
+            emit multilinePastePromptChanged();
+        }
+        return true;
+    }
+    if (choice != QStringLiteral("never"))
+        return false;
+    if (!m_settings.confirmMultilinePaste)
+        return true;
+    auto updated = m_settings;
+    updated.confirmMultilinePaste = false;
+    if (persistApplicationSettings(updated))
+        return true;
+    emit terminalNotificationRequested({
+        {QStringLiteral("windowId"), windowId},
+        {QStringLiteral("title"), tr("Paste preference could not be saved")},
+        {QStringLiteral("message"), tr("The previous confirmation setting has been kept.")},
+    });
+    return false;
+}
+
 QString AppController::terminalRightClickBehavior() const
 {
     return config::terminalRightClickPreferenceToken(m_settings.terminalRightClick);
@@ -17000,6 +17034,7 @@ bool AppController::persistApplicationSettings(const config::ApplicationSettings
         return true;
     }
     const bool aiDebugTraceChanged = m_settings.aiDebugTraceEnabled != settings.aiDebugTraceEnabled;
+    const bool pastePromptChanged = m_settings.confirmMultilinePaste != settings.confirmMultilinePaste;
     const bool titlePolicyChanged = m_settings.allowTerminalTitleChanges != settings.allowTerminalTitleChanges;
     const bool terminalThemeChanged =
         m_settings.terminalTheme != settings.terminalTheme || m_settings.theme != settings.theme
@@ -17007,6 +17042,12 @@ bool AppController::persistApplicationSettings(const config::ApplicationSettings
     const bool aiProxyChanged = m_settings.aiProxy != settings.aiProxy || m_settings.aiProxyUrl != settings.aiProxyUrl
                                 || m_settings.aiProxyUsername != settings.aiProxyUsername;
     m_settings = settings;
+    if (pastePromptChanged)
+    {
+        if (settings.confirmMultilinePaste)
+            m_multilinePasteSuppressedForRun = false;
+        emit multilinePastePromptChanged();
+    }
     if (m_connectionHistoryController)
         m_connectionHistoryController->setRecordingEnabled(m_settings.connectionHistoryEnabled);
     if (aiDebugTraceChanged)

@@ -178,6 +178,8 @@ class AppController final : public QObject
     Q_PROPERTY(bool terminalSelectionPopupEnabled READ terminalSelectionPopupEnabled NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QVariantList terminalSelectionActions READ terminalSelectionActions NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool confirmMultilinePaste READ confirmMultilinePaste NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(bool multilinePasteConfirmationRequired READ multilinePasteConfirmationRequired NOTIFY
+                   multilinePastePromptChanged)
     Q_PROPERTY(QString terminalRightClickBehavior READ terminalRightClickBehavior NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString terminalMiddleClickBehavior READ terminalMiddleClickBehavior NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString terminalWordDelimiters READ terminalWordDelimiters NOTIFY applicationSettingsChanged)
@@ -355,6 +357,9 @@ public:
     [[nodiscard]] bool terminalSelectionPopupEnabled() const noexcept;
     [[nodiscard]] QVariantList terminalSelectionActions() const;
     [[nodiscard]] bool confirmMultilinePaste() const noexcept;
+    [[nodiscard]] bool multilinePasteConfirmationRequired() const noexcept;
+    Q_INVOKABLE bool applyMultilinePastePromptChoice(const QString &choice,
+                                                     const QString &windowId = QStringLiteral("main"));
     [[nodiscard]] QString terminalRightClickBehavior() const;
     [[nodiscard]] QString terminalMiddleClickBehavior() const;
     [[nodiscard]] QString terminalWordDelimiters() const;
@@ -770,6 +775,7 @@ signals:
     void terminalSearchChanged();
     void remoteTelemetryChanged();
     void applicationSettingsChanged();
+    void multilinePastePromptChanged();
     void terminalThemeChanged();
     void terminalThemesChanged();
     void credentialVaultChanged();
@@ -1129,6 +1135,7 @@ private:
     bool m_openSshImportRunning = false;
     bool m_terminalTelemetryVisible = false;
     bool m_terminalTabsChangePending = false;
+    bool m_multilinePasteSuppressedForRun = false;
     qint64 m_nextTerminalNotificationMs = 0;
     QTimer m_scriptExecutionTimer;
     QString m_hostKeyTransferTaskId;

@@ -14,8 +14,6 @@ Window {
     property var workspace: ({})
     readonly property string zoomedPaneId: hostRoot.paneZoomByWorkspace[workspaceId] || ""
     readonly property var visibleLayoutRoot: zoomedPaneId.length > 0 ? hostRoot.findTerminalPane(workspace.root, zoomedPaneId) || workspace.root : workspace.root
-    property var pendingPasteViewport: null
-    property int pendingPasteLineCount: 0
     property bool windowControlsVisible: false
     readonly property int titleTriggerHeight: hostRoot.titleTriggerHeight
     readonly property int windowControlsHeight: Theme.titleBarHeight
@@ -317,7 +315,7 @@ Window {
         keepSelectionAfterCopy: detachedTerminalWindow.hostRoot.controller.keepSelectionAfterCopy
         selectionActionPopupEnabled: detachedTerminalWindow.hostRoot.controller.terminalSelectionPopupEnabled
         selectionActions: detachedTerminalWindow.hostRoot.controller.terminalSelectionActions
-        confirmMultilinePaste: detachedTerminalWindow.hostRoot.controller.confirmMultilinePaste
+        confirmMultilinePaste: detachedTerminalWindow.hostRoot.controller.multilinePasteConfirmationRequired
         rightClickBehavior: detachedTerminalWindow.hostRoot.controller.terminalRightClickBehavior
         middleClickBehavior: detachedTerminalWindow.hostRoot.controller.terminalMiddleClickBehavior
         wordDelimiters: detachedTerminalWindow.hostRoot.controller.terminalWordDelimiters
@@ -325,9 +323,7 @@ Window {
         onDetachPaneRequested: paneId => detachedTerminalWindow.coordinator.reattachPane(detachedTerminalWindow, paneId)
         onZoomPaneRequested: paneId => detachedTerminalWindow.hostRoot.toggleTerminalPaneZoom(paneId, detachedTerminalWindow.workspaceId)
         onMultilinePasteConfirmationRequested: (viewport, lineCount) => {
-            detachedTerminalWindow.pendingPasteViewport = viewport;
-            detachedTerminalWindow.pendingPasteLineCount = lineCount;
-            Qt.callLater(() => pasteDialog.openFrom(viewport));
+            pasteDialog.openFor(viewport, lineCount);
         }
         onTerminalSearchRequested: detachedTerminalWindow.openTerminalSearch()
     }
@@ -371,20 +367,10 @@ Window {
         z: 100
     }
 
-    ConfirmationDialog {
+    MultilinePasteDialog {
         id: pasteDialog
-        heading: qsTr("Paste multiple lines?")
-        description: qsTr("Paste %n line(s) into this detached terminal?", "", detachedTerminalWindow.pendingPasteLineCount)
-        acceptText: qsTr("Paste")
-        onAccepted: {
-            if (detachedTerminalWindow.pendingPasteViewport)
-                detachedTerminalWindow.pendingPasteViewport.resolveMultilinePaste(true);
-            detachedTerminalWindow.pendingPasteViewport = null;
-        }
-        onRejected: {
-            if (detachedTerminalWindow.pendingPasteViewport)
-                detachedTerminalWindow.pendingPasteViewport.resolveMultilinePaste(false);
-            detachedTerminalWindow.pendingPasteViewport = null;
-        }
+        objectName: "multilinePasteDialog"
+        controller: detachedTerminalWindow.hostRoot.controller
+        ownerWindowId: detachedTerminalWindow.ownerWindowId
     }
 }

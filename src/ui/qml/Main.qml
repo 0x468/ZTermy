@@ -50,8 +50,6 @@ Rectangle {
     property bool startupVaultPromptPresented: false
     property real pageReveal: 1.0
     property alias terminalSearchVisible: searchPanel.visible
-    property int pendingPasteLineCount: 0
-    property var pendingPasteViewport: null
     property bool appearancePreviewActive: false
     property bool windowInteractionPreviewActive: false
     property bool previewAutoHideTitleBar: false
@@ -2234,7 +2232,7 @@ Rectangle {
                             keepSelectionAfterCopy: root.controller.keepSelectionAfterCopy
                             selectionActionPopupEnabled: root.controller.terminalSelectionPopupEnabled
                             selectionActions: root.controller.terminalSelectionActions
-                            confirmMultilinePaste: root.controller.confirmMultilinePaste
+                            confirmMultilinePaste: root.controller.multilinePasteConfirmationRequired
                             rightClickBehavior: root.controller.terminalRightClickBehavior
                             middleClickBehavior: root.controller.terminalMiddleClickBehavior
                             wordDelimiters: root.controller.terminalWordDelimiters
@@ -2242,11 +2240,7 @@ Rectangle {
 
                             Component.onCompleted: forceActiveFocus()
                             onMultilinePasteConfirmationRequested: (viewport, lineCount) => {
-                                root.pendingPasteLineCount = lineCount;
-                                root.pendingPasteViewport = viewport;
-                                // A context menu restores focus as it closes. Defer the modal so it
-                                // becomes the final focus owner regardless of how paste was invoked.
-                                Qt.callLater(() => multilinePasteDialog.openFrom(viewport));
+                                multilinePasteDialog.openFor(viewport, lineCount);
                             }
                             onZoomPaneRequested: paneId => root.toggleTerminalPaneZoom(paneId)
                             onDetachPaneRequested: paneId => root.detachTerminalPane(paneId)
@@ -2647,28 +2641,10 @@ Rectangle {
         }
     }
 
-    ConfirmationDialog {
+    MultilinePasteDialog {
         id: multilinePasteDialog
-
-        heading: qsTr("Paste multiple lines?")
-        description: qsTr("The clipboard contains %n line(s). Pasting may execute commands immediately in the active terminal.", "", root.pendingPasteLineCount)
-        acceptText: qsTr("Paste")
-        acceptObjectName: "multilinePasteAccept"
-        rejectObjectName: "multilinePasteReject"
-        onAccepted: {
-            if (root.pendingPasteViewport) {
-                root.pendingPasteViewport.resolveMultilinePaste(true);
-            }
-            root.pendingPasteLineCount = 0;
-            root.pendingPasteViewport = null;
-        }
-        onRejected: {
-            if (root.pendingPasteViewport) {
-                root.pendingPasteViewport.resolveMultilinePaste(false);
-            }
-            root.pendingPasteLineCount = 0;
-            root.pendingPasteViewport = null;
-        }
+        objectName: "multilinePasteDialog"
+        controller: root.controller
     }
 
     TerminalWindowCoordinator {

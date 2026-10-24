@@ -16,6 +16,7 @@ Dialog {
     property bool destructive: false
     property bool acceptEnabled: true
     property Item focusRestoreItem: null
+    property Component extraContent: null
 
     function openFrom(item) {
         focusRestoreItem = item;
@@ -82,6 +83,12 @@ Dialog {
             wrapMode: Text.WordWrap
             font.family: Theme.uiFont
             font.pixelSize: Theme.textBody
+        }
+
+        Loader {
+            Layout.fillWidth: true
+            visible: sourceComponent !== null
+            sourceComponent: control.extraContent
         }
 
         RowLayout {

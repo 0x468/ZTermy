@@ -239,6 +239,8 @@ class AppControllerTests final : public QObject
     Q_OBJECT
 
 private slots:
+    void scopesMultilinePasteConfirmationWithoutLosingSettings();
+    void preservesPasteConfirmationWhenSavingFails();
     void appliesHistorySettingsToExistingAndNewSessions();
     void publishesProgressAndDeduplicatesTerminalNotifications_data();
     void publishesProgressAndDeduplicatesTerminalNotifications();
@@ -1021,6 +1023,82 @@ void AppControllerTests::loadsRecentProfilesAndParsesQuickTargets()
     QCOMPARE(cappedRecent.size(), 6);
     QCOMPARE(cappedRecent.constFirst().toMap().value(QStringLiteral("id")).toString(), QStringLiteral("capped-7"));
     QCOMPARE(cappedRecent.constLast().toMap().value(QStringLiteral("id")).toString(), QStringLiteral("capped-2"));
+}
+
+void AppControllerTests::scopesMultilinePasteConfirmationWithoutLosingSettings()
+{
+    QTemporaryDir directory;
+    const auto path = directory.filePath(QStringLiteral("settings.json"));
+    ztermy::config::ApplicationSettings settings;
+    settings.terminalHistoryLines = 23456;
+    QVERIFY(ztermy::config::ApplicationSettingsStore(path).save(settings));
+    const auto read = [&] {
+        QFile file(path);
+        return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
+    };
+    const auto makeController = [&] {
+        return std::make_unique<ztermy::AppController>(directory.filePath(QStringLiteral("profiles.json")),
+                                                       directory.filePath(QStringLiteral("known_hosts.json")), path);
+    };
+    auto controller = makeController();
+    const auto original = read();
+    QVERIFY(!original.isEmpty());
+    QSignalSpy promptChanged(controller.get(), &ztermy::AppController::multilinePastePromptChanged);
+    QVERIFY(controller->multilinePasteConfirmationRequired());
+    QVERIFY(controller->applyMultilinePastePromptChoice(QStringLiteral("once")));
+    QVERIFY(!controller->applyMultilinePastePromptChoice(QStringLiteral("invalid")));
+    QCOMPARE(read(), original);
+    QVERIFY(controller->applyMultilinePastePromptChoice(QStringLiteral("run")));
+    QVERIFY(controller->confirmMultilinePaste());
+    QVERIFY(!controller->multilinePasteConfirmationRequired());
+    QCOMPARE(promptChanged.count(), 1);
+    QVERIFY(controller->applyMultilinePastePromptChoice(QStringLiteral("run")));
+    QCOMPARE(promptChanged.count(), 1);
+    QCOMPARE(read(), original);
+    // An unrelated settings save must not cancel the in-memory choice.
+    QVERIFY(controller->saveLocalShellPreference(QStringLiteral("commandPrompt")));
+    QVERIFY(!controller->multilinePasteConfirmationRequired());
+    controller.reset();
+    controller = makeController();
+    QVERIFY(controller->multilinePasteConfirmationRequired());
+    auto expected = QJsonDocument::fromJson(read()).object();
+    expected.insert(QStringLiteral("confirmMultilinePaste"), false);
+    QVERIFY(controller->applyMultilinePastePromptChoice(QStringLiteral("never")));
+    QVERIFY(!controller->confirmMultilinePaste());
+    QVERIFY(!controller->multilinePasteConfirmationRequired());
+    QCOMPARE(QJsonDocument::fromJson(read()).object(), expected);
+    controller.reset();
+    controller = makeController();
+    QVERIFY(!controller->multilinePasteConfirmationRequired());
+    QVERIFY(controller->resetApplicationSettings());
+    QVERIFY(controller->multilinePasteConfirmationRequired());
+}
+
+void AppControllerTests::preservesPasteConfirmationWhenSavingFails()
+{
+    QTemporaryDir directory;
+    const auto path = directory.filePath(QStringLiteral("settings.json"));
+    QVERIFY(ztermy::config::ApplicationSettingsStore(path).save({}));
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")), path);
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    auto future = QJsonDocument::fromJson(file.readAll()).object();
+    file.close();
+    future.insert(QStringLiteral("version"), future.value(QStringLiteral("version")).toInt() + 1);
+    const auto bytes = QJsonDocument(future).toJson();
+    QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    QCOMPARE(file.write(bytes), bytes.size());
+    file.close();
+    QSignalSpy notification(&controller, &ztermy::AppController::terminalNotificationRequested);
+    QVERIFY(!controller.applyMultilinePastePromptChoice(QStringLiteral("never"), QStringLiteral("owned-window")));
+    QVERIFY(controller.confirmMultilinePaste());
+    QVERIFY(controller.multilinePasteConfirmationRequired());
+    QCOMPARE(notification.count(), 1);
+    QCOMPARE(notification.front().front().toMap().value(QStringLiteral("windowId")).toString(),
+             QStringLiteral("owned-window"));
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), bytes);
 }
 
 void AppControllerTests::appliesHistorySettingsToExistingAndNewSessions()
