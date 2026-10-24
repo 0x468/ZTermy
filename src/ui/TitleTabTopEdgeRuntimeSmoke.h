@@ -25,6 +25,32 @@ inline bool verifyTitleTabTopEdge(NativeWindow &window, AppController &controlle
     if (!captures.mkpath(QStringLiteral(".")))
         return false;
     const auto handle = reinterpret_cast<HWND>(window.winId()); // NOLINT(performance-no-int-to-ptr)
+    // Windows may deny a background process's requestActivate(). A real click
+    // in this fixture's owned client area grants foreground without relaxing
+    // the native input preconditions or touching any other application's HWND.
+    if (GetForegroundWindow() != handle)
+    {
+        RECT client{};
+        if (!GetClientRect(handle, &client))
+            return false;
+        POINT center{.x = (client.left + client.right) / 2, .y = (client.top + client.bottom) / 2};
+        ClientToScreen(handle, &center);
+        if (GetAncestor(WindowFromPoint(center), GA_ROOT) != handle || !SetCursorPos(center.x, center.y))
+            return false;
+        std::array<INPUT, 2> activateInputs{};
+        activateInputs[0].type = INPUT_MOUSE;
+        activateInputs[0].mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
+        activateInputs[1].type = INPUT_MOUSE;
+        activateInputs[1].mi.dwFlags = MOUSEEVENTF_LEFTUP;
+        if (SendInput(static_cast<UINT>(activateInputs.size()), activateInputs.data(), static_cast<int>(sizeof(INPUT)))
+                != activateInputs.size()
+            || !processWindowEventsUntil(
+                [&] {
+                    return GetForegroundWindow() == handle;
+                },
+                1s))
+            return false;
+    }
     const auto originalState = window.windowStates();
     const auto originalGeometry = window.geometry();
     const auto restore = qScopeGuard([&] {

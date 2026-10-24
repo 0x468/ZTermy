@@ -1059,6 +1059,8 @@ qt_add_executable(ztermy WIN32
     src/main.cpp
     src/ui/ApplicationInfo.cpp
     src/ui/ApplicationInfo.h
+    src/ui/TerminalTabListModel.cpp
+    src/ui/TerminalTabListModel.h
     src/ui/WindowStatusRuntimeSmoke.cpp
     src/ui/AiMemoryDiagnostics.h
     src/application/FontCatalog.cpp
@@ -2998,6 +3000,18 @@ if(BUILD_TESTING)
         target_compile_options(ztermy_application_info_tests PRIVATE /permissive- /utf-8 /W4)
     endif()
     add_test(NAME application-info COMMAND ztermy_application_info_tests)
+    qt_add_executable(ztermy_terminal_tab_list_model_tests
+        tests/terminal_tab_list_model_tests.cpp
+        src/ui/TerminalTabListModel.cpp
+        src/ui/TerminalTabListModel.h
+    )
+    target_compile_features(ztermy_terminal_tab_list_model_tests PRIVATE cxx_std_23)
+    target_include_directories(ztermy_terminal_tab_list_model_tests PRIVATE src)
+    target_link_libraries(ztermy_terminal_tab_list_model_tests PRIVATE Qt6::Qml Qt6::Test)
+    if(MSVC)
+        target_compile_options(ztermy_terminal_tab_list_model_tests PRIVATE /permissive- /utf-8 /W4)
+    endif()
+    add_test(NAME terminal-tab-list-model COMMAND ztermy_terminal_tab_list_model_tests)
 
     qt_add_executable(ztermy_credential_vault_tests
         tests/credential_vault_tests.cpp
@@ -4922,6 +4936,12 @@ if(BUILD_TESTING)
     add_test(NAME settings-reset-runtime COMMAND ztermy --settings-reset-smoke
         --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/settings-reset-runtime")
     set_tests_properties(settings-reset-runtime PROPERTIES RUN_SERIAL TRUE TIMEOUT 60)
+    add_test(NAME tab-refresh-runtime COMMAND ztermy --tab-refresh-smoke
+        --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/tab-refresh-runtime")
+    set_tests_properties(tab-refresh-runtime PROPERTIES RUN_SERIAL TRUE TIMEOUT 60)
+    add_test(NAME tab-refresh-reset-control COMMAND ztermy --tab-refresh-smoke --tab-refresh-reset-control
+        --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/tab-refresh-reset-control")
+    set_tests_properties(tab-refresh-reset-control PROPERTIES RUN_SERIAL TRUE TIMEOUT 60)
 
     qt_add_executable(ztermy_svg_icon_image_provider_tests
         tests/svg_icon_image_provider_tests.cpp

@@ -275,12 +275,12 @@ Rectangle {
         return Math.min(184, Math.max(112, titleTabFontMetrics.advanceWidth(String(title || "")) + 66));
     }
 
-    function terminalTabStripDesiredWidth() {
+    function terminalTabStripDesiredWidth(tabs) {
         if (equalTerminalTabWidths)
-            return root.mainTerminalTabs.length * 184 + Math.max(0, root.mainTerminalTabs.length - 1) * 2;
-        let width = Math.max(0, root.mainTerminalTabs.length - 1) * 2;
-        for (let index = 0; index < root.mainTerminalTabs.length; ++index)
-            width += root.currentPage === "terminal" && root.mainTerminalTabs[index].id === root.mainWorkspaceId ? terminalTabPreferredWidth(root.mainTerminalTabs[index].title) : 38;
+            return tabs.length * 184 + Math.max(0, tabs.length - 1) * 2;
+        let width = Math.max(0, tabs.length - 1) * 2;
+        for (let index = 0; index < tabs.length; ++index)
+            width += root.currentPage === "terminal" && tabs[index].id === root.mainWorkspaceId ? terminalTabPreferredWidth(tabs[index].title) : 38;
         return width;
     }
 
@@ -1164,16 +1164,18 @@ Rectangle {
 
                 objectName: "titleTerminalTabs"
                 readonly property real availableWidth: Math.max(0, root.titleNavigationWidth - hostsTitleTab.width - sftpTitleTab.width - 36 - settingsTitleTab.width - titleTabOverflow.width)
-                readonly property real desiredTabWidth: root.terminalTabStripDesiredWidth()
+                readonly property real desiredTabWidth: root.terminalTabStripDesiredWidth(root.mainTerminalTabs)
                 readonly property real equalTabWidth: Math.max(38, Math.min(184, (availableWidth - Math.max(0, count - 1) * spacing) / Math.max(1, count)))
                 currentIndex: -1
-                width: count === 0 ? 0 : Math.min(availableWidth, desiredTabWidth)
+                width: root.mainTerminalTabs.length === 0 ? 0 : Math.min(titleTerminalTabs.availableWidth, titleTerminalTabs.desiredTabWidth)
                 height: titleNavigation.height
                 orientation: ListView.Horizontal
                 spacing: 2
                 clip: true
                 interactive: false
-                model: root.mainTerminalTabs
+                model: TerminalTabListModel {
+                    tabs: root.mainTerminalTabs
+                }
                 onCountChanged: Qt.callLater(ensureCurrentTabVisible)
                 onCurrentIndexChanged: Qt.callLater(ensureCurrentTabVisible)
                 onWidthChanged: Qt.callLater(ensureCurrentTabVisible)
