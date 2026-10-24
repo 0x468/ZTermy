@@ -71,6 +71,7 @@ Button {
     }
 
     background: Rectangle {
+        id: buttonBackground
         implicitWidth: 72
         implicitHeight: 34
         radius: Theme.radiusControl
@@ -80,6 +81,17 @@ Button {
 
         Behavior on color {
             MotionColor {}
+        }
+
+        Rectangle {
+            objectName: "actionButtonFocusRing"
+            anchors.fill: parent
+            anchors.margins: 3
+            radius: Math.max(0, parent.radius - 2)
+            color: "transparent"
+            visible: control.enabled && control.visualFocus
+            border.width: 2
+            border.color: Theme.contrastText(buttonBackground.color)
         }
     }
 

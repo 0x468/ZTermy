@@ -19,6 +19,7 @@
 #include "ui/AiMemoryDiagnostics.h"
 #include "ui/FontTypographyRuntimeSmoke.h"
 #include "ui/MemoryLifecycleRuntimeSmoke.h"
+#include "ui/PasteOptionsRuntimeSmoke.h"
 #include "ui/RuntimeSmokeItems.h"
 #include "ui/SettingsResetRuntimeSmoke.h"
 #include "ui/SystemIntegrationRuntimeSmoke.h"
@@ -4786,6 +4787,13 @@ int main(int argc, char *argv[])
         return EXIT_SUCCESS;
     }
 
+    if (QCoreApplication::arguments().contains(QStringLiteral("--paste-options-smoke")))
+    {
+        const bool passed = ztermy::ui::verifyPasteOptions(window, appController, paths->dataDirectory);
+        appController.shutdown();
+        window.releaseQmlResources();
+        return passed ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
     if (QCoreApplication::arguments().contains(QStringLiteral("--tab-refresh-smoke")))
     {
         const bool passed = ztermy::ui::verifyTabRefreshClicks(window, appController);

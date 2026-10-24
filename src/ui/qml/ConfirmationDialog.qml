@@ -31,7 +31,7 @@ Dialog {
     closePolicy: Popup.CloseOnEscape
     padding: 20
 
-    onAboutToShow: Qt.callLater(rejectButton.forceActiveFocus)
+    onAboutToShow: Qt.callLater(() => rejectButton.forceActiveFocus(Qt.TabFocusReason))
     onClosed: {
         const restoreItem = focusRestoreItem;
         focusRestoreItem = null;
