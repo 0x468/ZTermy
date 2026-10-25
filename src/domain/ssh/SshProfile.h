@@ -64,7 +64,7 @@ struct SshSessionOptions final
     std::uint16_t connectionTimeoutSeconds = 10;
     std::uint16_t authenticationTimeoutSeconds = 30;
     std::uint16_t terminalOpenTimeoutSeconds = 30;
-    std::uint16_t keepaliveIntervalSeconds = 0;
+    std::uint16_t keepaliveIntervalSeconds = 30;
     std::uint8_t keepaliveFailureThreshold = 3;
     std::string startupCommand;
     SshStartupCommandMode startupCommandMode = SshStartupCommandMode::Paste;

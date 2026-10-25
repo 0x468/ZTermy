@@ -412,12 +412,27 @@ std::expected<void, SshTransportError> Libssh2Session::handshake(SshByteTranspor
     }
 
     auto *session = static_cast<LIBSSH2_SESSION *>(m_session);
-    *libssh2_session_abstract(session) = &transport;
-    (void)libssh2_session_callback_set2(session, LIBSSH2_CALLBACK_SEND,
-                                        reinterpret_cast<libssh2_cb_generic *>(transportSend));
-    (void)libssh2_session_callback_set2(session, LIBSSH2_CALLBACK_RECV,
-                                        reinterpret_cast<libssh2_cb_generic *>(transportReceive));
     m_transport = &transport;
+    *libssh2_session_abstract(session) = this;
+    const auto sendCallback = +[](libssh2_socket_t socket, const void *buffer, size_t length, int flags,
+                                  void **abstract) noexcept -> ssize_t {
+        auto *self = static_cast<Libssh2Session *>(*abstract);
+        void *byteTransport = self->m_transport;
+        return transportSend(socket, buffer, length, flags, &byteTransport);
+    };
+    const auto receiveCallback =
+        +[](libssh2_socket_t socket, void *buffer, size_t length, int flags, void **abstract) noexcept -> ssize_t {
+        auto *self = static_cast<Libssh2Session *>(*abstract);
+        void *byteTransport = self->m_transport;
+        const auto received = transportReceive(socket, buffer, length, flags, &byteTransport);
+        if (received > 0)
+            self->m_lastReceivedAt = std::chrono::steady_clock::now();
+        return received;
+    };
+    (void)libssh2_session_callback_set2(session, LIBSSH2_CALLBACK_SEND,
+                                        reinterpret_cast<libssh2_cb_generic *>(sendCallback));
+    (void)libssh2_session_callback_set2(session, LIBSSH2_CALLBACK_RECV,
+                                        reinterpret_cast<libssh2_cb_generic *>(receiveCallback));
     const auto deadline = std::chrono::steady_clock::now() + timeout;
     while (true)
     {
@@ -1448,6 +1463,11 @@ std::expected<void, SshTransportError> Libssh2Session::configureKeepalive(const 
     }
     libssh2_keepalive_config(static_cast<LIBSSH2_SESSION *>(m_session), 1, static_cast<unsigned int>(intervalSeconds));
     return {};
+}
+
+std::chrono::steady_clock::time_point Libssh2Session::lastReceivedAt() const noexcept
+{
+    return m_lastReceivedAt;
 }
 
 std::expected<int, SshTransportError> Libssh2Session::sendKeepalive() noexcept

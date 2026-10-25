@@ -914,8 +914,14 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     QByteArray remoteTelemetryOutput;
     std::chrono::steady_clock::time_point remoteTelemetryStarted{};
     std::chrono::steady_clock::time_point remoteTelemetryDeadline{};
-    auto nextKeepalive =
-        std::chrono::steady_clock::now() + std::chrono::seconds(request.sessionOptions.keepaliveIntervalSeconds);
+    const auto connectedAt = std::chrono::steady_clock::now();
+    // libssh2 clamps one second to two seconds; use the same interval for the deadline.
+    const auto keepaliveInterval =
+        std::chrono::seconds((std::max)(request.sessionOptions.keepaliveIntervalSeconds, std::uint16_t{2}));
+    const auto keepaliveTimeout = keepaliveInterval * request.sessionOptions.keepaliveFailureThreshold;
+    auto nextKeepalive = connectedAt;
+    auto lastKeepaliveReceive = session->lastReceivedAt();
+    std::optional<std::chrono::steady_clock::time_point> unansweredKeepaliveSince;
     std::uint8_t consecutiveKeepaliveFailures = 0;
     telemetryScheduler.setVisible(m_telemetryRequestedVisible.load(), std::chrono::steady_clock::now());
     postRemoteTelemetryState(telemetryScheduler.visible() ? QStringLiteral("loading") : QStringLiteral("paused"));
@@ -1328,9 +1334,23 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
             }
         }
 
+        if (session->lastReceivedAt() > lastKeepaliveReceive)
+        {
+            lastKeepaliveReceive = session->lastReceivedAt();
+            unansweredKeepaliveSince.reset();
+        }
+        if (unansweredKeepaliveSince
+            && std::chrono::steady_clock::now() - *unansweredKeepaliveSince >= keepaliveTimeout)
+        {
+            finishFailure(SshFailureKind::TimedOut, tr("SSH server did not respond to keepalive probes"));
+            return;
+        }
+
         if (request.sessionOptions.keepaliveIntervalSeconds > 0 && std::chrono::steady_clock::now() >= nextKeepalive)
         {
             const auto now = std::chrono::steady_clock::now();
+            if (!unansweredKeepaliveSince)
+                unansweredKeepaliveSince = now;
             auto keepalive = session->sendKeepalive();
             if (!keepalive)
             {
@@ -1340,7 +1360,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                     finishFailure(sshFailureFromTransport(keepalive.error()), tr("SSH keepalive failed"));
                     return;
                 }
-                nextKeepalive = now + std::chrono::seconds(request.sessionOptions.keepaliveIntervalSeconds);
+                nextKeepalive = now + keepaliveInterval;
             }
             else
             {

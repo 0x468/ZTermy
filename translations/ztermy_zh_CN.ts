@@ -12314,45 +12314,45 @@ Output:
         <translation>SSH 启动命令执行失败</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="997"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1003"/>
         <source>SSH command wake event failed</source>
         <translation>SSH 命令唤醒事件失败</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1021"/>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1061"/>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1139"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1027"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1067"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1145"/>
         <source>SSH terminal selection clear failed: %1</source>
         <translation>清除 SSH 终端选区失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1029"/>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1070"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1035"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1076"/>
         <source>Terminal input could not be converted to the selected encoding.</source>
         <translation>终端输入无法转换为所选编码。</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1049"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1055"/>
         <source>SSH terminal key encoding failed: %1</source>
         <translation>SSH 终端按键编码失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1092"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1098"/>
         <source>SSH terminal mouse encoding failed: %1</source>
         <translation>SSH 终端鼠标编码失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1115"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1121"/>
         <source>SSH terminal focus encoding failed: %1</source>
         <translation>SSH 终端焦点编码失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1148"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1154"/>
         <source>SSH terminal paste failed: %1</source>
         <translation>SSH 终端粘贴失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1158"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1164"/>
         <source>Terminal paste could not be converted to the selected encoding.</source>
         <translation>终端粘贴内容无法转换为所选编码。</translation>
     </message>
@@ -12397,7 +12397,7 @@ Output:
         <translation>SSH 终端搜索失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1180"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1186"/>
         <source>SSH terminal color scheme failed: %1</source>
         <translation>SSH 终端配色应用失败：%1</translation>
     </message>
@@ -12408,28 +12408,33 @@ Output:
     </message>
     <message>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="861"/>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1233"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1239"/>
         <source>SSH terminal state resize failed</source>
         <translation>调整 SSH 终端状态大小失败</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1340"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1360"/>
         <source>SSH keepalive failed</source>
         <translation>SSH 保活失败</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="931"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1345"/>
+        <source>SSH server did not respond to keepalive probes</source>
+        <translation>SSH 服务器未响应保活探测</translation>
+    </message>
+    <message>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="937"/>
         <source>SSH terminal parser failed</source>
         <translation>SSH 终端解析器失败</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1388"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1408"/>
         <source>SSH terminal closed without a complete channel shutdown</source>
         <translation>SSH 终端已关闭，但通道未完整关闭</translation>
     </message>
     <message>
         <location filename="../src/application/AppController.cpp" line="2364"/>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1392"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1412"/>
         <source>SSH terminal disconnected</source>
         <translation>SSH 终端已断开连接</translation>
     </message>

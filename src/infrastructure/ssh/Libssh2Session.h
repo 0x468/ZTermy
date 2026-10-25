@@ -175,6 +175,8 @@ public:
                  const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] std::expected<void, SshTransportError> configureKeepalive(std::uint32_t intervalSeconds) noexcept;
     [[nodiscard]] std::expected<int, SshTransportError> sendKeepalive() noexcept;
+    // Includes protocol replies and auxiliary channels, not only PTY output.
+    [[nodiscard]] std::chrono::steady_clock::time_point lastReceivedAt() const noexcept;
     // One non-blocking read: nullopt means no data yet, zero means EOF.
     [[nodiscard]] std::expected<std::optional<std::size_t>, SshTransportError>
     pollTerminal(SshByteTransport &transport, std::span<char> output, const std::stop_token &stopToken = {}) noexcept;
@@ -279,6 +281,7 @@ private:
     std::unique_ptr<Libssh2Runtime> m_runtime;
     void *m_session = nullptr;
     SshByteTransport *m_transport = nullptr;
+    std::chrono::steady_clock::time_point m_lastReceivedAt{};
     void *m_terminalChannel = nullptr;
     void *m_directTcpipChannel = nullptr;
     void *m_auxiliaryChannel = nullptr;

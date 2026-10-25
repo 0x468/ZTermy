@@ -478,7 +478,7 @@ Rectangle {
         connectionTimeoutField.text = "10";
         authenticationTimeoutField.text = "30";
         terminalOpenTimeoutField.text = "30";
-        keepaliveIntervalField.text = "0";
+        keepaliveIntervalField.text = "30";
         keepaliveThresholdField.text = "3";
         startupCommandField.text = "";
         startupModeBox.currentIndex = 0;
@@ -631,7 +631,7 @@ Rectangle {
         connectionTimeoutField.text = String(options.connectionTimeoutSeconds === undefined ? 10 : options.connectionTimeoutSeconds);
         authenticationTimeoutField.text = String(options.authenticationTimeoutSeconds === undefined ? 30 : options.authenticationTimeoutSeconds);
         terminalOpenTimeoutField.text = String(options.terminalOpenTimeoutSeconds === undefined ? 30 : options.terminalOpenTimeoutSeconds);
-        keepaliveIntervalField.text = String(options.keepaliveIntervalSeconds === undefined ? 0 : options.keepaliveIntervalSeconds);
+        keepaliveIntervalField.text = String(options.keepaliveIntervalSeconds === undefined ? 30 : options.keepaliveIntervalSeconds);
         keepaliveThresholdField.text = String(options.keepaliveFailureThreshold === undefined ? 3 : options.keepaliveFailureThreshold);
         startupCommandField.text = options.startupCommand || "";
         startupModeBox.currentIndex = options.startupCommandMode === "line-delay" ? 1 : 0;
@@ -2017,7 +2017,7 @@ Rectangle {
                                                 id: keepaliveIntervalField
                                                 objectName: "hostKeepaliveInterval"
                                                 Layout.fillWidth: true
-                                                text: "0"
+                                                text: "30"
                                                 placeholderText: qsTr("0 disables keepalive")
                                                 accessibleName: qsTr("SSH keepalive interval in seconds")
                                                 inputMethodHints: Qt.ImhDigitsOnly

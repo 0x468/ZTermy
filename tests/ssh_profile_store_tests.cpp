@@ -348,6 +348,9 @@ void SshProfileStoreTests::migratesPlatformIconSchemaAndPreservesHosts()
     QCOMPARE(loaded->size(), std::size_t{2});
     QCOMPARE(loaded->front().iconName, std::string("brand-debian"));
     QCOMPARE(loaded->back().iconName, std::string("database"));
+    QCOMPARE(loaded->front().sessionOptions.keepaliveIntervalSeconds, std::uint16_t{30});
+    QCOMPARE(loaded->front().sessionOptions.keepaliveFailureThreshold, std::uint8_t{4});
+    QCOMPARE(loaded->back().sessionOptions.keepaliveIntervalSeconds, std::uint16_t{0});
     QVERIFY(store.save(*loaded));
     QFile file(path);
     QVERIFY(file.open(QIODevice::ReadOnly));

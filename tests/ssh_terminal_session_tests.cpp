@@ -283,6 +283,8 @@ private slots:
     void mergesIdentityHintsWithoutOverwritingConfiguredEnvironment();
     void advertisesIdentityOverLoopbackSsh_data();
     void advertisesIdentityOverLoopbackSsh();
+    void detectsSilentConnectionLoss_data();
+    void detectsSilentConnectionLoss();
     void appliesHistoryLimitsToDisconnectedViews();
     void synchronizesOutputOverLoopbackSsh();
     void stopsQueuedMouseAfterRemoteExit_data();
@@ -516,6 +518,79 @@ void SshTerminalSessionTests::advertisesIdentityOverLoopbackSsh()
     }
     server.write(QByteArrayLiteral("finish\n"));
     QTRY_VERIFY_WITH_TIMEOUT(server.state() == QProcess::NotRunning, 10000);
+    QCOMPARE(server.exitCode(), 0);
+    session.stop();
+}
+
+void SshTerminalSessionTests::detectsSilentConnectionLoss_data()
+{
+    QTest::addColumn<QString>("mode");
+    QTest::addColumn<int>("interval");
+    QTest::addColumn<int>("threshold");
+    QTest::newRow("unanswered-probes") << QStringLiteral("blackhole") << 2 << 3;
+    QTest::newRow("silent-shell-responds") << QStringLiteral("healthy") << 2 << 3;
+    QTest::newRow("explicitly-disabled") << QStringLiteral("blackhole") << 0 << 3;
+    QTest::newRow("one-second-libssh2-clamp") << QStringLiteral("healthy") << 1 << 3;
+    QTest::newRow("one-probe-threshold") << QStringLiteral("healthy") << 2 << 1;
+}
+
+void SshTerminalSessionTests::detectsSilentConnectionLoss()
+{
+    QFETCH(QString, mode);
+    QFETCH(int, interval);
+    QFETCH(int, threshold);
+    const auto python = qEnvironmentVariable("ZTERMY_TEST_SSH_FIXTURE_PYTHON");
+    if (python.isEmpty())
+        QSKIP("Set ZTERMY_TEST_SSH_FIXTURE_PYTHON to a Python environment with Paramiko");
+    QCOMPARE(ztermy::ssh::SshSessionOptions{}.keepaliveIntervalSeconds, 30);
+    QProcess server;
+    QByteArray events;
+    connect(&server, &QProcess::readyReadStandardOutput, this, [&] {
+        events += server.readAllStandardOutput();
+    });
+    server.start(python, {QFINDTESTDATA("fixtures/keepalive_ssh_server.py"), mode});
+    QVERIFY(server.waitForStarted(5000));
+    QTRY_VERIFY_WITH_TIMEOUT(events.contains('\n'), 10000);
+    bool validPort = false;
+    const auto port = events.split('\n').first().toUShort(&validPort);
+    QVERIFY(validPort && port != 0);
+    QTemporaryDir directory;
+    ztermy::ssh::SshTerminalSession session;
+    QSignalSpy hostKey(&session, &ztermy::ssh::SshTerminalSession::hostKeyConfirmationRequired);
+    QSignalSpy running(&session, &ztermy::ssh::SshTerminalSession::runningChanged);
+    QSignalSpy failures(&session, &ztermy::ssh::SshTerminalSession::failureOccurred);
+    ztermy::ssh::SshConnectionRequest request{
+        .host = QStringLiteral("127.0.0.1"),
+        .port = port,
+        .username = QStringLiteral("fixture"),
+        .authentication = ztermy::ssh::SshAuthenticationMethod::Password,
+        .secret = ztermy::security::SensitiveByteArray(QByteArrayLiteral("fixture-only")),
+        .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json")),
+        .sessionOptions = {.keepaliveIntervalSeconds = static_cast<std::uint16_t>(interval),
+                           .keepaliveFailureThreshold = static_cast<std::uint8_t>(threshold)},
+    };
+    QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
+    QTRY_COMPARE_WITH_TIMEOUT(hostKey.count(), 1, 10000);
+    session.confirmHostKey(false);
+    QTRY_VERIFY_WITH_TIMEOUT(!running.isEmpty() && running.constLast().constFirst().toBool(), 10000);
+    QTRY_VERIFY_WITH_TIMEOUT(events.contains(mode == QStringLiteral("blackhole") ? "BLACKHOLE" : "RESPONDING"), 5000);
+    if (mode == QStringLiteral("blackhole") && interval > 0)
+    {
+        // A successful local write must not reset the receive deadline.
+        session.queueInput(QByteArrayLiteral("fixture-input\r"));
+        QTRY_VERIFY_WITH_TIMEOUT(!failures.isEmpty(), 8500);
+        QCOMPARE(qvariant_cast<ztermy::ssh::SshFailureKind>(failures.first().first()),
+                 ztermy::ssh::SshFailureKind::TimedOut);
+        QTRY_VERIFY_WITH_TIMEOUT(!running.constLast().constFirst().toBool(), 1000);
+    }
+    else
+    {
+        QTest::qWait(7500);
+        QVERIFY(failures.isEmpty());
+        QVERIFY(running.constLast().constFirst().toBool());
+    }
+    server.write(QByteArrayLiteral("finish\n"));
+    QTRY_VERIFY_WITH_TIMEOUT(server.state() == QProcess::NotRunning, 5000);
     QCOMPARE(server.exitCode(), 0);
     session.stop();
 }
