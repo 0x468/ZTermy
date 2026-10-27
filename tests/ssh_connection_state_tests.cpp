@@ -33,6 +33,7 @@ class SshConnectionStateTests final : public QObject
 private slots:
     void completesKnownHostConnection();
     void pausesUnknownHostBeforeAuthentication();
+    void advancesMultipleJumpEndpoints();
     void preservesDistinctFailureKinds();
     void rejectsOutOfOrderTransitions();
     void closesAndReconnects();
@@ -59,6 +60,24 @@ void SshConnectionStateTests::pausesUnknownHostBeforeAuthentication()
 
     QCOMPARE(state.phase(), SshConnectionPhase::AwaitingHostKeyConfirmation);
     QVERIFY(state.advanceTo(SshConnectionPhase::Authenticating));
+}
+
+void SshConnectionStateTests::advancesMultipleJumpEndpoints()
+{
+    SshConnectionState state;
+    QVERIFY(state.start());
+    for (int hop = 0; hop < 3; ++hop)
+    {
+        QVERIFY(state.advanceTo(SshConnectionPhase::Connecting));
+        QVERIFY(!state.advanceTo(SshConnectionPhase::Connected));
+        QVERIFY(state.advanceTo(SshConnectionPhase::Handshaking));
+        QVERIFY(state.advanceTo(SshConnectionPhase::VerifyingHostKey));
+        QVERIFY(state.advanceTo(SshConnectionPhase::AwaitingHostKeyConfirmation));
+        QVERIFY(state.advanceTo(SshConnectionPhase::Authenticating));
+    }
+    QVERIFY(state.advanceTo(SshConnectionPhase::OpeningChannel));
+    QVERIFY(state.advanceTo(SshConnectionPhase::Connected));
+    QVERIFY(!state.advanceTo(SshConnectionPhase::Connecting));
 }
 
 void SshConnectionStateTests::preservesDistinctFailureKinds()

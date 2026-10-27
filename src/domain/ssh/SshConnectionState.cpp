@@ -21,7 +21,9 @@ namespace
         case AwaitingHostKeyConfirmation:
             return next == Authenticating;
         case Authenticating:
-            return next == OpeningChannel;
+            // An authenticated jump endpoint starts the next hop before a PTY
+            // is opened on the final endpoint. Each hop repeats key verification.
+            return next == OpeningChannel || next == Connecting;
         case OpeningChannel:
             return next == Connected;
         case Disconnected:

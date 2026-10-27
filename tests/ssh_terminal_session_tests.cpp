@@ -285,6 +285,8 @@ private slots:
     void advertisesIdentityOverLoopbackSsh();
     void detectsSilentConnectionLoss_data();
     void detectsSilentConnectionLoss();
+    void connectsThroughLoopbackJumps_data();
+    void connectsThroughLoopbackJumps();
     void appliesHistoryLimitsToDisconnectedViews();
     void synchronizesOutputOverLoopbackSsh();
     void stopsQueuedMouseAfterRemoteExit_data();
@@ -593,6 +595,85 @@ void SshTerminalSessionTests::detectsSilentConnectionLoss()
     QTRY_VERIFY_WITH_TIMEOUT(server.state() == QProcess::NotRunning, 5000);
     QCOMPARE(server.exitCode(), 0);
     session.stop();
+}
+
+void SshTerminalSessionTests::connectsThroughLoopbackJumps_data()
+{
+    QTest::addColumn<QString>("mode");
+    QTest::addColumn<int>("hops");
+    QTest::newRow("one-hop-pty") << QStringLiteral("success") << 1;
+    QTest::newRow("two-hop-pty") << QStringLiteral("success") << 2;
+    QTest::newRow("forward-refused") << QStringLiteral("refuse") << 1;
+    QTest::newRow("target-auth-rejected") << QStringLiteral("auth-failure") << 1;
+    QTest::newRow("target-key-rejected") << QStringLiteral("reject-key") << 1;
+}
+
+void SshTerminalSessionTests::connectsThroughLoopbackJumps()
+{
+    QFETCH(QString, mode);
+    QFETCH(int, hops);
+    const auto python = qEnvironmentVariable("ZTERMY_TEST_SSH_FIXTURE_PYTHON");
+    if (python.isEmpty())
+        QSKIP("Set ZTERMY_TEST_SSH_FIXTURE_PYTHON to a Python environment with Paramiko");
+    QProcess server;
+    QByteArray events;
+    connect(&server, &QProcess::readyReadStandardOutput, this, [&] {
+        events += server.readAllStandardOutput();
+    });
+    server.start(python, {QFINDTESTDATA("fixtures/jump_ssh_server.py"), mode});
+    QVERIFY(server.waitForStarted(5000));
+    QTRY_VERIFY_WITH_TIMEOUT(events.contains('\n'), 10000);
+    const auto ports = events.split('\n').first().split(' ');
+    QCOMPARE(ports.size(), 3);
+    QTemporaryDir directory;
+    ztermy::ssh::SshTerminalSession session;
+    QSignalSpy keys(&session, &ztermy::ssh::SshTerminalSession::hostKeyConfirmationRequired);
+    QSignalSpy running(&session, &ztermy::ssh::SshTerminalSession::runningChanged);
+    QSignalSpy failures(&session, &ztermy::ssh::SshTerminalSession::failureOccurred);
+    int confirmations = 0;
+    connect(&session, &ztermy::ssh::SshTerminalSession::hostKeyConfirmationRequired, &session, [&] {
+        ++confirmations;
+        if (mode == QStringLiteral("reject-key") && confirmations > hops)
+            session.rejectHostKey();
+        else
+            session.confirmHostKey(false);
+    });
+    ztermy::ssh::SshConnectionRequest request{
+        .host = QStringLiteral("127.0.0.1"),
+        .port = ports[2].toUShort(),
+        .username = QStringLiteral("fixture"),
+        .authentication = ztermy::ssh::SshAuthenticationMethod::Password,
+        .secret = ztermy::security::SensitiveByteArray(QByteArrayLiteral("fixture-only")),
+        .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json")),
+    };
+    for (int index = 2 - hops; index < 2; ++index)
+        request.jumpHosts.push_back(
+            {.profileId = QString::number(index),
+             .displayName = QStringLiteral("Fixture jump"),
+             .host = QStringLiteral("127.0.0.1"),
+             .port = ports[index].toUShort(),
+             .username = QStringLiteral("fixture"),
+             .authentication = ztermy::ssh::SshAuthenticationMethod::Password,
+             .secret = ztermy::security::SensitiveByteArray(QByteArrayLiteral("fixture-only"))});
+    QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
+    if (mode == QStringLiteral("success"))
+    {
+        QTRY_VERIFY_WITH_TIMEOUT(events.contains("PTY_READY"), 15000);
+        QTRY_VERIFY_WITH_TIMEOUT(!running.isEmpty() && running.last().first().toBool(), 5000);
+        QCOMPARE(confirmations, hops + 1);
+        QVERIFY(failures.isEmpty());
+    }
+    else
+    {
+        QTRY_VERIFY_WITH_TIMEOUT(!failures.isEmpty(), 15000);
+        QVERIFY(std::ranges::none_of(running, [](const auto &args) {
+            return args.first().toBool();
+        }));
+    }
+    session.stop();
+    server.write(QByteArrayLiteral("finish\n"));
+    QTRY_VERIFY_WITH_TIMEOUT(server.state() == QProcess::NotRunning, 5000);
+    QCOMPARE(server.exitCode(), 0);
 }
 
 void SshTerminalSessionTests::retainsViewportSizeDuringConnectionAndReconnect()
