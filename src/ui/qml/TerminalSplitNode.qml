@@ -107,6 +107,11 @@ Item {
         return action ? action.shortcut : "";
     }
 
+    function actionShortcuts(actionId) {
+        const action = controller ? controller.actions.find(candidate => candidate.id === actionId) : null;
+        return action ? action.shortcuts : [];
+    }
+
     Loader {
         id: contentLoader
 
@@ -125,11 +130,19 @@ Item {
             readonly property var activeViewport: node.active ? viewport : null
             Shortcut {
                 objectName: "terminalReconnectShortcut-" + (leaf.tab.sessionId || "")
-                sequence: root.actionShortcut("terminal.reconnect")
-                enabled: sequence.length > 0 && !!leaf.tab.canReconnect && viewport.activeFocus
+                sequences: root.actionShortcuts("terminal.reconnect")
+                enabled: sequences.length > 0 && !!leaf.tab.canReconnect && viewport.activeFocus
                 autoRepeat: false
                 context: Qt.WindowShortcut
                 onActivated: root.controller.reconnectTerminalTab(leaf.tab.sessionId)
+            }
+            Shortcut {
+                objectName: "terminalPasteShortcut-" + (leaf.tab.sessionId || "")
+                sequences: root.actionShortcuts("terminal.paste")
+                enabled: sequences.length > 0 && viewport.activeFocus && !viewport.readOnly
+                autoRepeat: false
+                context: Qt.WindowShortcut
+                onActivated: viewport.pasteClipboard()
             }
             readonly property bool aiConfigured: !!root.controller && root.controller.aiModel.trim().length > 0 && (root.controller.aiProviderPreference === "openai-chatgpt" ? root.controller.aiChatGptConfigured : root.controller.aiBaseUrl.trim().length > 0 && (root.controller.aiProviderPreference === "ollama" || root.controller.aiApiKeyConfigured))
             readonly property bool connectionProgressRequested: tab.kind === "ssh" && (!!tab.connecting || !!tab.reconnecting)

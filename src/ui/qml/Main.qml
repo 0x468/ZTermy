@@ -860,9 +860,9 @@ Rectangle {
             height: 0
 
             Shortcut {
-                sequence: registryShortcutDelegate.modelData.shortcut
+                sequences: registryShortcutDelegate.modelData.shortcuts
                 // Reconnect is owned by the focused leaf, including detached windows.
-                enabled: registryShortcutDelegate.modelData.id !== "terminal.reconnect" && registryShortcutDelegate.modelData.shortcut.length > 0 && registryShortcutDelegate.modelData.enabled && !settingsPane.shortcutRecording && !commandPalette.visible
+                enabled: registryShortcutDelegate.modelData.id !== "terminal.reconnect" && registryShortcutDelegate.modelData.id !== "terminal.paste" && registryShortcutDelegate.modelData.shortcuts.length > 0 && registryShortcutDelegate.modelData.enabled && !settingsPane.shortcutRecording && !commandPalette.visible
                 autoRepeat: registryShortcutDelegate.modelData.autoRepeat
                 context: Qt.WindowShortcut
                 onActivated: root.controller.triggerAction(registryShortcutDelegate.modelData.id)

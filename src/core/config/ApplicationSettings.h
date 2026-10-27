@@ -139,7 +139,7 @@ struct ApplicationSettings final
     double backdropOpacity = 1.0;
     // Schema 37 keeps this as a readable tombstone; the window surface owns global opacity.
     double terminalBackgroundOpacity = 0.0;
-    QMap<QString, QString> shortcutOverrides;
+    QMap<QString, QStringList> shortcutOverrides;
     QString customAccent = QStringLiteral("#22C55E");
     QString uiFontFamily;
     QString terminalFontFamily = QStringLiteral("Cascadia Mono");

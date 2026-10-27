@@ -33,6 +33,7 @@ private slots:
     void restoresDefaults();
     void presentationTracksShortcutChangesAndContext();
     void reconnectShortcutIsConfigurableAndPreservesExistingBindings();
+    void supportsMultipleBindingsAtomically();
 };
 
 void ActionRegistryTests::presentationTracksShortcutChangesAndContext()
@@ -150,8 +151,8 @@ void ActionRegistryTests::ignoresUnknownAndInvalidPersistedOverrides()
     registry.setOverrides({
         {QStringLiteral("terminal.find"), QStringLiteral("Ctrl+Shift+P")},
     });
-    QVERIFY(registry.overrides().isEmpty());
-    QCOMPARE(registry.effectiveShortcut(QStringLiteral("terminal.find")), QStringLiteral("Ctrl+Shift+F"));
+    QCOMPARE(registry.effectiveShortcut(QStringLiteral("terminal.find")), QStringLiteral("Ctrl+Shift+P"));
+    QVERIFY(registry.effectiveShortcuts(QStringLiteral("application.commandPalette")).isEmpty());
 
     registry.setOverrides({
         {QStringLiteral("application.commandPalette"), QString{}},
@@ -198,7 +199,7 @@ void ActionRegistryTests::reconnectShortcutIsConfigurableAndPreservesExistingBin
         QVERIFY(registry.effectiveShortcut(id).isEmpty());
         QCOMPARE(registry.validateShortcut(id, QStringLiteral("Ctrl+R")).error,
                  ztermy::actions::ShortcutValidationError::Conflict);
-        registry.setOverrides(registry.overrides());
+        registry.setBindingOverrides(registry.overrides());
         QCOMPARE(registry.effectiveShortcut(ownerId), QStringLiteral("Ctrl+R"));
         QVERIFY(registry.effectiveShortcut(id).isEmpty());
     }
@@ -207,5 +208,33 @@ void ActionRegistryTests::reconnectShortcutIsConfigurableAndPreservesExistingBin
 }
 
 QTEST_MAIN(ActionRegistryTests)
+
+void ActionRegistryTests::supportsMultipleBindingsAtomically()
+{
+    ztermy::actions::ActionRegistry registry;
+    const auto paste = QStringLiteral("terminal.paste");
+    QCOMPARE(registry.effectiveShortcuts(paste).size(), 3);
+    QVERIFY(registry.effectiveShortcuts(paste).contains(QStringLiteral("Ctrl+V")));
+    auto bindings = registry.effectiveShortcuts(paste);
+    bindings.removeAll(QStringLiteral("Ctrl+V"));
+    QVERIFY(registry.setShortcuts(paste, bindings).valid());
+    QVERIFY(!registry.effectiveShortcuts(paste).contains(QStringLiteral("Ctrl+V")));
+    QVERIFY(registry.setShortcuts("terminal.find", {"Ctrl+Alt+F", "Ctrl+Alt+G"}).valid());
+    const auto before = registry.effectiveShortcuts(paste);
+    QVERIFY(!registry.setShortcuts(paste, {"Ctrl+V", "Ctrl+Alt+G"}).valid());
+    QCOMPARE(registry.effectiveShortcuts(paste), before);
+    QVERIFY(registry.setShortcuts(paste, {"Ctrl+V", "ctrl+v"}).valid());
+    QCOMPARE(registry.effectiveShortcuts(paste), QStringList{"Ctrl+V"});
+    QVERIFY(registry.resetShortcut(paste));
+    QCOMPARE(registry.effectiveShortcuts(paste).size(), 3);
+    registry.setOverrides({{"terminal.find", "Ctrl+V"}});
+    QCOMPARE(registry.effectiveShortcut("terminal.find"), QStringLiteral("Ctrl+V"));
+    QCOMPARE(registry.effectiveShortcuts(paste).size(), 2);
+    auto restored = registry;
+    restored.setBindingOverrides(registry.overrides());
+    QCOMPARE(restored.effectiveShortcuts(paste), registry.effectiveShortcuts(paste));
+    QVERIFY(registry.setShortcuts(paste, {}).valid());
+    QVERIFY(registry.effectiveShortcuts(paste).isEmpty());
+}
 
 #include "action_registry_tests.moc"

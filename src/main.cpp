@@ -4709,8 +4709,11 @@ int main(int argc, char *argv[])
         ztermy::ui::processWindowEventsFor(std::chrono::milliseconds{250});
         QWindow peer;
         QDir captures(QDir(paths->dataDirectory).filePath(QStringLiteral("shortcut-settings-captures")));
-        const bool passed = captures.mkpath(QStringLiteral("."))
-                            && ztermy::ui::verifyGlobalShortcutSettingsRuntime(window, appController, peer, captures);
+        const bool passed =
+            captures.mkpath(QStringLiteral("."))
+            && (QCoreApplication::arguments().contains(QStringLiteral("--shortcut-aliases-only"))
+                    ? ztermy::ui::verifyActionShortcutBindingsRuntime(window, appController, captures)
+                    : ztermy::ui::verifyGlobalShortcutSettingsRuntime(window, appController, peer, captures));
         appController.shutdown();
         window.releaseResources();
         qCInfo(applicationLog) << "Shortcut settings runtime smoke passed=" << passed;

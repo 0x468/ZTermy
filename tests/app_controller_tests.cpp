@@ -247,6 +247,7 @@ class AppControllerTests final : public QObject
 private slots:
     void freezesEndedSessionClock_data();
     void freezesEndedSessionClock();
+    void persistsMultipleShortcutBindings();
     void scopesMultilinePasteConfirmationWithoutLosingSettings();
     void preservesPasteConfirmationWhenSavingFails();
     void appliesHistorySettingsToExistingAndNewSessions();
@@ -365,6 +366,42 @@ void AppControllerTests::freezesEndedSessionClock()
     QVERIFY(tab.connectedUtcMs >= ended);
     setRunning(false);
     QVERIFY(tab.disconnectedUtcMs >= ended);
+}
+
+void AppControllerTests::persistsMultipleShortcutBindings()
+{
+    QTemporaryDir directory;
+    const auto profiles = directory.filePath("profiles.json");
+    const auto settings = directory.filePath("settings.json");
+    const auto hosts = directory.filePath("known_hosts.json");
+    const auto state = std::make_shared<FakeLocalSessionState>();
+    const auto factory = [state] {
+        return std::make_unique<FakeLocalTerminalSession>(state);
+    };
+    ztermy::AppController controller(profiles, hosts, settings, factory);
+    const auto bindings = [](const ztermy::AppController &owner) {
+        for (const auto &action : owner.actions())
+            if (action.toMap().value("id") == "terminal.paste")
+                return action.toMap().value("shortcuts").toStringList();
+        return QStringList{};
+    };
+    QVERIFY(controller.setActionShortcuts("terminal.paste", {"Ctrl+V", "Shift+Ins"}).value("valid").toBool());
+    QVERIFY(
+        controller.editActionShortcutFromKey("terminal.paste", -1, Qt::Key_V, Qt::ControlModifier | Qt::ShiftModifier)
+            .value("valid")
+            .toBool());
+    QCOMPARE(bindings(controller).size(), 3);
+    ztermy::AppController reopened(profiles, hosts, settings, factory);
+    QCOMPARE(bindings(reopened), bindings(controller));
+    const auto before = bindings(controller);
+    QVERIFY(!controller.setActionShortcuts("terminal.paste", {"Ctrl+V", "Ctrl+Shift+P"}).value("valid").toBool());
+    QCOMPARE(bindings(controller), before);
+    QFile blocked(settings);
+    QVERIFY(blocked.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    blocked.write("{\"version\":9999}");
+    blocked.close();
+    QVERIFY(!controller.setActionShortcuts("terminal.paste", {}).value("valid").toBool());
+    QCOMPARE(bindings(controller), before);
 }
 
 void AppControllerTests::savesUpdatesReloadsAndDeletesProfiles()

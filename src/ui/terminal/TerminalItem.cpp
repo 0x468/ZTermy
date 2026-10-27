@@ -1121,13 +1121,6 @@ void TerminalItem::keyPressEvent(QKeyEvent *event)
         event->accept();
         return;
     }
-    if (shift && !control && event->key() == Qt::Key_Insert)
-    {
-        pasteClipboard();
-        event->accept();
-        return;
-    }
-
     if (m_readOnly)
     {
         event->accept();

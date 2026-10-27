@@ -2,6 +2,7 @@
 
 #include <QMap>
 #include <QString>
+#include <QStringList>
 #include <QVariantList>
 
 #include <array>
@@ -38,6 +39,9 @@ public:
     void invalidatePresentationCache();
     [[nodiscard]] QString defaultShortcut(const QString &actionId) const;
     [[nodiscard]] QString effectiveShortcut(const QString &actionId) const;
+    [[nodiscard]] QStringList defaultShortcuts(const QString &actionId) const;
+    [[nodiscard]] QStringList effectiveShortcuts(const QString &actionId) const;
+    [[nodiscard]] ShortcutValidation setShortcuts(const QString &actionId, const QStringList &shortcuts);
     [[nodiscard]] bool contains(const QString &actionId) const noexcept;
     [[nodiscard]] bool enabled(const QString &actionId, bool terminalAvailable) const noexcept;
     [[nodiscard]] bool allowsAutoRepeat(const QString &actionId) const noexcept;
@@ -46,13 +50,14 @@ public:
     [[nodiscard]] bool resetShortcut(const QString &actionId);
     [[nodiscard]] bool resetAllShortcuts();
     void setOverrides(const QMap<QString, QString> &overrides);
-    [[nodiscard]] const QMap<QString, QString> &overrides() const noexcept;
+    void setBindingOverrides(const QMap<QString, QStringList> &overrides);
+    [[nodiscard]] const QMap<QString, QStringList> &overrides() const noexcept;
 
     [[nodiscard]] static QString shortcutFromKeyEvent(int key, int modifiers);
     [[nodiscard]] static QString validationMessage(ShortcutValidationError error, const QString &conflictingLabel);
 
 private:
-    QMap<QString, QString> m_overrides;
+    QMap<QString, QStringList> m_overrides;
     mutable std::array<QVariantList, 2> m_cachedActions;
 };
 

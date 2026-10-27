@@ -60,7 +60,7 @@ inline bool verifyHistorySettings(NativeWindow &window, AppController &controlle
     if (!activate("settingsApply") || controller.terminalHistoryLines() != 20000)
         return false;
     const auto saved = QJsonDocument::fromJson(document()).object();
-    if (saved.value(QStringLiteral("version")).toInt() != 46
+    if (saved.value(QStringLiteral("version")).toInt() != 47
         || saved.value(QStringLiteral("terminalHistoryLines")).toInt() != 20000)
         return false;
     bool passed = true;

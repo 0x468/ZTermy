@@ -853,6 +853,12 @@ void TerminalItemTests::routesCopyPasteAndTextKeys()
 
     QKeyEvent pasteEvent(QEvent::KeyPress, Qt::Key_Insert, Qt::ShiftModifier);
     item.keyPressEvent(&pasteEvent);
+    // The configurable leaf shortcut owns Shift+Insert now. Without that
+    // binding the viewport must pass it through, not force a paste.
+    QCOMPARE(pasteSpy.count(), 0);
+    QCOMPARE(keyEvents.size(), std::size_t{1});
+    keyEvents.clear();
+    item.pasteClipboard();
     QCOMPARE(pasteSpy.count(), 1);
     QCOMPARE(pasteSpy.at(0).at(0).toByteArray(), QByteArrayLiteral("single-line paste"));
     QCOMPARE(confirmationSpy.count(), 0);
@@ -1012,6 +1018,8 @@ void TerminalItemTests::supportsClassicClipboardAliasesAndContextActions()
 
     QKeyEvent shiftInsert(QEvent::KeyPress, Qt::Key_Insert, Qt::ShiftModifier);
     item.keyPressEvent(&shiftInsert);
+    QCOMPARE(pasteSpy.count(), 0);
+    item.pasteClipboard();
     QCOMPARE(pasteSpy.count(), 1);
     QCOMPARE(pasteSpy.at(0).at(0).toByteArray(), QByteArrayLiteral("classic paste"));
 
@@ -1189,8 +1197,7 @@ void TerminalItemTests::confirmsMultilinePaste()
     QSignalSpy pasteSpy(&item, &ztermy::ui::TerminalItem::pasteRequested);
     item.clipboardTextFixture = QStringLiteral("first\nsecond");
 
-    QKeyEvent pasteEvent(QEvent::KeyPress, Qt::Key_Insert, Qt::ShiftModifier);
-    item.keyPressEvent(&pasteEvent);
+    item.pasteClipboard();
 
     QCOMPARE(confirmationSpy.count(), 1);
     QVERIFY(item.multilinePastePending());

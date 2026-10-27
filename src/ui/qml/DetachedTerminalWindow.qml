@@ -36,8 +36,8 @@ Window {
             width: 0
             height: 0
             Shortcut {
-                sequence: localShortcut.modelData.shortcut
-                enabled: detachedTerminalWindow.active && localShortcut.modelData.enabled && sequence.length > 0
+                sequences: localShortcut.modelData.shortcuts
+                enabled: detachedTerminalWindow.active && localShortcut.modelData.enabled && sequences.length > 0
                 autoRepeat: localShortcut.modelData.autoRepeat
                 context: Qt.WindowShortcut
                 onActivated: detachedTerminalWindow.executeLocalAction(localShortcut.modelData.id)

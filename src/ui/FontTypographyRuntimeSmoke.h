@@ -102,7 +102,7 @@ inline bool verifyFontTypography(NativeWindow &window, AppController &controller
         return false;
     }
     const auto persisted = QJsonDocument::fromJson(document()).object();
-    if (persisted.value(QStringLiteral("version")).toInt() != 46
+    if (persisted.value(QStringLiteral("version")).toInt() != 47
         || persisted.value(QStringLiteral("terminalFontSize")).toDouble() != 12.5)
         return false;
     if (!controller.setActiveTerminalAppearance(controller.terminalFontFamily(), 11.25, true, 0.0,

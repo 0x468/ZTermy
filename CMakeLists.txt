@@ -4944,6 +4944,9 @@ if(BUILD_TESTING)
     add_test(NAME paste-options-runtime COMMAND ztermy --paste-options-smoke
         --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/paste-options-runtime")
     set_tests_properties(paste-options-runtime PROPERTIES RUN_SERIAL TRUE TIMEOUT 90)
+    add_test(NAME shortcut-aliases-runtime COMMAND ztermy --shortcut-settings-smoke --shortcut-aliases-only
+        --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/shortcut-aliases-runtime")
+    set_tests_properties(shortcut-aliases-runtime PROPERTIES RUN_SERIAL TRUE TIMEOUT 45)
     add_test(NAME tab-refresh-reset-control COMMAND ztermy --tab-refresh-smoke --tab-refresh-reset-control
         --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/tab-refresh-reset-control")
     set_tests_properties(tab-refresh-reset-control PROPERTIES RUN_SERIAL TRUE TIMEOUT 60)

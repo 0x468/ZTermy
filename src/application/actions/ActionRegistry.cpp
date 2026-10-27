@@ -555,6 +555,8 @@ QVariantList ActionRegistry::actions(const bool terminalAvailable) const
             {QStringLiteral("label"), translated(descriptor.label)},
             {QStringLiteral("description"), translated(descriptor.description)},
             {QStringLiteral("shortcut"), shortcut},
+            {QStringLiteral("shortcuts"), effectiveShortcuts(id)},
+            {QStringLiteral("defaultShortcuts"), defaultShortcuts(id)},
             {QStringLiteral("defaultShortcut"), QLatin1StringView(descriptor.defaultShortcut)},
             {QStringLiteral("customized"), m_overrides.contains(id)},
             {QStringLiteral("enabled"), !descriptor.terminalRequired || terminalAvailable},
@@ -574,13 +576,26 @@ void ActionRegistry::invalidatePresentationCache()
 
 QString ActionRegistry::effectiveShortcut(const QString &actionId) const
 {
+    return effectiveShortcuts(actionId).value(0);
+}
+
+QStringList ActionRegistry::effectiveShortcuts(const QString &actionId) const
+{
     const ActionDescriptor *descriptor = findDescriptor(actionId);
     if (descriptor == nullptr)
     {
         return {};
     }
     const auto override = m_overrides.constFind(actionId);
-    return override == m_overrides.cend() ? QString::fromLatin1(descriptor->defaultShortcut) : override.value();
+    return override == m_overrides.cend() ? defaultShortcuts(actionId) : override.value();
+}
+
+QStringList ActionRegistry::defaultShortcuts(const QString &actionId) const
+{
+    if (actionId == QStringLiteral("terminal.paste"))
+        return {QStringLiteral("Ctrl+Shift+V"), QStringLiteral("Ctrl+V"), QStringLiteral("Shift+Ins")};
+    const auto shortcut = defaultShortcut(actionId);
+    return shortcut.isEmpty() ? QStringList{} : QStringList{shortcut};
 }
 
 QString ActionRegistry::defaultShortcut(const QString &actionId) const
@@ -621,8 +636,9 @@ ShortcutValidation ActionRegistry::validateShortcut(const QString &actionId, con
         {
             continue;
         }
-        const QString otherShortcut = effectiveShortcut(otherId);
-        if (!otherShortcut.isEmpty() && QKeySequence::fromString(otherShortcut, QKeySequence::PortableText) == sequence)
+        if (std::ranges::any_of(effectiveShortcuts(otherId), [&](const QString &otherShortcut) {
+                return QKeySequence::fromString(otherShortcut, QKeySequence::PortableText) == sequence;
+            }))
         {
             return {
                 .error = ShortcutValidationError::Conflict,
@@ -636,22 +652,30 @@ ShortcutValidation ActionRegistry::validateShortcut(const QString &actionId, con
 
 ShortcutValidation ActionRegistry::setShortcut(const QString &actionId, const QString &shortcut)
 {
-    ShortcutValidation validation = validateShortcut(actionId, shortcut);
-    if (validation.valid())
+    return setShortcuts(actionId, shortcut.trimmed().isEmpty() ? QStringList{} : QStringList{shortcut});
+}
+
+ShortcutValidation ActionRegistry::setShortcuts(const QString &actionId, const QStringList &shortcuts)
+{
+    if (!contains(actionId))
+        return {.error = ShortcutValidationError::UnknownAction};
+    if (shortcuts.size() > 8)
+        return {.error = ShortcutValidationError::InvalidSequence};
+    QStringList normalized;
+    for (const auto &shortcut : shortcuts)
     {
-        invalidatePresentationCache();
-        const ActionDescriptor *descriptor = findDescriptor(actionId);
-        Q_ASSERT(descriptor != nullptr);
-        if (validation.normalized == QLatin1StringView(descriptor->defaultShortcut))
-        {
-            m_overrides.remove(actionId);
-        }
-        else
-        {
-            m_overrides.insert(actionId, validation.normalized);
-        }
+        const auto validation = validateShortcut(actionId, shortcut);
+        if (!validation.valid())
+            return validation;
+        if (!validation.normalized.isEmpty() && !normalized.contains(validation.normalized))
+            normalized.push_back(validation.normalized);
     }
-    return validation;
+    invalidatePresentationCache();
+    if (normalized == defaultShortcuts(actionId))
+        m_overrides.remove(actionId);
+    else
+        m_overrides.insert(actionId, normalized);
+    return {.normalized = normalized.value(0)};
 }
 
 bool ActionRegistry::resetShortcut(const QString &actionId)
@@ -673,61 +697,63 @@ bool ActionRegistry::resetAllShortcuts()
 
 void ActionRegistry::setOverrides(const QMap<QString, QString> &overrides)
 {
+    QMap<QString, QStringList> bindings;
+    for (auto entry = overrides.cbegin(); entry != overrides.cend(); ++entry)
+        bindings.insert(entry.key(), entry.value().isEmpty() ? QStringList{} : QStringList{entry.value()});
+    setBindingOverrides(bindings);
+}
+
+void ActionRegistry::setBindingOverrides(const QMap<QString, QStringList> &overrides)
+{
     invalidatePresentationCache();
-    QMap<QString, QString> candidates;
+    QMap<QString, QStringList> candidates;
     for (auto entry = overrides.cbegin(); entry != overrides.cend(); ++entry)
     {
-        const ShortcutValidation validation = normalizedShortcut(entry.key(), entry.value());
-        if (!validation.valid())
-        {
+        if (!contains(entry.key()) || entry.value().size() > 8)
             continue;
-        }
-        const ActionDescriptor *descriptor = findDescriptor(entry.key());
-        Q_ASSERT(descriptor != nullptr);
-        if (validation.normalized != QLatin1StringView(descriptor->defaultShortcut))
+        QStringList normalized;
+        bool valid = true;
+        for (const auto &shortcut : entry.value())
         {
-            candidates.insert(entry.key(), validation.normalized);
+            const auto validation = normalizedShortcut(entry.key(), shortcut);
+            if (!validation.valid())
+            {
+                valid = false;
+                break;
+            }
+            if (!validation.normalized.isEmpty() && !normalized.contains(validation.normalized))
+                normalized.push_back(validation.normalized);
         }
+        if (valid && normalized != defaultShortcuts(entry.key()))
+            candidates.insert(entry.key(), normalized);
     }
-
     m_overrides = candidates;
-    // This newly introduced default must not steal a previously customized
-    // binding. Persist the opt-out through the existing overrides contract.
-    const QString reconnectId = QStringLiteral("terminal.reconnect");
-    if (!m_overrides.contains(reconnectId) && std::ranges::any_of(candidates, [](const QString &shortcut) {
-            return shortcut == QStringLiteral("Ctrl+R");
-        }))
-        m_overrides.insert(reconnectId, QString{});
+    // Existing customized bindings win over newly introduced defaults. Retain
+    // the other aliases instead of disabling the entire action.
     QMap<QString, QString> owners;
+    for (auto entry = candidates.cbegin(); entry != candidates.cend(); ++entry)
+        for (const auto &shortcut : entry.value())
+            if (!owners.contains(shortcut))
+                owners.insert(shortcut, entry.key());
     for (const ActionDescriptor &descriptor : ::actions)
     {
         const QString id = QLatin1StringView(descriptor.id);
-        const QString shortcut = effectiveShortcut(id);
-        if (shortcut.isEmpty())
+        const auto bindings = effectiveShortcuts(id);
+        QStringList accepted;
+        for (const auto &shortcut : bindings)
         {
-            continue;
+            if (!owners.contains(shortcut) || owners.value(shortcut) == id)
+            {
+                owners.insert(shortcut, id);
+                accepted.push_back(shortcut);
+            }
         }
-        const QString sequenceKey =
-            QKeySequence::fromString(shortcut, QKeySequence::PortableText).toString(QKeySequence::PortableText);
-        const auto owner = owners.constFind(sequenceKey);
-        if (owner == owners.cend())
-        {
-            owners.insert(sequenceKey, id);
-            continue;
-        }
-        if (m_overrides.contains(id))
-        {
-            m_overrides.remove(id);
-        }
-        else if (m_overrides.contains(owner.value()))
-        {
-            m_overrides.remove(owner.value());
-            owners.insert(sequenceKey, id);
-        }
+        if (accepted != bindings)
+            m_overrides.insert(id, accepted);
     }
 }
 
-const QMap<QString, QString> &ActionRegistry::overrides() const noexcept
+const QMap<QString, QStringList> &ActionRegistry::overrides() const noexcept
 {
     return m_overrides;
 }

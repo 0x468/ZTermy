@@ -13,6 +13,82 @@
 
 namespace ztermy::ui
 {
+[[nodiscard]] inline bool verifyActionShortcutBindingsRuntime(NativeWindow &main, AppController &controller,
+                                                              const QDir &captures)
+{
+    using namespace std::chrono_literals;
+    if (qEnvironmentVariableIntValue("ZTERMY_TEST_ISOLATED_SHELLS") != 1
+        || !QCoreApplication::arguments().contains(QStringLiteral("--data-dir")))
+        return false;
+    auto *root = main.rootObject();
+    {
+        const auto clock = root->property("sessionClock");
+        const auto restoreClock = qScopeGuard([&] {
+            root->setProperty("sessionClock", clock);
+        });
+        QVariant first;
+        QVariant later;
+        root->setProperty("sessionClock", 400000.0);
+        if (!QMetaObject::invokeMethod(root, "formatSessionDuration", Q_RETURN_ARG(QVariant, first),
+                                       Q_ARG(QVariant, QVariant{1000}), Q_ARG(QVariant, QVariant{121000})))
+            return false;
+        root->setProperty("sessionClock", 900000.0);
+        if (!QMetaObject::invokeMethod(root, "formatSessionDuration", Q_RETURN_ARG(QVariant, later),
+                                       Q_ARG(QVariant, QVariant{1000}), Q_ARG(QVariant, QVariant{121000}))
+            || first.toString() != QStringLiteral("02:00") || later != first)
+            return false;
+    }
+    if (!controller.resetAllActionShortcuts() || !QMetaObject::invokeMethod(root, "openSettingsTab"))
+        return false;
+    processWindowEventsFor(250ms);
+    if (!focusItem(main, quickItem(root, "settingsShortcutsCategory"), QStringLiteral("settingsShortcutsCategory")))
+        return false;
+    sendKey(main, Qt::Key_Space);
+    const auto bindings = [&](const QString &id) {
+        for (const auto &entry : controller.actions())
+            if (entry.toMap().value(QStringLiteral("id")) == id)
+                return entry.toMap().value(QStringLiteral("shortcuts")).toStringList();
+        return QStringList{};
+    };
+    const auto record = [&](const char *name, Qt::Key key, Qt::KeyboardModifiers modifiers) {
+        processWindowEventsFor(100ms);
+        if (!focusItem(main, quickItem(root, name), QString::fromLatin1(name)))
+            return false;
+        sendKey(main, Qt::Key_Space);
+        sendKey(main, key, modifiers);
+        return true;
+    };
+    if (!record("shortcutRecorder_application.commandPalette", Qt::Key_V, Qt::ControlModifier)
+        || !quickItem(root, "settingsPane")->property("shortcutRecording").toBool())
+        return false;
+    sendKey(main, Qt::Key_P, Qt::ControlModifier | Qt::AltModifier);
+    if (bindings(QStringLiteral("application.commandPalette")) != QStringList{QStringLiteral("Ctrl+Alt+P")})
+        return false;
+    if (!record("shortcutAdd_application.commandPalette", Qt::Key_F20, Qt::ControlModifier | Qt::AltModifier)
+        || bindings(QStringLiteral("application.commandPalette")).size() != 2)
+        return false;
+    if (!record("shortcutRecorder_application.commandPalette_1", Qt::Key_F21, Qt::ControlModifier | Qt::AltModifier)
+        || !bindings(QStringLiteral("application.commandPalette")).contains(QStringLiteral("Ctrl+Alt+F21")))
+        return false;
+    if (!record("shortcutRecorder_application.commandPalette_1", Qt::Key_Backspace, {})
+        || bindings(QStringLiteral("application.commandPalette")) != QStringList{QStringLiteral("Ctrl+Alt+P")})
+        return false;
+    if (!record("shortcutRecorder_terminal.paste_1", Qt::Key_Backspace, {})
+        || bindings(QStringLiteral("terminal.paste")).contains(QStringLiteral("Ctrl+V"))
+        || bindings(QStringLiteral("terminal.paste")).size() != 2)
+        return false;
+    if (!controller.resetActionShortcut(QStringLiteral("terminal.paste"))
+        || bindings(QStringLiteral("terminal.paste")).size() != 3)
+        return false;
+    auto *search = quickItem(root, "shortcutSearch");
+    if (!search || !search->setProperty("text", QStringLiteral("paste")))
+        return false;
+    processWindowEventsFor(150ms);
+    const bool saved = main.grabWindow().save(captures.filePath(QStringLiteral("shortcut-aliases.png")));
+    qInfo() << "Action shortcut aliases: add, edit, remove, conflict, paste opt-out and reset passed=" << saved;
+    return saved;
+}
+
 [[nodiscard]] inline bool verifyGlobalShortcutSettingsRuntime(NativeWindow &main, AppController &controller,
                                                               QWindow &peer, const QDir &captures)
 {

@@ -1,6 +1,7 @@
 #include "core/config/ApplicationSettings.h"
 
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTemporaryDir>
@@ -17,6 +18,16 @@ namespace
     // cases. Encode their font in the old unit before writing that old schema.
     auto document = QJsonDocument::fromJson(data);
     auto root = document.object();
+    const auto version = root.value(QStringLiteral("version")).toInt();
+    if (version > 0 && version < 47 && root.value("shortcutOverrides").isObject())
+    {
+        auto bindings = root.value("shortcutOverrides").toObject();
+        for (auto entry = bindings.begin(); entry != bindings.end(); ++entry)
+            if (entry.value().isArray())
+                entry.value() = entry.value().toArray().isEmpty() ? QJsonValue("") : entry.value().toArray().first();
+        root.insert("shortcutOverrides", bindings);
+        document.setObject(root);
+    }
     if (root.value(QStringLiteral("version")).toInt() > 0 && root.value(QStringLiteral("version")).toInt() < 46
         && root.contains(QStringLiteral("terminalFontWeight")))
     {
@@ -34,6 +45,12 @@ namespace
 
 [[nodiscard]] QJsonObject withMigratedTypography(QJsonObject legacy)
 {
+    auto shortcuts = legacy.value("shortcutOverrides").toObject();
+    for (auto entry = shortcuts.begin(); entry != shortcuts.end(); ++entry)
+        if (entry.value().isString())
+            entry.value() = entry.value().toString().isEmpty() ? QJsonArray{} : QJsonArray{entry.value()};
+    if (legacy.contains("shortcutOverrides"))
+        legacy.insert("shortcutOverrides", shortcuts);
     legacy.insert(QStringLiteral("terminalFontSize"),
                   legacy.value(QStringLiteral("terminalFontSize")).toDouble() * 0.75);
     legacy.insert(QStringLiteral("terminalFontWeight"), 400);
@@ -49,6 +66,7 @@ class ApplicationSettingsTests final : public QObject
     Q_OBJECT
 
 private slots:
+    void migratesSchema46ToMultipleShortcuts();
     void migratesTypographyWithoutChangingLegacySize();
     void missingFileUsesDefaults();
     void migratesSchema44AndBoundsHistoryLines();
@@ -92,6 +110,43 @@ private slots:
     void createsMissingParentDirectory();
 };
 
+void ApplicationSettingsTests::migratesSchema46ToMultipleShortcuts()
+{
+    QFile fixture(QFINDTESTDATA("fixtures/settings/schema-46.json"));
+    QVERIFY(fixture.open(QIODevice::ReadOnly));
+    auto legacy = QJsonDocument::fromJson(fixture.readAll()).object();
+    QTemporaryDir directory;
+    const auto path = directory.filePath("settings.json");
+    QVERIFY(writeFile(path, QJsonDocument(legacy).toJson()));
+    ztermy::config::ApplicationSettingsStore store(path);
+    auto settings = store.load();
+    QVERIFY(settings);
+    QCOMPARE(settings->shortcutOverrides.value("terminal.find"), QStringList{"Ctrl+Alt+F"});
+    QVERIFY(settings->shortcutOverrides.contains("terminal.paste"));
+    QVERIFY(settings->shortcutOverrides.value("terminal.paste").isEmpty());
+    QVERIFY(store.save(*settings));
+    QFile saved(path);
+    QVERIFY(saved.open(QIODevice::ReadOnly));
+    auto actual = QJsonDocument::fromJson(saved.readAll()).object();
+    saved.close();
+    QCOMPARE(actual.take("version").toInt(), 47);
+    auto expected = legacy;
+    expected.remove("version");
+    expected.insert("shortcutOverrides",
+                    QJsonObject{{"terminal.find", QJsonArray{"Ctrl+Alt+F"}}, {"terminal.paste", QJsonArray{}}});
+    QCOMPARE(actual, expected);
+    settings->shortcutOverrides["terminal.paste"] = {"Ctrl+V", "Ctrl+Shift+V"};
+    QVERIFY(store.save(*settings));
+    QCOMPARE(store.load(), settings);
+    settings->shortcutOverrides["terminal.paste"] = QStringList(9, "Ctrl+V");
+    QVERIFY(!store.save(*settings));
+    actual.insert("version", 47);
+    actual.insert("shortcutOverrides", QJsonObject{{"terminal.paste", QJsonArray{42}}});
+    const auto badPath = directory.filePath("bad.json");
+    QVERIFY(writeFile(badPath, QJsonDocument(actual).toJson()));
+    QVERIFY(!ztermy::config::ApplicationSettingsStore(badPath).load());
+}
+
 void ApplicationSettingsTests::migratesSchema44AndBoundsHistoryLines()
 {
     QFile fixture(QFINDTESTDATA("fixtures/settings/schema-44.json"));
@@ -115,7 +170,7 @@ void ApplicationSettingsTests::migratesSchema44AndBoundsHistoryLines()
         QFile file(path);
         QVERIFY(file.open(QIODevice::ReadOnly));
         auto rewritten = QJsonDocument::fromJson(file.readAll()).object();
-        QCOMPARE(rewritten.take(QStringLiteral("version")).toInt(), 46);
+        QCOMPARE(rewritten.take(QStringLiteral("version")).toInt(), 47);
         QCOMPARE(rewritten.take(QStringLiteral("terminalHistoryLines")).toInt(), lines);
         QCOMPARE(rewritten, withMigratedTypography(original));
     }
@@ -160,13 +215,18 @@ void ApplicationSettingsTests::migratesTypographyWithoutChangingLegacySize()
         QFile rewritten(path);
         QVERIFY(rewritten.open(QIODevice::ReadOnly));
         auto upgraded = QJsonDocument::fromJson(rewritten.readAll()).object();
-        QCOMPARE(upgraded.take(QStringLiteral("version")).toInt(), 46);
+        QCOMPARE(upgraded.take(QStringLiteral("version")).toInt(), 47);
         upgraded.remove(QStringLiteral("terminalFontWeight"));
         upgraded.remove(QStringLiteral("terminalLineHeight"));
         upgraded.remove(QStringLiteral("terminalCellWidth"));
         upgraded.insert(QStringLiteral("version"), 45);
         upgraded.insert(QStringLiteral("terminalFontSize"), 16);
-        QCOMPARE(upgraded, original);
+        auto expected = original;
+        auto shortcuts = expected.value("shortcutOverrides").toObject();
+        for (auto entry = shortcuts.begin(); entry != shortcuts.end(); ++entry)
+            entry.value() = QJsonArray{entry.value()};
+        expected.insert("shortcutOverrides", shortcuts);
+        QCOMPARE(upgraded, expected);
     }
     auto settings = *store.load();
     settings.terminalFontSize = 12.5;
@@ -222,7 +282,7 @@ void ApplicationSettingsTests::migratesSchema35AndPersistsThemeSlots()
     QVERIFY(file.open(QIODevice::ReadOnly));
     json = QJsonDocument::fromJson(file.readAll()).object();
     file.close();
-    QCOMPARE(json.value(QStringLiteral("version")).toInt(), 46);
+    QCOMPARE(json.value(QStringLiteral("version")).toInt(), 47);
     loaded->lightTheme = QStringLiteral("../escape");
     QVERIFY(!store.save(*loaded));
 }
@@ -248,7 +308,7 @@ void ApplicationSettingsTests::migratesSchema43AndPersistsReconnectHistory()
     QVERIFY(saved.open(QIODevice::ReadOnly));
     auto rewritten = QJsonDocument::fromJson(saved.readAll()).object();
     saved.close();
-    QCOMPARE(rewritten.take(QStringLiteral("version")).toInt(), 46);
+    QCOMPARE(rewritten.take(QStringLiteral("version")).toInt(), 47);
     QCOMPARE(rewritten.take(QStringLiteral("terminalHistoryLines")).toInt(), 10000);
     QCOMPARE(rewritten.take(QStringLiteral("retainHistoryOnReconnect")), QJsonValue(true));
     original.remove(QStringLiteral("version"));
@@ -327,7 +387,7 @@ void ApplicationSettingsTests::migratesSchema37AndPersistsSessionLifecycle()
     QCOMPARE(store.load(), loaded);
     QVERIFY(file.open(QIODevice::ReadOnly));
     json = QJsonDocument::fromJson(file.readAll()).object();
-    QCOMPARE(json.value(QStringLiteral("version")).toInt(), 46);
+    QCOMPARE(json.value(QStringLiteral("version")).toInt(), 47);
     QCOMPARE(json.value(QStringLiteral("closePaneOnSessionEnd")).toBool(), true);
     QCOMPARE(json.value(QStringLiteral("preserveTerminalSessions")).toBool(), false);
     QCOMPARE(json.value(QStringLiteral("reopenLocalSessions")).toBool(), false);
@@ -357,7 +417,7 @@ void ApplicationSettingsTests::migratesSchema38AndPersistsTitlePolicy()
     auto rewritten = QJsonDocument::fromJson(file.readAll()).object();
     rewritten.remove(QStringLiteral("retainHistoryOnReconnect"));
     rewritten.remove(QStringLiteral("windowsIntegration"));
-    QCOMPARE(rewritten.take(QStringLiteral("version")).toInt(), 46);
+    QCOMPARE(rewritten.take(QStringLiteral("version")).toInt(), 47);
     QCOMPARE(rewritten.take(QStringLiteral("terminalHistoryLines")).toInt(), 10000);
     QCOMPARE(rewritten.take(QStringLiteral("allowTerminalTitleChanges")), QJsonValue(false));
     QCOMPARE(rewritten.take(QStringLiteral("restoreDetachedWindows")), QJsonValue(true));
@@ -394,7 +454,7 @@ void ApplicationSettingsTests::migratesSchema39AndPersistsDetachedWindowPolicy()
     auto rewritten = QJsonDocument::fromJson(file.readAll()).object();
     rewritten.remove(QStringLiteral("retainHistoryOnReconnect"));
     rewritten.remove(QStringLiteral("windowsIntegration"));
-    QCOMPARE(rewritten.take(QStringLiteral("version")).toInt(), 46);
+    QCOMPARE(rewritten.take(QStringLiteral("version")).toInt(), 47);
     QCOMPARE(rewritten.take(QStringLiteral("terminalHistoryLines")).toInt(), 10000);
     QCOMPARE(rewritten.take(QStringLiteral("restoreDetachedWindows")), QJsonValue(false));
     auto window = rewritten.value(QStringLiteral("windowInteraction")).toObject();
@@ -438,7 +498,7 @@ void ApplicationSettingsTests::migratesSchema40AndPersistsTitleBarModes()
     auto rewritten = QJsonDocument::fromJson(saved.readAll()).object();
     rewritten.remove(QStringLiteral("retainHistoryOnReconnect"));
     rewritten.remove(QStringLiteral("windowsIntegration"));
-    QCOMPARE(rewritten.take(QStringLiteral("version")).toInt(), 46);
+    QCOMPARE(rewritten.take(QStringLiteral("version")).toInt(), 47);
     QCOMPARE(rewritten.take(QStringLiteral("terminalHistoryLines")).toInt(), 10000);
     auto window = rewritten.value(QStringLiteral("windowInteraction")).toObject();
     QCOMPARE(window.take(QStringLiteral("autoHideTitleBar")), QJsonValue(true));
@@ -472,7 +532,7 @@ void ApplicationSettingsTests::migratesSchema42AndValidatesExplorerChoices()
     QVERIFY(file.open(QIODevice::ReadOnly));
     auto rewritten = QJsonDocument::fromJson(file.readAll()).object();
     rewritten.remove(QStringLiteral("retainHistoryOnReconnect"));
-    QCOMPARE(rewritten.take(QStringLiteral("version")).toInt(), 46);
+    QCOMPARE(rewritten.take(QStringLiteral("version")).toInt(), 47);
     QCOMPARE(rewritten.take(QStringLiteral("terminalHistoryLines")).toInt(), 10000);
     const auto integration = rewritten.take(QStringLiteral("windowsIntegration")).toObject();
     QCOMPARE(integration, loaded->windowsIntegration.toJson());
@@ -518,7 +578,7 @@ void ApplicationSettingsTests::migratesSchema41WithoutLosingUnrelatedSettings()
     auto rewritten = QJsonDocument::fromJson(saved.readAll()).object();
     rewritten.remove(QStringLiteral("retainHistoryOnReconnect"));
     rewritten.remove(QStringLiteral("windowsIntegration"));
-    QCOMPARE(rewritten.take(QStringLiteral("version")).toInt(), 46);
+    QCOMPARE(rewritten.take(QStringLiteral("version")).toInt(), 47);
     QCOMPARE(rewritten.take(QStringLiteral("terminalHistoryLines")).toInt(), 10000);
     auto window = rewritten.value(QStringLiteral("windowInteraction")).toObject();
     QCOMPARE(window.take(QStringLiteral("globalShortcut")), QJsonValue(QStringLiteral("Ctrl+Alt+Space")));
@@ -601,7 +661,7 @@ void ApplicationSettingsTests::migratesSchema31AndPreservesProvider()
     QVERIFY(store.save(*loaded));
     QCOMPARE(store.load(), loaded);
     QVERIFY(file.open(QIODevice::ReadOnly));
-    QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value(QStringLiteral("version")).toInt(), 46);
+    QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value(QStringLiteral("version")).toInt(), 47);
     loaded->windowInteraction.navigationWidth = 1;
     QVERIFY(!store.save(*loaded));
 }
@@ -632,7 +692,7 @@ void ApplicationSettingsTests::migratesSchema32AndPersistsConnectionHistoryPrefe
     QVERIFY(file.open(QIODevice::ReadOnly));
     json = QJsonDocument::fromJson(file.readAll()).object();
     file.close();
-    QCOMPARE(json.value(QStringLiteral("version")).toInt(), 46);
+    QCOMPARE(json.value(QStringLiteral("version")).toInt(), 47);
     QCOMPARE(json.value(QStringLiteral("connectionHistoryEnabled")).toBool(), false);
     json.insert(QStringLiteral("connectionHistoryEnabled"), QStringLiteral("false"));
     const QString invalidPath = directory.filePath(QStringLiteral("invalid-settings.json"));
@@ -666,7 +726,7 @@ void ApplicationSettingsTests::migratesSchema33AndPersistsEffectsTier()
     QVERIFY(file.open(QIODevice::ReadOnly));
     json = QJsonDocument::fromJson(file.readAll()).object();
     file.close();
-    QCOMPARE(json.value(QStringLiteral("version")).toInt(), 46);
+    QCOMPARE(json.value(QStringLiteral("version")).toInt(), 47);
     QCOMPARE(json.value(QStringLiteral("effectsTier")).toString(), QStringLiteral("reduced"));
     json.insert(QStringLiteral("effectsTier"), QStringLiteral("ultra"));
     const QString invalidPath = directory.filePath(QStringLiteral("invalid-settings.json"));
@@ -704,7 +764,7 @@ void ApplicationSettingsTests::migratesSchema34AndPersistsTerminalTheme()
     QVERIFY(file.open(QIODevice::ReadOnly));
     json = QJsonDocument::fromJson(file.readAll()).object();
     file.close();
-    QCOMPARE(json.value(QStringLiteral("version")).toInt(), 46);
+    QCOMPARE(json.value(QStringLiteral("version")).toInt(), 47);
     QCOMPARE(json.value(QStringLiteral("terminalTheme")).toString(), QStringLiteral("solarized-dark"));
     const QString invalidPath = directory.filePath(QStringLiteral("invalid-settings.json"));
     json.insert(QStringLiteral("terminalTheme"), QStringLiteral("   "));
@@ -738,7 +798,7 @@ void ApplicationSettingsTests::savesAndLoadsEveryPreference()
     const ztermy::config::ApplicationSettings expected{
         .backdropOpacity = 0.82,
         .terminalBackgroundOpacity = 0.45,
-        .shortcutOverrides = {{QStringLiteral("terminal.find"), QStringLiteral("Ctrl+Alt+F")}},
+        .shortcutOverrides = {{QStringLiteral("terminal.find"), QStringList{QStringLiteral("Ctrl+Alt+F")}}},
         .customAccent = QStringLiteral("#3366CC"),
         .uiFontFamily = QStringLiteral("Microsoft YaHei UI"),
         .terminalFontFamily = QStringLiteral("Cascadia Code"),
@@ -856,7 +916,7 @@ void ApplicationSettingsTests::migratesLegacyWindowOpacityAndNoneBackdrop()
     QFile saved(path);
     QVERIFY(saved.open(QIODevice::ReadOnly));
     const QByteArray persisted = saved.readAll();
-    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 46")));
+    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 47")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdropOpacity\": 0.75")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdrop\": \"transparent\"")));
     QVERIFY(!persisted.contains(QByteArrayLiteral("windowOpacity")));
@@ -1142,7 +1202,7 @@ void ApplicationSettingsTests::migratesRecentPermissionSchemasAndAllowsResave()
 
         QVERIFY(file.open(QIODevice::ReadOnly));
         const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-        QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 46);
+        QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 47);
         QCOMPARE(persisted.value(QStringLiteral("aiPermission")).toString(), QStringLiteral("ask"));
         QCOMPARE(persisted.value(QStringLiteral("terminalFontSize")).toInt(), 16);
     }
@@ -1179,7 +1239,7 @@ void ApplicationSettingsTests::migratesRetiredExternalAgentSchemaWithoutLosingPr
     QVERIFY(store.save(*loaded));
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 46);
+    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 47);
     QVERIFY(!persisted.contains(QStringLiteral("aiAgent")));
     QCOMPARE(persisted.value(QStringLiteral("aiBaseUrl")).toString(), expected.aiBaseUrl);
     QCOMPARE(persisted.value(QStringLiteral("aiModel")).toString(), expected.aiModel);
@@ -1219,7 +1279,7 @@ void ApplicationSettingsTests::migratesNativeChatGptSchemaWithSystemAiProxy()
     QVERIFY(store.save(*loaded));
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 46);
+    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 47);
     QCOMPARE(persisted.value(QStringLiteral("aiProxy")).toString(), QStringLiteral("system"));
     QVERIFY(!loaded->closeToTray);
     QVERIFY(!loaded->performanceMode);
@@ -1252,7 +1312,7 @@ void ApplicationSettingsTests::migratesPrePerformanceSchemaWithPerformanceDisabl
     QVERIFY(store.save(*loaded));
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 46);
+    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 47);
     QCOMPARE(persisted.value(QStringLiteral("performanceMode")).toBool(), false);
 }
 
@@ -1327,7 +1387,7 @@ void ApplicationSettingsTests::migratesPreSelectionRetentionSchemaWithDismissDef
     QVERIFY(store.save(*loaded));
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 46);
+    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 47);
     QCOMPARE(persisted.value(QStringLiteral("keepSelectionAfterCopy")).toBool(), false);
 }
 
@@ -1380,7 +1440,7 @@ void ApplicationSettingsTests::migratesPreLocalShellSchemaWithAutomaticDefault()
     QVERIFY(store.save(*migrated));
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 46);
+    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 47);
     QCOMPARE(persisted.value(QStringLiteral("localShell")).toString(), QStringLiteral("automatic"));
 }
 

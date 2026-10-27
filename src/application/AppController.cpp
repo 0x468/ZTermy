@@ -7533,8 +7533,25 @@ bool AppController::triggerAction(const QString &actionId)
 
 QVariantMap AppController::setActionShortcut(const QString &actionId, const QString &shortcut)
 {
-    const QMap<QString, QString> previousOverrides = m_actionRegistry.overrides();
-    const actions::ShortcutValidation validation = m_actionRegistry.setShortcut(actionId, shortcut);
+    return setActionShortcuts(actionId, shortcut.isEmpty() ? QStringList{} : QStringList{shortcut});
+}
+
+QVariantMap AppController::editActionShortcutFromKey(const QString &actionId, const int index, const int key,
+                                                     const int modifiers)
+{
+    auto bindings = m_actionRegistry.effectiveShortcuts(actionId);
+    const auto binding = actions::ActionRegistry::shortcutFromKeyEvent(key, modifiers);
+    if (index >= 0 && index < bindings.size())
+        bindings[index] = binding;
+    else
+        bindings.push_back(binding);
+    return setActionShortcuts(actionId, bindings);
+}
+
+QVariantMap AppController::setActionShortcuts(const QString &actionId, const QStringList &shortcuts)
+{
+    const auto previousOverrides = m_actionRegistry.overrides();
+    const actions::ShortcutValidation validation = m_actionRegistry.setShortcuts(actionId, shortcuts);
     if (!validation.valid())
     {
         return shortcutResult(validation);
@@ -7544,7 +7561,7 @@ QVariantMap AppController::setActionShortcut(const QString &actionId, const QStr
     updated.shortcutOverrides = m_actionRegistry.overrides();
     if (!m_settingsStore.save(updated))
     {
-        m_actionRegistry.setOverrides(previousOverrides);
+        m_actionRegistry.setBindingOverrides(previousOverrides);
         return {
             {QStringLiteral("valid"), false},
             {QStringLiteral("shortcut"), QString{}},
@@ -7569,7 +7586,7 @@ bool AppController::resetActionShortcut(const QString &actionId)
     {
         return false;
     }
-    return setActionShortcut(actionId, m_actionRegistry.defaultShortcut(actionId))
+    return setActionShortcuts(actionId, m_actionRegistry.defaultShortcuts(actionId))
         .value(QStringLiteral("valid"))
         .toBool();
 }
@@ -7588,7 +7605,7 @@ bool AppController::resetAllActionShortcuts()
     {
         return true;
     }
-    const QMap<QString, QString> previousOverrides = m_actionRegistry.overrides();
+    const auto previousOverrides = m_actionRegistry.overrides();
     if (resetGlobal && m_globalShortcutHandler
         && !m_globalShortcutHandler({}, previousInteraction.summonToCursorScreen))
         return false;
@@ -7598,7 +7615,7 @@ bool AppController::resetAllActionShortcuts()
     updated.windowInteraction.globalShortcut.clear();
     if (!m_settingsStore.save(updated))
     {
-        m_actionRegistry.setOverrides(previousOverrides);
+        m_actionRegistry.setBindingOverrides(previousOverrides);
         if (resetGlobal && m_globalShortcutHandler)
             (void)m_globalShortcutHandler(previousInteraction.globalShortcut, previousInteraction.summonToCursorScreen);
         return false;
@@ -14102,7 +14119,7 @@ bool AppController::resetApplicationSettings()
     {
         return false;
     }
-    m_actionRegistry.setOverrides(m_settings.shortcutOverrides);
+    m_actionRegistry.setBindingOverrides(m_settings.shortcutOverrides);
     emit actionRegistryChanged();
     return true;
 }
@@ -16692,7 +16709,7 @@ bool AppController::replaceAndPersistAiPermissionRules(std::vector<ai::AiPermiss
 
 void AppController::initializeActionRegistry()
 {
-    m_actionRegistry.setOverrides(m_settings.shortcutOverrides);
+    m_actionRegistry.setBindingOverrides(m_settings.shortcutOverrides);
     m_settings.shortcutOverrides = m_actionRegistry.overrides();
     QObject::connect(this, &AppController::terminalTabsChanged, this, &AppController::actionRegistryChanged);
     QObject::connect(this, &AppController::activeTerminalTabChanged, this, &AppController::actionRegistryChanged);

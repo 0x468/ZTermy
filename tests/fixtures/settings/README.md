@@ -15,3 +15,10 @@ excluding only the schema number and newly introduced fields.
 summon shortcut and cursor-screen preference. Schema 43 adds
 `windowsIntegration`. The migration compares every previous field after rewrite;
 the fixture uses synthetic data and must not be regenerated from the new writer.
+
+## Settings schema 46
+
+`schema-46.json` is the previous real typography/settings contract. Schema 47
+changes shortcut override values from strings to arrays. Its migration test
+checks every unrelated JSON field, including opaque credential references,
+and preserves explicit empty/unbound overrides as empty arrays.

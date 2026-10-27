@@ -84,7 +84,8 @@ constexpr qint64 explorerMenuSchemaVersion = 43;
 constexpr qint64 reconnectHistorySchemaVersion = 44;
 constexpr qint64 terminalHistorySchemaVersion = 45;
 constexpr qint64 terminalTypographySchemaVersion = 46;
-constexpr qint64 currentSchemaVersion = terminalTypographySchemaVersion;
+constexpr qint64 multiShortcutSchemaVersion = 47;
+constexpr qint64 currentSchemaVersion = multiShortcutSchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -183,7 +184,10 @@ using ztermy::config::ThemePreference;
         settings.shortcutOverrides.size() <= 128
         && std::ranges::all_of(settings.shortcutOverrides.asKeyValueRange(), [](const auto &entry) {
                const auto &[id, shortcut] = entry;
-               return !id.trimmed().isEmpty() && id.size() <= 128 && shortcut.size() <= 128;
+               return !id.trimmed().isEmpty() && id.size() <= 128 && shortcut.size() <= 8
+                      && std::ranges::all_of(shortcut, [](const QString &sequence) {
+                             return !sequence.isEmpty() && sequence.size() <= 128;
+                         });
            });
     const QUrl aiBaseUrl(settings.aiBaseUrl.trimmed());
     const bool validAiBaseUrl =
@@ -471,7 +475,7 @@ using ztermy::config::ThemePreference;
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
 
-    QMap<QString, QString> shortcutOverrides;
+    QMap<QString, QStringList> shortcutOverrides;
     if (version >= shortcutSchemaVersion)
     {
         const QJsonObject shortcutObject = shortcutOverridesValue.toObject();
@@ -481,11 +485,26 @@ using ztermy::config::ThemePreference;
         }
         for (auto entry = shortcutObject.constBegin(); entry != shortcutObject.constEnd(); ++entry)
         {
-            if (!entry.value().isString())
+            if (version < multiShortcutSchemaVersion)
             {
-                return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+                if (!entry.value().isString())
+                    return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+                const auto legacy = entry.value().toString();
+                shortcutOverrides.insert(entry.key(), legacy.isEmpty() ? QStringList{} : QStringList{legacy});
             }
-            shortcutOverrides.insert(entry.key(), entry.value().toString());
+            else
+            {
+                if (!entry.value().isArray() || entry.value().toArray().size() > 8)
+                    return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+                QStringList bindings;
+                for (const auto &binding : entry.value().toArray())
+                {
+                    if (!binding.isString() || binding.toString().isEmpty())
+                        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+                    bindings.push_back(binding.toString());
+                }
+                shortcutOverrides.insert(entry.key(), bindings);
+            }
         }
     }
 
@@ -699,7 +718,7 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
     QJsonObject shortcutOverrides;
     for (auto entry = settings.shortcutOverrides.cbegin(); entry != settings.shortcutOverrides.cend(); ++entry)
     {
-        shortcutOverrides.insert(entry.key(), entry.value());
+        shortcutOverrides.insert(entry.key(), QJsonArray::fromStringList(entry.value()));
     }
 
     const QJsonObject root{

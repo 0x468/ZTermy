@@ -210,6 +210,54 @@ inline bool verifyPasteOptions(NativeWindow &window, AppController &controller, 
     viewport->pasteClipboard();
     if (viewport->multilinePastePending() || pastes != 3 || !exactBytes)
         return false;
+    // Exercise the same shortcuts a clipboard manager synthesizes, in both
+    // window types. No Enter is sent and no clipboard text is executed.
+    QObject::disconnect(pasted);
+    QObject::disconnect(detachedPasted);
+    clipboard->setText(QStringLiteral("rem paste binding"));
+    const auto verifyBindings = [&](QQuickWindow &target, TerminalItem *item) {
+        showForRuntimeSmoke(target);
+        target.requestActivate();
+        item->forceActiveFocus(Qt::OtherFocusReason);
+        if (!processWindowEventsUntil(
+                [&] {
+                    return target.isActive() && item->hasActiveFocus();
+                },
+                2000ms))
+            return false;
+        int deliveries = 0;
+        int rawControlV = 0;
+        bool exact = true;
+        const auto delivery = QObject::connect(item, &TerminalItem::pasteRequested, item, [&](const QByteArray &bytes) {
+            ++deliveries;
+            exact = exact && bytes == QByteArrayLiteral("rem paste binding");
+        });
+        const auto raw = QObject::connect(
+            item, &TerminalItem::keyEventGenerated, item, [&](const terminal::TerminalKeyEvent &event) {
+                if (event.action == terminal::TerminalKeyAction::press && event.key == terminal::TerminalKey::keyV)
+                    ++rawControlV;
+            });
+        const auto cleanup = qScopeGuard([&] {
+            QObject::disconnect(delivery);
+            QObject::disconnect(raw);
+        });
+        key(target, Qt::Key_V, Qt::ControlModifier);
+        key(target, Qt::Key_V, Qt::ControlModifier | Qt::ShiftModifier);
+        key(target, Qt::Key_Insert, Qt::ShiftModifier);
+        if (deliveries != 3 || rawControlV != 0 || !exact)
+            return false;
+        if (!controller.setActionShortcuts(QStringLiteral("terminal.paste"), {QStringLiteral("Ctrl+Shift+V")})
+                 .value(QStringLiteral("valid"))
+                 .toBool())
+            return false;
+        processWindowEventsFor(100ms);
+        key(target, Qt::Key_V, Qt::ControlModifier);
+        if (deliveries != 3 || rawControlV != 1)
+            return false;
+        return controller.resetActionShortcut(QStringLiteral("terminal.paste"));
+    };
+    if (!verifyBindings(window, viewport) || !verifyBindings(*detached, detachedViewport))
+        return false;
     qInfo() << "Paste scopes passed: once, cancellation, persistent and run-only; main and detached windows";
     return true;
 }

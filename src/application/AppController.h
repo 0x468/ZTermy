@@ -601,6 +601,9 @@ public:
                                              bool applyToRemainingBatch = false);
     Q_INVOKABLE bool triggerAction(const QString &actionId);
     [[nodiscard]] Q_INVOKABLE QVariantMap setActionShortcut(const QString &actionId, const QString &shortcut);
+    [[nodiscard]] Q_INVOKABLE QVariantMap setActionShortcuts(const QString &actionId, const QStringList &shortcuts);
+    [[nodiscard]] Q_INVOKABLE QVariantMap editActionShortcutFromKey(const QString &actionId, int index, int key,
+                                                                    int modifiers);
     [[nodiscard]] Q_INVOKABLE QVariantMap setActionShortcutFromKey(const QString &actionId, int key, int modifiers);
     Q_INVOKABLE bool setGlobalShortcutFromKey(int key, int modifiers);
     Q_INVOKABLE bool resetActionShortcut(const QString &actionId);
