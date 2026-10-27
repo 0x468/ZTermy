@@ -707,11 +707,11 @@ Rectangle {
         }
     }
 
-    function formatSessionDuration(startedUtcMs) {
+    function formatSessionDuration(startedUtcMs, endedUtcMs) {
         if (!startedUtcMs || startedUtcMs <= 0) {
             return "";
         }
-        const seconds = Math.max(0, Math.floor((sessionClock - startedUtcMs) / 1000));
+        const seconds = Math.max(0, Math.floor(((endedUtcMs > 0 ? endedUtcMs : sessionClock) - startedUtcMs) / 1000));
         const hours = Math.floor(seconds / 3600);
         const minutes = Math.floor((seconds % 3600) / 60);
         const remainingSeconds = seconds % 60;
@@ -1882,7 +1882,7 @@ Rectangle {
                             Text {
                                 Layout.alignment: Qt.AlignVCenter
                                 visible: root.width >= 900 && root.activeTerminalTab !== null && root.activeTerminalTab.connectedUtcMs > 0
-                                text: root.activeTerminalTab !== null ? qsTr("Connected %1").arg(root.formatSessionDuration(root.activeTerminalTab.connectedUtcMs)) : ""
+                                text: root.activeTerminalTab !== null ? (root.activeTerminalTab.running ? qsTr("Connected %1") : qsTr("Disconnected · %1")).arg(root.formatSessionDuration(root.activeTerminalTab.connectedUtcMs, root.activeTerminalTab.disconnectedUtcMs)) : ""
                                 color: Theme.workspaceTextMuted
                                 font.family: Theme.uiFont
                                 font.pixelSize: Theme.textCompact

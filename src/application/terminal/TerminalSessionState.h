@@ -108,6 +108,7 @@ struct TerminalSessionState final
     std::optional<PendingAiSftpList> pendingAiSftpList;
     std::optional<PendingAiMcpCall> pendingAiMcpCall;
     qint64 connectedUtcMs = 0;
+    qint64 disconnectedUtcMs = 0;
     qreal sessionBackgroundOpacity = -1.0;
     qint64 recordingStartedUtcMs = 0;
     std::uint64_t scriptPlaybackGeneration = 0;

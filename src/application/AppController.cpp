@@ -3047,6 +3047,7 @@ QVariantMap AppController::terminalTabValue(const TerminalTab &tab, const QStrin
         {QStringLiteral("identity"), tab.identity.isEmpty() ? tab.title : tab.identity},
         {QStringLiteral("address"), tab.address},
         {QStringLiteral("connectedUtcMs"), tab.connectedUtcMs},
+        {QStringLiteral("disconnectedUtcMs"), tab.disconnectedUtcMs},
         {QStringLiteral("logState"),
          tab.sessionLog ? sessionLogStateToken(tab.sessionLog->state()) : QStringLiteral("idle")},
         {QStringLiteral("logPath"), tab.sessionLog ? tab.sessionLog->path() : QString{}},
@@ -14976,6 +14977,14 @@ void AppController::connectLocalTabSignals(TerminalTab &tab)
                          if (TerminalTab *updated = findTab(tabId))
                          {
                              updated->running = running;
+                             if (running)
+                             {
+                                 if (updated->disconnectedUtcMs > 0)
+                                     updated->connectedUtcMs = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
+                                 updated->disconnectedUtcMs = 0;
+                             }
+                             else if (updated->connectedUtcMs > 0 && updated->disconnectedUtcMs == 0)
+                                 updated->disconnectedUtcMs = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
                              if (running && updated->connectedUtcMs == 0)
                              {
                                  updated->connectedUtcMs = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
@@ -15090,6 +15099,14 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
         if (TerminalTab *updated = findTab(tabId))
         {
             updated->running = running;
+            if (running)
+            {
+                if (updated->disconnectedUtcMs > 0)
+                    updated->connectedUtcMs = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
+                updated->disconnectedUtcMs = 0;
+            }
+            else if (updated->connectedUtcMs > 0 && updated->disconnectedUtcMs == 0)
+                updated->disconnectedUtcMs = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
             if (running && updated->connectedUtcMs == 0)
             {
                 updated->connectedUtcMs = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();

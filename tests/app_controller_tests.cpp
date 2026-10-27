@@ -214,6 +214,12 @@ class AppControllerTestAccess
 {
 public:
     static auto &active(AppController &controller) { return *controller.activeTab(); }
+    static void wireSsh(AppController &controller)
+    {
+        auto &tab = active(controller);
+        tab.ssh = std::make_unique<ssh::SshTerminalSession>();
+        controller.connectSshTabSignals(tab);
+    }
     static void wireSftp(AppController &controller) { controller.connectSftpTabSignals(active(controller)); }
     static void bind(AppController &controller, const ssh::SshConnectionRequest &request)
     {
@@ -239,6 +245,8 @@ class AppControllerTests final : public QObject
     Q_OBJECT
 
 private slots:
+    void freezesEndedSessionClock_data();
+    void freezesEndedSessionClock();
     void scopesMultilinePasteConfirmationWithoutLosingSettings();
     void preservesPasteConfirmationWhenSavingFails();
     void appliesHistorySettingsToExistingAndNewSessions();
@@ -317,6 +325,47 @@ private slots:
     void loadsRecentProfilesAndParsesQuickTargets();
     void reconnectsSavedKeyProfileOnRealHost();
 };
+
+void AppControllerTests::freezesEndedSessionClock_data()
+{
+    QTest::addColumn<bool>("ssh");
+    QTest::newRow("local") << false;
+    QTest::newRow("ssh") << true;
+}
+
+void AppControllerTests::freezesEndedSessionClock()
+{
+    QFETCH(bool, ssh);
+    QTemporaryDir directory;
+    auto state = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController controller(directory.filePath("profiles.json"), directory.filePath("known_hosts.json"),
+                                     directory.filePath("settings.json"), [state] {
+                                         return std::make_unique<FakeLocalTerminalSession>(state);
+                                     });
+    QVERIFY(!controller.startLocalTerminal().isEmpty());
+    auto &tab = ztermy::AppControllerTestAccess::active(controller);
+    if (ssh)
+        ztermy::AppControllerTestAccess::wireSsh(controller);
+    const auto setRunning = [&](bool running) {
+        if (ssh)
+            emit tab.ssh->runningChanged(running);
+        else
+            emit tab.local->runningChanged(running);
+    };
+    tab.connectedUtcMs = QDateTime::currentMSecsSinceEpoch() - 120000;
+    setRunning(false);
+    const auto ended = tab.disconnectedUtcMs;
+    QVERIFY(ended >= tab.connectedUtcMs + 120000);
+    setRunning(false);
+    QCOMPARE(tab.disconnectedUtcMs, ended);
+    QCoreApplication::processEvents();
+    QCOMPARE(controller.terminalTabs().first().toMap().value("disconnectedUtcMs").toLongLong(), ended);
+    setRunning(true);
+    QCOMPARE(tab.disconnectedUtcMs, 0);
+    QVERIFY(tab.connectedUtcMs >= ended);
+    setRunning(false);
+    QVERIFY(tab.disconnectedUtcMs >= ended);
+}
 
 void AppControllerTests::savesUpdatesReloadsAndDeletesProfiles()
 {
