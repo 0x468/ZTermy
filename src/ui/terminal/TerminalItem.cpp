@@ -147,9 +147,13 @@ TerminalItem::TerminalItem(QQuickItem *parent) : QQuickItem(parent)
             cancelSelectionGesture();
             reportFocus(false);
         }
-        else if (hasActiveFocus())
+        else
         {
-            reportFocus(true);
+            // Snapshots may advance while hidden without scheduling raster work.
+            // Rebuild from the latest snapshot when the viewport becomes visible.
+            invalidateRenderer(true);
+            if (hasActiveFocus())
+                reportFocus(true);
         }
     });
 }
@@ -2234,7 +2238,8 @@ void TerminalItem::invalidateRenderer(const bool full)
 {
     m_fullInvalidationPending = m_fullInvalidationPending || full;
     ++m_revision;
-    update();
+    if (isVisible())
+        update();
 }
 
 void TerminalItem::notifyInputMethod() const

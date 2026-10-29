@@ -4938,6 +4938,10 @@ if(BUILD_TESTING)
     add_test(NAME settings-reset-runtime COMMAND ztermy --settings-reset-smoke
         --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/settings-reset-runtime")
     set_tests_properties(settings-reset-runtime PROPERTIES RUN_SERIAL TRUE TIMEOUT 60)
+    add_test(NAME terminal-sparse-runtime COMMAND ztermy --terminal-sparse-benchmark
+        --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/terminal-sparse-runtime")
+    set_tests_properties(terminal-sparse-runtime PROPERTIES RUN_SERIAL TRUE TIMEOUT 60
+        ENVIRONMENT "ZTERMY_PERFORMANCE_PAINT_PHASE_DIAGNOSTIC=1")
     add_test(NAME markdown-document-runtime COMMAND ztermy --markdown-document-runtime-smoke
         --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/markdown-document-runtime")
     set_tests_properties(markdown-document-runtime PROPERTIES RUN_SERIAL TRUE TIMEOUT 45)

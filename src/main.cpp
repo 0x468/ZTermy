@@ -27,6 +27,7 @@
 #include "ui/SystemIntegrationRuntimeSmoke.h"
 #include "ui/TabRefreshRuntimeSmoke.h"
 #include "ui/TerminalLifecycleRuntimeSmoke.h"
+#include "ui/TerminalSparseBenchmark.h"
 #include "ui/ThemeSettingsRuntimeSmoke.h"
 #include "ui/WindowSettingsLayoutRuntimeSmoke.h"
 #include "ui/WindowStateRuntimeSmoke.h"
@@ -4720,6 +4721,13 @@ int main(int argc, char *argv[])
         }
         qCInfo(applicationLog) << "QML and native-window smoke test completed";
         return EXIT_SUCCESS;
+    }
+    if (QCoreApplication::arguments().contains(QStringLiteral("--terminal-sparse-benchmark")))
+    {
+        const bool passed = ztermy::ui::runTerminalSparseBenchmark(window, paths->dataDirectory);
+        appController.shutdown();
+        window.releaseResources();
+        return passed ? EXIT_SUCCESS : EXIT_FAILURE;
     }
     if (QCoreApplication::arguments().contains(QStringLiteral("--markdown-document-runtime-smoke")))
     {

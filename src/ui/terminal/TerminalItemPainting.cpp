@@ -225,6 +225,10 @@ namespace ztermy::ui
 {
 QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 {
+    // Qt can synchronize dirty content even for a hidden item. Keep the old
+    // revision pending; visibleChanged schedules a fresh render on restoration.
+    if (!isVisible())
+        return oldNode;
     auto *node = static_cast<TerminalTextureNode *>(oldNode);
     if (node == nullptr)
     {
