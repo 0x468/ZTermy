@@ -130,6 +130,13 @@ inline bool runTerminalSparseBenchmark(NativeWindow &window, const QString &dire
                 {QStringLiteral("paintP95UpperBoundUs"),
                  static_cast<qint64>(metrics.paintLatency.p95UpperBoundMicroseconds)},
                 {QStringLiteral("paintMaxUs"), static_cast<qint64>(metrics.paintLatency.maxMicroseconds)},
+                {QStringLiteral("paintAverageUs"), metrics.renderedFrames == 0
+                                                       ? 0.0
+                                                       : static_cast<double>(metrics.paintTotalNanoseconds)
+                                                             / static_cast<double>(metrics.renderedFrames) / 1000.0},
+                {QStringLiteral("rowRasterHits"), static_cast<qint64>(metrics.rowRasterHits)},
+                {QStringLiteral("rowRasterMisses"), static_cast<qint64>(metrics.rowRasterMisses)},
+                {QStringLiteral("rowRasterPeakBytes"), static_cast<qint64>(metrics.rowRasterPeakBytes)},
                 {QStringLiteral("textPaintP95UpperBoundUs"),
                  static_cast<qint64>(metrics.textPaintLatency.p95UpperBoundMicroseconds)},
                 {QStringLiteral("renderedFrames"), static_cast<qint64>(metrics.renderedFrames)},

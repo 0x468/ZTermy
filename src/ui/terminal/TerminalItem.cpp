@@ -97,6 +97,7 @@ namespace ztermy::ui
 
 TerminalItem::TerminalItem(QQuickItem *parent) : QQuickItem(parent)
 {
+    m_rowRasterCacheEnabled = qEnvironmentVariableIntValue("ZTERMY_DISABLE_ROW_RASTER_CACHE") != 1;
     m_statusText = tr("Starting local terminal...");
     setFlag(ItemHasContents, true);
     setFlag(ItemAcceptsInputMethod, true);
@@ -421,7 +422,7 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
         m_lastReportedFocus.reset();
         reportFocus(hasActiveFocus());
     }
-    invalidateRenderer(true);
+    invalidateRenderer(true, true);
     notifyInputMethod();
     if (scrollbarMoved)
         emit scrollbarChanged();
@@ -2234,8 +2235,18 @@ void TerminalItem::clearPreedit()
     invalidateRenderer(true);
 }
 
-void TerminalItem::invalidateRenderer(const bool full)
+void TerminalItem::setRowRasterCacheEnabled(const bool enabled)
 {
+    if (m_rowRasterCacheEnabled == enabled)
+        return;
+    m_rowRasterCacheEnabled = enabled;
+    invalidateRenderer(true);
+}
+
+void TerminalItem::invalidateRenderer(const bool full, const bool preserveRowRaster)
+{
+    if (full && !preserveRowRaster)
+        ++m_rowRasterRevision;
     m_fullInvalidationPending = m_fullInvalidationPending || full;
     ++m_revision;
     if (isVisible())

@@ -162,6 +162,7 @@ public:
     void setPerformanceMetricsEnabled(bool enabled) noexcept;
     void resetPerformanceMetrics() noexcept;
     [[nodiscard]] TerminalRenderMetricsSnapshot performanceMetrics() const noexcept;
+    void setRowRasterCacheEnabled(bool enabled);
     [[nodiscard]] terminal::TerminalGeometry currentTerminalGeometry() const noexcept;
 
 public slots:
@@ -285,7 +286,7 @@ protected:
     [[nodiscard]] virtual QString readClipboardText() const;
 
 private:
-    void invalidateRenderer(bool full);
+    void invalidateRenderer(bool full, bool preserveRowRaster = false);
     void reportTerminalSize();
     [[nodiscard]] std::optional<ztermy::terminal::TerminalPoint> terminalPoint(const QPointF &position) const;
     [[nodiscard]] std::uint32_t hyperlinkAt(const QPointF &position) const;
@@ -350,6 +351,8 @@ private:
     QString m_wordDelimiters = QStringLiteral(" \t'\"│`|;,()[]{}<>$@:#~");
     QByteArray m_pendingMultilinePaste;
     std::uint64_t m_revision = 0;
+    std::uint64_t m_rowRasterRevision = 0;
+    bool m_rowRasterCacheEnabled = true;
     qreal m_backgroundOpacity = 1.0;
     quint16 m_reportedColumns = 0;
     quint16 m_reportedRows = 0;

@@ -70,6 +70,19 @@ public:
     std::uint64_t revision = 0;
     QSize pixelSize;
     QImage image;
+    struct RasterRow
+    {
+        QImage ink;
+        std::vector<ztermy::terminal::TerminalCell> cells;
+        bool valid = false;
+    };
+    std::vector<RasterRow> rasterRows;
+    quint16 rasterColumns = 0;
+    ztermy::terminal::TerminalColor rasterForeground;
+    ztermy::terminal::TerminalColor rasterBackground;
+    bool rasterSearchSelection = false;
+    std::uint64_t rasterRevision = 0;
+    qreal rasterDpr = 0;
     ztermy::terminal::TerminalSnapshotPtr previousDiagnosticSnapshot;
     QSGSimpleTextureNode *cursorNode = nullptr;
     QRectF cursorRect;
@@ -378,6 +391,39 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         static const TerminalKeywordCellStyle noStyle{};
         const quint16 firstRow = cursorOnlyPaint ? m_snapshot->cursor.row : 0;
         const quint16 lastRow = cursorOnlyPaint ? static_cast<quint16>(firstRow + 1) : m_snapshot->rows;
+        // Cache only same-position, transparent text ink. Backgrounds, images
+        // and overlays retain their existing composition order. Never trust damage
+        // lists across coalesced snapshots: compare owned row content keys.
+        constexpr std::uint64_t rasterBudget = std::uint64_t{16} * 1024U * 1024U;
+        const int inkHeight = qCeil(cellHeightValue * devicePixelRatio) + 1;
+        const std::uint64_t rowBytes = static_cast<std::uint64_t>(pixelSize.width()) * inkHeight * 4U;
+        // Charge worst-case bounded grapheme storage, not just bitmap pixels.
+        constexpr std::size_t maximumCachedGrapheme = 16;
+        const std::uint64_t rowStorage =
+            rowBytes + sizeof(TerminalTextureNode::RasterRow)
+            + m_snapshot->columns * (sizeof(terminal::TerminalCell) + (maximumCachedGrapheme + 8) * sizeof(char32_t));
+        const bool cacheEligible = m_rowRasterCacheEnabled && m_snapshot->images.empty() && preeditClusters.empty()
+                                   && m_keywordStyles.empty() && m_searchStyles.empty() && m_searchQuery.isEmpty()
+                                   && !m_quickSelectActive && !m_copyModeActive && rowBytes > 0
+                                   && rowStorage <= rasterBudget && m_snapshot->rows <= rasterBudget / rowStorage
+                                   && std::ranges::none_of(m_snapshot->cells, [](const auto &cell) {
+                                          return cell.blink || cell.grapheme.size() > maximumCachedGrapheme;
+                                      });
+        const bool compatibleRaster =
+            cacheEligible && !node->rasterRows.empty() && node->rasterRevision == m_rowRasterRevision
+            && node->pixelSize == pixelSize && node->rasterDpr == devicePixelRatio
+            && node->rasterColumns == m_snapshot->columns && node->rasterRows.size() == m_snapshot->rows
+            && node->rasterForeground == m_snapshot->defaultForeground
+            && node->rasterBackground == m_snapshot->defaultBackground
+            && node->rasterSearchSelection == m_snapshot->searchSelectionPresent;
+        if (!compatibleRaster)
+        {
+            node->rasterRows.clear();
+            if (cacheEligible)
+                node->rasterRows.resize(m_snapshot->rows);
+        }
+        std::size_t rasterHits = 0;
+        std::size_t rasterMisses = 0;
         if (collectPaintPhases)
         {
             const qint64 now = frameTimer.nsecsElapsed();
@@ -477,6 +523,23 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
             QPainter textPainter;
             const qreal rowTop =
                 qFloor((verticalPadding + row * cellHeightValue) * devicePixelRatio) / devicePixelRatio;
+            auto *cachedRow = cacheEligible ? &node->rasterRows[row] : nullptr;
+            // Cursor glyph shaping metadata is rebuilt on its row, never cached.
+            const bool canCacheRow = cachedRow && !(terminalCursorPresent && row == m_snapshot->cursor.row);
+            const auto rowCellOffset = static_cast<std::ptrdiff_t>(row) * m_snapshot->columns;
+            if (canCacheRow && compatibleRaster && cachedRow->valid
+                && std::equal(m_snapshot->cells.begin() + rowCellOffset,
+                              m_snapshot->cells.begin() + rowCellOffset + m_snapshot->columns, cachedRow->cells.begin(),
+                              cachedRow->cells.end()))
+            {
+                if (!cachedRow->ink.isNull())
+                    painter.drawImage(QPointF{0, rowTop}, cachedRow->ink);
+                ++rasterHits;
+                continue;
+            }
+            ++rasterMisses;
+            if (cachedRow)
+                cachedRow->valid = false;
             activeStyleBits = std::numeric_limits<std::size_t>::max();
             activePen = QColor{};
             for (quint16 column = 0; column < m_snapshot->columns; ++column)
@@ -703,7 +766,38 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
             {
                 textPainter.end();
                 painter.drawImage(QPointF{0, rowTop}, rowInk);
+                if (canCacheRow)
+                    cachedRow->ink = rowInk;
             }
+            else if (canCacheRow)
+                cachedRow->ink = {};
+            if (canCacheRow)
+            {
+                cachedRow->cells.assign(m_snapshot->cells.begin() + rowCellOffset,
+                                        m_snapshot->cells.begin() + rowCellOffset + m_snapshot->columns);
+                cachedRow->valid = true;
+            }
+        }
+        if (cacheEligible)
+        {
+            node->rasterColumns = m_snapshot->columns;
+            node->rasterForeground = m_snapshot->defaultForeground;
+            node->rasterBackground = m_snapshot->defaultBackground;
+            node->rasterSearchSelection = m_snapshot->searchSelectionPresent;
+            node->rasterRevision = m_rowRasterRevision;
+            node->rasterDpr = devicePixelRatio;
+        }
+        if (m_renderMetrics.enabled())
+        {
+            std::uint64_t cacheBytes = 0;
+            for (const auto &cachedRow : node->rasterRows)
+            {
+                cacheBytes += static_cast<std::uint64_t>(cachedRow.ink.sizeInBytes());
+                cacheBytes += cachedRow.cells.capacity() * sizeof(terminal::TerminalCell);
+                for (const auto &cell : cachedRow.cells)
+                    cacheBytes += cell.grapheme.capacity() * sizeof(char32_t);
+            }
+            m_renderMetrics.recordRowRaster(rasterHits, rasterMisses, cacheBytes);
         }
         if (!cursorOnlyPaint && m_quickSelectActive)
         {

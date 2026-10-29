@@ -16,6 +16,7 @@ struct TerminalRenderMetricsSnapshot final
     diagnostics::LatencySummary paintLatency;
     diagnostics::LatencySummary textureLatency;
     std::uint64_t renderedFrames = 0;
+    std::uint64_t paintTotalNanoseconds = 0;
     std::uint64_t fullFrames = 0;
     std::uint64_t partialFrames = 0;
     std::uint64_t cleanFrames = 0;
@@ -33,6 +34,9 @@ struct TerminalRenderMetricsSnapshot final
     std::uint64_t rowReuseReusableRows = 0;
     std::uint64_t rowReuseRepaintRows = 0;
     std::uint64_t rowReuseShiftedFrames = 0;
+    std::uint64_t rowRasterHits = 0;
+    std::uint64_t rowRasterMisses = 0;
+    std::uint64_t rowRasterPeakBytes = 0;
     diagnostics::LatencySummary imagePreparationLatency;
     diagnostics::LatencySummary snapshotPreparationLatency;
     diagnostics::LatencySummary backgroundPaintLatency;
@@ -59,6 +63,7 @@ public:
     void recordCursorInvalidation() noexcept;
     void recordRowReuse(std::size_t candidateRows, std::size_t reusableRows, bool shifted) noexcept;
     void recordPaintPhases(const TerminalPaintPhaseDurations &durations) noexcept;
+    void recordRowRaster(std::size_t hits, std::size_t misses, std::uint64_t bytes) noexcept;
     void recordFrame(std::chrono::steady_clock::duration paintLatency,
                      std::chrono::steady_clock::duration textureLatency, std::uint64_t framePixels,
                      terminal::TerminalDamageKind damage, std::size_t damagedRows) noexcept;
@@ -71,6 +76,7 @@ private:
     diagnostics::LatencyHistogram m_textureLatency;
     std::atomic_bool m_enabled = false;
     std::atomic_uint64_t m_renderedFrames = 0;
+    std::atomic_uint64_t m_paintTotalNanoseconds = 0;
     std::atomic_uint64_t m_fullFrames = 0;
     std::atomic_uint64_t m_partialFrames = 0;
     std::atomic_uint64_t m_cleanFrames = 0;
@@ -88,6 +94,9 @@ private:
     std::atomic_uint64_t m_rowReuseReusableRows = 0;
     std::atomic_uint64_t m_rowReuseRepaintRows = 0;
     std::atomic_uint64_t m_rowReuseShiftedFrames = 0;
+    std::atomic_uint64_t m_rowRasterHits = 0;
+    std::atomic_uint64_t m_rowRasterMisses = 0;
+    std::atomic_uint64_t m_rowRasterPeakBytes = 0;
     diagnostics::LatencyHistogram m_imagePreparationLatency;
     diagnostics::LatencyHistogram m_snapshotPreparationLatency;
     diagnostics::LatencyHistogram m_backgroundPaintLatency;

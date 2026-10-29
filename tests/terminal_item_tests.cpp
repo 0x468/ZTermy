@@ -130,6 +130,8 @@ private slots:
     void highlightsWideAndCaseInsensitiveKeywords();
     void recordsOptInRenderMetrics();
     void analyzesTerminalRowReuse();
+    void rowRasterCacheMatchesFullPaint_data();
+    void rowRasterCacheMatchesFullPaint();
 };
 
 void TerminalItemTests::keepsInputAndSelectionVisibleOverImages_data()
@@ -587,6 +589,7 @@ void TerminalItemTests::recordsOptInRenderMetrics()
     metrics.recordSnapshot(ztermy::terminal::TerminalDamageKind::partial, 2);
     metrics.recordCursorInvalidation();
     metrics.recordRowReuse(24, 20, true);
+    metrics.recordRowRaster(22, 2, 4096);
     metrics.recordPaintPhases({
         .imagePreparation = std::chrono::microseconds{100},
         .snapshotPreparation = std::chrono::microseconds{200},
@@ -614,6 +617,10 @@ void TerminalItemTests::recordsOptInRenderMetrics()
     QCOMPARE(snapshot.rowReuseReusableRows, std::uint64_t{20});
     QCOMPARE(snapshot.rowReuseRepaintRows, std::uint64_t{4});
     QCOMPARE(snapshot.rowReuseShiftedFrames, std::uint64_t{1});
+    QCOMPARE(snapshot.rowRasterHits, std::uint64_t{22});
+    QCOMPARE(snapshot.rowRasterMisses, std::uint64_t{2});
+    QCOMPARE(snapshot.rowRasterPeakBytes, std::uint64_t{4096});
+    QCOMPARE(snapshot.paintTotalNanoseconds, std::uint64_t{1'500'000});
     QCOMPARE(snapshot.imagePreparationLatency.count, std::uint64_t{1});
     QCOMPARE(snapshot.snapshotPreparationLatency.count, std::uint64_t{1});
     QCOMPARE(snapshot.backgroundPaintLatency.count, std::uint64_t{1});
@@ -622,6 +629,210 @@ void TerminalItemTests::recordsOptInRenderMetrics()
 
     metrics.reset();
     QCOMPARE(metrics.snapshot().renderedFrames, std::uint64_t{0});
+    QCOMPARE(metrics.snapshot().rowRasterHits, std::uint64_t{0});
+    QCOMPARE(metrics.snapshot().rowRasterPeakBytes, std::uint64_t{0});
+}
+
+void TerminalItemTests::rowRasterCacheMatchesFullPaint_data()
+{
+    QTest::addColumn<QString>("scenario");
+    for (const auto *name :
+         {"sparse",       "selection", "clear-selection",  "scroll",           "wide-styles", "cursor",
+          "font",         "weight",    "line-height",      "column-width",     "ligatures",   "palette",
+          "resize",       "image",     "remove-image",     "preedit",          "search",      "keywords",
+          "blink",        "font-size", "snapshot-palette", "selected-palette", "cursor-move", "producer-alias",
+          "long-grapheme"})
+        QTest::newRow(name) << QString::fromLatin1(name);
+}
+
+void TerminalItemTests::rowRasterCacheMatchesFullPaint()
+{
+    QFETCH(QString, scenario);
+    QQuickWindow window;
+    auto *item = new TestableTerminalItem(window.contentItem());
+    item->setRowRasterCacheEnabled(true);
+    item->setPerformanceMetricsEnabled(true);
+    item->setFontPixelSize(18);
+    item->setCursorBlink(false);
+    item->setTerminalCursorVisible(false);
+    item->setTextBlinkEnabled(false);
+    window.resize(840, 520);
+    item->setSize(window.size());
+    auto initial = snapshotAt(3, 3);
+    initial->columns = 64;
+    initial->rows = 16;
+    initial->cells.resize(std::size_t{64} * 16);
+    initial->cursor.visible = false;
+    for (quint16 row = 0; row < initial->rows; ++row)
+        for (quint16 column = 0; column < initial->columns; ++column)
+        {
+            auto &cell = initial->cell(column, row);
+            cell.grapheme.assign(1, U'a' + (column + row) % 26);
+            cell.foreground = {.red = 220, .green = 220, .blue = 220};
+        }
+    const auto addImage = [](auto &snapshot) {
+        auto pixels = std::make_shared<ztermy::terminal::TerminalImage>();
+        pixels->width = pixels->height = 1;
+        pixels->pixels = {240, 30, 60, 210};
+        snapshot.images.push_back(
+            {.image = pixels, .row = 2, .z = 1, .width = 160, .height = 70, .sourceWidth = 1, .sourceHeight = 1});
+    };
+    if (scenario == QStringLiteral("clear-selection"))
+    {
+        initial->cell(4, 2).selected = true;
+        initial->selectionPresent = true;
+    }
+    if (scenario == QStringLiteral("cursor-move"))
+    {
+        initial->cursor.visible = true;
+        item->setTerminalCursorVisible(true);
+    }
+    if (scenario == QStringLiteral("remove-image"))
+        addImage(*initial);
+    item->setSnapshot(initial);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    const auto capture = [&] {
+        QTest::qWait(25);
+        return window.grabWindow();
+    };
+    QVERIFY(!capture().isNull());
+    // One full warm frame, then an immutable successor. Deliberately lie about
+    // damage: cache correctness must not depend on an unbroken snapshot chain.
+    auto next = std::make_shared<ztermy::terminal::TerminalSnapshot>(*initial);
+    next->cell(1, 1).grapheme = U"Z";
+    next->damage = ztermy::terminal::TerminalDamageKind::none;
+    next->damagedRows.clear();
+    bool expectHits = true;
+    if (scenario == QStringLiteral("selection") || scenario == QStringLiteral("clear-selection"))
+    {
+        next->selectionPresent = scenario == QStringLiteral("selection");
+        for (quint16 column = 2; column < 12; ++column)
+            next->cell(column, 2).selected = next->selectionPresent;
+    }
+    else if (scenario == QStringLiteral("scroll"))
+    {
+        std::rotate(next->cells.begin(), next->cells.begin() + next->columns, next->cells.end());
+        next->scrollbar.offset = 300;
+        expectHits = false;
+    }
+    else if (scenario == QStringLiteral("wide-styles"))
+    {
+        next->cell(2, 4).grapheme = U"问";
+        next->cell(2, 4).displayWidth = 2;
+        next->cell(3, 4).grapheme.clear();
+        next->cell(3, 4).displayWidth = 0;
+        next->cell(4, 4).grapheme = U"e\u0301";
+        next->cell(5, 4).grapheme = U"\U0001f600";
+        next->cell(5, 4).bold = true;
+        next->cell(6, 4).italic = true;
+        next->cell(7, 4).underlineStyle = ztermy::terminal::TerminalUnderlineStyle::curly;
+        next->cell(8, 4).selected = true;
+    }
+    else if (scenario == QStringLiteral("cursor"))
+    {
+        item->setTerminalCursorVisible(true);
+        next->cursor.visible = true;
+        next->cursor.style = ztermy::terminal::TerminalCursorStyle::block;
+    }
+    else if (scenario == QStringLiteral("cursor-move"))
+        next->cursor.row = 5;
+    else if (scenario == QStringLiteral("snapshot-palette"))
+    {
+        next->defaultForeground = {.red = 20, .green = 30, .blue = 40};
+        next->defaultBackground = {.red = 250, .green = 245, .blue = 240};
+        expectHits = false;
+    }
+    else if (scenario == QStringLiteral("producer-alias"))
+    {
+        initial->cell(10, 6).grapheme = U"Q";
+        next->cell(10, 6).grapheme = U"Q";
+    }
+    else if (scenario == QStringLiteral("long-grapheme"))
+    {
+        next->cell(3, 3).grapheme = U"e" + std::u32string(40, U'\u0301');
+        expectHits = false;
+    }
+    else if (scenario == QStringLiteral("image"))
+    {
+        addImage(*next);
+        next->cell(4, 2).selected = true;
+        expectHits = false;
+    }
+    else if (scenario == QStringLiteral("remove-image"))
+    {
+        next->images.clear();
+        expectHits = false;
+    }
+    else if (scenario == QStringLiteral("preedit"))
+    {
+        QInputMethodEvent event(QStringLiteral("输入法"), {});
+        item->inputMethodEvent(&event);
+        expectHits = false;
+    }
+    else if (scenario == QStringLiteral("search"))
+    {
+        item->setSearchQuery(QStringLiteral("abc"));
+        expectHits = false;
+    }
+    else if (scenario == QStringLiteral("keywords"))
+    {
+        item->setKeywordHighlightRules({QVariantMap{{QStringLiteral("pattern"), QStringLiteral("abc")},
+                                                    {QStringLiteral("foreground"), QStringLiteral("#FF0000")}}});
+        expectHits = false;
+    }
+    else if (scenario == QStringLiteral("blink"))
+    {
+        next->cell(5, 5).blink = true;
+        expectHits = false;
+    }
+    else if (scenario != QStringLiteral("sparse"))
+    {
+        if (scenario == QStringLiteral("font"))
+            item->setFontFamily(QStringLiteral("Consolas"));
+        if (scenario == QStringLiteral("font-size"))
+            item->setFontPixelSize(24);
+        if (scenario == QStringLiteral("weight"))
+            item->setFontWeight(700);
+        if (scenario == QStringLiteral("line-height"))
+            item->setLineHeightScale(1.3);
+        if (scenario == QStringLiteral("column-width"))
+            item->setCellWidthScale(1.15);
+        if (scenario == QStringLiteral("ligatures"))
+            item->setLigaturesEnabled(false);
+        if (scenario == QStringLiteral("palette"))
+            item->setForegroundOverride(QColor(40, 100, 220));
+        if (scenario == QStringLiteral("selected-palette"))
+        {
+            item->setSelectionForeground(QColor(20, 40, 60));
+            item->setSelectionBackground(QColor(230, 210, 180));
+            next->cell(3, 3).selected = true;
+        }
+        if (scenario == QStringLiteral("resize"))
+        {
+            window.resize(760, 480);
+            item->setSize(window.size());
+        }
+        expectHits = false;
+    }
+    item->resetPerformanceMetrics();
+    item->setSnapshot(next);
+    const QImage cached = capture();
+    QVERIFY(!cached.isNull());
+    const auto cacheMetrics = item->performanceMetrics();
+    if (expectHits)
+        QVERIFY2(cacheMetrics.rowRasterHits > 0, qPrintable(scenario));
+    else
+        QCOMPARE(cacheMetrics.rowRasterHits, std::uint64_t{0});
+    if (scenario == QStringLiteral("image") || scenario == QStringLiteral("preedit")
+        || scenario == QStringLiteral("search") || scenario == QStringLiteral("keywords")
+        || scenario == QStringLiteral("blink") || scenario == QStringLiteral("long-grapheme"))
+        QCOMPARE(cacheMetrics.rowRasterPeakBytes, std::uint64_t{0});
+    QVERIFY(cacheMetrics.rowRasterPeakBytes <= std::uint64_t{16} * 1024U * 1024U);
+    item->setRowRasterCacheEnabled(false);
+    const QImage reference = capture();
+    QVERIFY(!reference.isNull());
+    QCOMPARE(cached, reference);
 }
 
 void TerminalItemTests::skipsKeywordStylesWithoutRulesAndReportsScrollbarChanges()

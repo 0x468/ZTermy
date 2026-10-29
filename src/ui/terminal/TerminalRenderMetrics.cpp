@@ -44,6 +44,7 @@ void TerminalRenderMetrics::reset() noexcept
     m_paintLatency.reset();
     m_textureLatency.reset();
     m_renderedFrames.store(0, std::memory_order_relaxed);
+    m_paintTotalNanoseconds.store(0, std::memory_order_relaxed);
     m_fullFrames.store(0, std::memory_order_relaxed);
     m_partialFrames.store(0, std::memory_order_relaxed);
     m_cleanFrames.store(0, std::memory_order_relaxed);
@@ -61,6 +62,9 @@ void TerminalRenderMetrics::reset() noexcept
     m_rowReuseReusableRows.store(0, std::memory_order_relaxed);
     m_rowReuseRepaintRows.store(0, std::memory_order_relaxed);
     m_rowReuseShiftedFrames.store(0, std::memory_order_relaxed);
+    m_rowRasterHits.store(0, std::memory_order_relaxed);
+    m_rowRasterMisses.store(0, std::memory_order_relaxed);
+    m_rowRasterPeakBytes.store(0, std::memory_order_relaxed);
     m_imagePreparationLatency.reset();
     m_snapshotPreparationLatency.reset();
     m_backgroundPaintLatency.reset();
@@ -106,6 +110,16 @@ void TerminalRenderMetrics::recordRowReuse(const std::size_t candidateRows, cons
     }
 }
 
+void TerminalRenderMetrics::recordRowRaster(const std::size_t hits, const std::size_t misses,
+                                            const std::uint64_t bytes) noexcept
+{
+    if (!enabled())
+        return;
+    m_rowRasterHits.fetch_add(hits, std::memory_order_relaxed);
+    m_rowRasterMisses.fetch_add(misses, std::memory_order_relaxed);
+    updateMaximum(m_rowRasterPeakBytes, bytes);
+}
+
 void TerminalRenderMetrics::recordPaintPhases(const TerminalPaintPhaseDurations &durations) noexcept
 {
     if (!enabled())
@@ -129,6 +143,9 @@ void TerminalRenderMetrics::recordFrame(const std::chrono::steady_clock::duratio
         return;
     }
     m_paintLatency.record(paintLatency);
+    m_paintTotalNanoseconds.fetch_add(
+        static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(paintLatency).count()),
+        std::memory_order_relaxed);
     m_textureLatency.record(textureLatency);
     m_renderedFrames.fetch_add(1, std::memory_order_relaxed);
     incrementDamageCounters(damage, m_fullFrames, m_partialFrames, m_cleanFrames);
@@ -146,6 +163,7 @@ TerminalRenderMetricsSnapshot TerminalRenderMetrics::snapshot() const noexcept
         .paintLatency = m_paintLatency.summary(),
         .textureLatency = m_textureLatency.summary(),
         .renderedFrames = m_renderedFrames.load(std::memory_order_relaxed),
+        .paintTotalNanoseconds = m_paintTotalNanoseconds.load(std::memory_order_relaxed),
         .fullFrames = m_fullFrames.load(std::memory_order_relaxed),
         .partialFrames = m_partialFrames.load(std::memory_order_relaxed),
         .cleanFrames = m_cleanFrames.load(std::memory_order_relaxed),
@@ -163,6 +181,9 @@ TerminalRenderMetricsSnapshot TerminalRenderMetrics::snapshot() const noexcept
         .rowReuseReusableRows = m_rowReuseReusableRows.load(std::memory_order_relaxed),
         .rowReuseRepaintRows = m_rowReuseRepaintRows.load(std::memory_order_relaxed),
         .rowReuseShiftedFrames = m_rowReuseShiftedFrames.load(std::memory_order_relaxed),
+        .rowRasterHits = m_rowRasterHits.load(std::memory_order_relaxed),
+        .rowRasterMisses = m_rowRasterMisses.load(std::memory_order_relaxed),
+        .rowRasterPeakBytes = m_rowRasterPeakBytes.load(std::memory_order_relaxed),
         .imagePreparationLatency = m_imagePreparationLatency.summary(),
         .snapshotPreparationLatency = m_snapshotPreparationLatency.summary(),
         .backgroundPaintLatency = m_backgroundPaintLatency.summary(),
