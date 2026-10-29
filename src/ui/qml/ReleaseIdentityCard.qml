@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Effects
+import QtQuick.Window
 
 Item {
     id: card
@@ -10,6 +11,7 @@ Item {
     required property string version
     required property string verse
     property bool compact: false
+    readonly property bool sceneAnimationActive: visible && Window.window !== null && Window.window.visible && Window.window.visibility !== Window.Minimized && Motion.enabled && !Motion.reduced
     readonly property color releaseAccent: Theme.dark ? "#D8C7F2" : "#8B593C"
     readonly property color skyTop: Theme.dark ? "#17141F" : "#FFF9F1"
     readonly property color skyBottom: Theme.dark ? "#292038" : "#EBD8C5"
@@ -36,19 +38,21 @@ Item {
     }
 
     NumberAnimation on animatedMoonPhase {
+        objectName: "releaseMoonAnimation"
         from: 0.1
         to: 1.1
         duration: hover.hovered ? 11000 : 32000
         loops: Animation.Infinite
-        running: Motion.enabled && !Motion.reduced
+        running: card.sceneAnimationActive
     }
 
     NumberAnimation on animatedWavePhase {
+        objectName: "releaseWaveAnimation"
         from: 0
         to: Math.PI * 2
         duration: hover.hovered ? 2500 : 5200
         loops: Animation.Infinite
-        running: Motion.enabled && !Motion.reduced
+        running: card.sceneAnimationActive
     }
 
     function traceMoon(ctx, phase, x, y, radius) {

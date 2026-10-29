@@ -4938,6 +4938,9 @@ if(BUILD_TESTING)
     add_test(NAME settings-reset-runtime COMMAND ztermy --settings-reset-smoke
         --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/settings-reset-runtime")
     set_tests_properties(settings-reset-runtime PROPERTIES RUN_SERIAL TRUE TIMEOUT 60)
+    add_test(NAME release-card-activity-runtime COMMAND ztermy --release-card-activity-smoke
+        --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/release-card-activity-runtime")
+    set_tests_properties(release-card-activity-runtime PROPERTIES RUN_SERIAL TRUE TIMEOUT 45)
     add_test(NAME tab-refresh-runtime COMMAND ztermy --tab-refresh-smoke
         --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/tab-refresh-runtime")
     set_tests_properties(tab-refresh-runtime PROPERTIES RUN_SERIAL TRUE TIMEOUT 60)

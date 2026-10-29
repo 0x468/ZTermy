@@ -20,6 +20,7 @@
 #include "ui/FontTypographyRuntimeSmoke.h"
 #include "ui/MemoryLifecycleRuntimeSmoke.h"
 #include "ui/PasteOptionsRuntimeSmoke.h"
+#include "ui/ReleaseCardActivityRuntimeSmoke.h"
 #include "ui/RuntimeSmokeItems.h"
 #include "ui/SettingsResetRuntimeSmoke.h"
 #include "ui/SystemIntegrationRuntimeSmoke.h"
@@ -4702,6 +4703,15 @@ int main(int argc, char *argv[])
         }
         qCInfo(applicationLog) << "QML and native-window smoke test completed";
         return EXIT_SUCCESS;
+    }
+    if (QCoreApplication::arguments().contains(QStringLiteral("--release-card-activity-smoke")))
+    {
+        const bool passed = ztermy::ui::verifyReleaseCardActivity(
+            window, paths->dataDirectory,
+            QCoreApplication::arguments().contains(QStringLiteral("--release-card-stop-control")));
+        appController.shutdown();
+        window.releaseResources();
+        return passed ? EXIT_SUCCESS : EXIT_FAILURE;
     }
     if (QCoreApplication::arguments().contains(QStringLiteral("--shortcut-settings-smoke")))
     {
