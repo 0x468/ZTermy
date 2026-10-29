@@ -16,12 +16,16 @@ Item {
     })
     property int textFormat: TextEdit.MarkdownText
     property string renderedSource: ""
+    property string streamingSource: ""
     property bool selectionHold: false
     property var memoryDiagnostics: null
     property int diagnosticRow: -1
 
     readonly property var blocks: splitBlocks(renderedSource, textFormat)
-    readonly property bool useStreamingRenderer: streaming || selectionHold
+    // Prose/plain text already has a complete document in streamingText. Reuse it
+    // after completion instead of reparsing the same answer into a second editor.
+    readonly property bool singleTextBlock: blocks.length === 1 && (blocks[0].kind === "markdown" || blocks[0].kind === "text")
+    readonly property bool useStreamingRenderer: streaming || selectionHold || singleTextBlock
 
     signal copyRequested(string text)
     signal verticalScrollRequested(real delta)
@@ -38,7 +42,7 @@ Item {
             memoryDiagnostics.track("column", contentColumn, diagnosticRow);
         }
         renderedSource = source;
-        streamingText.text = source;
+        updateStreamingText();
     }
 
     onSourceChanged: {
@@ -47,6 +51,8 @@ Item {
         if (!streaming) {
             renderTimer.stop();
             renderedSource = source;
+            if (singleTextBlock || selectionHold)
+                updateStreamingText();
         } else if (!renderTimer.running) {
             renderTimer.start();
         }
@@ -57,6 +63,8 @@ Item {
             selectionHold = false;
             updateStreamingText();
         } else {
+            renderTimer.stop();
+            updateStreamingText();
             selectionHold = streamingText.selectionStart !== streamingText.selectionEnd;
             if (renderedSource !== source) {
                 renderTimer.stop();
@@ -66,12 +74,15 @@ Item {
     }
 
     function updateStreamingText() {
+        if (streamingSource === source)
+            return;
         if (memoryDiagnostics)
             memoryDiagnostics.recordEvent("stream-render", diagnosticRow, source.length);
         const selectionStart = streamingText.selectionStart;
         const selectionEnd = streamingText.selectionEnd;
         const cursorPosition = streamingText.cursorPosition;
         streamingText.text = source;
+        streamingSource = source;
         if (selectionStart !== selectionEnd) {
             streamingText.select(Math.min(selectionStart, streamingText.length), Math.min(selectionEnd, streamingText.length));
         } else {
@@ -93,6 +104,7 @@ Item {
 
     TextEdit {
         id: streamingText
+        objectName: "markdownTextDocument"
 
         anchors.left: parent.left
         anchors.right: parent.right
@@ -230,7 +242,7 @@ Item {
         spacing: 6
 
         Repeater {
-            model: markdown.blocks
+            model: markdown.useStreamingRenderer ? [] : markdown.blocks
 
             delegate: Loader {
                 id: blockLoader

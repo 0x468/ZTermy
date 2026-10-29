@@ -18,6 +18,7 @@
 #include "ui/AiLongContentRuntimeSmoke.h"
 #include "ui/AiMemoryDiagnostics.h"
 #include "ui/FontTypographyRuntimeSmoke.h"
+#include "ui/MarkdownDocumentRuntimeSmoke.h"
 #include "ui/MemoryLifecycleRuntimeSmoke.h"
 #include "ui/PasteOptionsRuntimeSmoke.h"
 #include "ui/ReleaseCardActivityRuntimeSmoke.h"
@@ -4157,6 +4158,8 @@ struct ResizeHitRuntimeCase
                 return false;
             processWindowEventsFor(std::chrono::milliseconds{100});
             auto *prose = diagnostics->textItem(turn * 2 - 1, QStringLiteral("markdown"));
+            if (prose == nullptr)
+                prose = diagnostics->textItem(turn * 2 - 1, QStringLiteral("streamingText"));
             if (prose == nullptr || prose->width() < 100 || prose->height() <= 0)
                 return false;
             auto *document = prose->property("textDocument").value<QQuickTextDocument *>();
@@ -4326,13 +4329,19 @@ struct ResizeHitRuntimeCase
         });
     std::uint64_t heartbeatTicks = 0;
     qint64 maximumHeartbeatGapMilliseconds = 0;
+    qint64 streamingHeartbeatGapMilliseconds = 0;
+    qint64 completionHeartbeatGapMilliseconds = 0;
+    bool completingStream = false;
     QElapsedTimer heartbeatGap;
     heartbeatGap.start();
     QTimer heartbeat;
     heartbeat.setInterval(10);
     heartbeat.setTimerType(Qt::PreciseTimer);
     QObject::connect(&heartbeat, &QTimer::timeout, &window, [&] {
-        maximumHeartbeatGapMilliseconds = std::max(maximumHeartbeatGapMilliseconds, heartbeatGap.restart());
+        const qint64 gap = heartbeatGap.restart();
+        maximumHeartbeatGapMilliseconds = std::max(maximumHeartbeatGapMilliseconds, gap);
+        auto &stageGap = completingStream ? completionHeartbeatGapMilliseconds : streamingHeartbeatGapMilliseconds;
+        stageGap = std::max(stageGap, gap);
         ++heartbeatTicks;
     });
 
@@ -4350,10 +4359,15 @@ struct ResizeHitRuntimeCase
                                      },
                                      std::chrono::seconds{15});
     streamTimer.stop();
+    streamingHeartbeatGapMilliseconds = std::max(streamingHeartbeatGapMilliseconds, heartbeatGap.restart());
+    completingStream = true;
+    QElapsedTimer completionElapsed;
+    completionElapsed.start();
     if (streamCompleted && streamChunkCount > 0)
     {
         static_cast<void>(conversation->completeAssistantMessage(assistantMessageId));
     }
+    const qint64 completionCallMilliseconds = completionElapsed.elapsed();
     processWindowEventsFor(std::chrono::milliseconds{350});
     const qint64 streamMilliseconds = streamElapsed.elapsed();
     heartbeat.stop();
@@ -4472,6 +4486,9 @@ struct ResizeHitRuntimeCase
              {QStringLiteral("durationMs"), streamMilliseconds},
              {QStringLiteral("heartbeatTicks"), static_cast<qint64>(heartbeatTicks)},
              {QStringLiteral("maximumHeartbeatGapMs"), maximumHeartbeatGapMilliseconds},
+             {QStringLiteral("streamingHeartbeatGapMs"), streamingHeartbeatGapMilliseconds},
+             {QStringLiteral("completionHeartbeatGapMs"), completionHeartbeatGapMilliseconds},
+             {QStringLiteral("completionCallMs"), completionCallMilliseconds},
              {QStringLiteral("frameSwaps"), static_cast<qint64>(frameSwaps)},
              {QStringLiteral("completed"), streamCompleted},
          }},
@@ -4703,6 +4720,13 @@ int main(int argc, char *argv[])
         }
         qCInfo(applicationLog) << "QML and native-window smoke test completed";
         return EXIT_SUCCESS;
+    }
+    if (QCoreApplication::arguments().contains(QStringLiteral("--markdown-document-runtime-smoke")))
+    {
+        const bool passed = ztermy::ui::verifyMarkdownDocumentRuntime(window);
+        appController.shutdown();
+        window.releaseResources();
+        return passed ? EXIT_SUCCESS : EXIT_FAILURE;
     }
     if (QCoreApplication::arguments().contains(QStringLiteral("--release-card-activity-smoke")))
     {
