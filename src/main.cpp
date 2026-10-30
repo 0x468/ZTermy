@@ -4655,6 +4655,7 @@ int main(int argc, char *argv[])
     const bool opaqueSurface = opaquePerformanceSurface || performanceModeActive;
     QQuickWindow::setDefaultAlphaBuffer(!opaqueSurface);
     ztermy::NativeWindow window(performanceModeActive, opaqueSurface);
+    ztermy::ui::configureTerminalTextureMetrics(window);
     instance.setWindow(&window);
     QObject::connect(&window, &ztermy::NativeWindow::restartRequested, &instance,
                      &ztermy::ApplicationInstance::requestRestart);

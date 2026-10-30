@@ -897,6 +897,8 @@ add_library(ztermy_terminal_ui STATIC
     src/ui/terminal/TerminalItem.cpp
     src/ui/terminal/TerminalItemBlink.cpp
     src/ui/terminal/TerminalItemPainting.cpp
+    src/ui/terminal/TerminalTextureUpload.cpp
+    src/ui/terminal/TerminalTextureUpload.h
     src/ui/terminal/TerminalImagePainter.cpp
     src/ui/terminal/TerminalImagePainter.h
     src/ui/terminal/TerminalItem.h
@@ -933,6 +935,7 @@ target_link_libraries(ztermy_windows_clipboard
 )
 
 target_compile_features(ztermy_terminal_ui PUBLIC cxx_std_23)
+target_link_libraries(ztermy_terminal_ui PRIVATE Qt6::GuiPrivate)
 target_include_directories(ztermy_terminal_ui PUBLIC src)
 target_link_libraries(ztermy_terminal_ui
     PUBLIC

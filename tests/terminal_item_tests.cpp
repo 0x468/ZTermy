@@ -5,6 +5,7 @@
 #include "ui/terminal/TerminalRenderMetrics.h"
 #include "ui/terminal/TerminalRowReuseAnalysis.h"
 #include "ui/terminal/TerminalTextLayout.h"
+#include "ui/terminal/TerminalTextureUpload.h"
 
 #include <QColor>
 #include <QDropEvent>
@@ -18,6 +19,8 @@
 #include <QMouseEvent>
 #include <QQuickItemGrabResult>
 #include <QQuickWindow>
+#include <QSGRendererInterface>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTest>
 #include <QWheelEvent>
@@ -132,6 +135,7 @@ private slots:
     void analyzesTerminalRowReuse();
     void rowRasterCacheMatchesFullPaint_data();
     void rowRasterCacheMatchesFullPaint();
+    void reusesTextureAndBoundsUploads();
 };
 
 void TerminalItemTests::keepsInputAndSelectionVisibleOverImages_data()
@@ -637,17 +641,24 @@ void TerminalItemTests::rowRasterCacheMatchesFullPaint_data()
 {
     QTest::addColumn<QString>("scenario");
     for (const auto *name :
-         {"sparse",       "selection", "clear-selection",  "scroll",           "wide-styles", "cursor",
-          "font",         "weight",    "line-height",      "column-width",     "ligatures",   "palette",
-          "resize",       "image",     "remove-image",     "preedit",          "search",      "keywords",
-          "blink",        "font-size", "snapshot-palette", "selected-palette", "cursor-move", "producer-alias",
-          "long-grapheme"})
+         {"sparse",        "selection", "clear-selection",  "scroll",           "wide-styles", "cursor",
+          "font",          "weight",    "line-height",      "column-width",     "ligatures",   "palette",
+          "resize",        "image",     "remove-image",     "preedit",          "search",      "keywords",
+          "blink",         "font-size", "snapshot-palette", "selected-palette", "cursor-move", "producer-alias",
+          "long-grapheme", "opacity",   "edge-rows"})
         QTest::newRow(name) << QString::fromLatin1(name);
 }
 
 void TerminalItemTests::rowRasterCacheMatchesFullPaint()
 {
     QFETCH(QString, scenario);
+    const QByteArray studyMode = qgetenv("ZTERMY_TEXTURE_UPLOAD_MODE");
+    const auto restoreStudyMode = qScopeGuard([&] {
+        if (studyMode.isNull())
+            qunsetenv("ZTERMY_TEXTURE_UPLOAD_MODE");
+        else
+            qputenv("ZTERMY_TEXTURE_UPLOAD_MODE", studyMode);
+    });
     QQuickWindow window;
     auto *item = new TestableTerminalItem(window.contentItem());
     item->setRowRasterCacheEnabled(true);
@@ -703,6 +714,15 @@ void TerminalItemTests::rowRasterCacheMatchesFullPaint()
     next->cell(1, 1).grapheme = U"Z";
     next->damage = ztermy::terminal::TerminalDamageKind::none;
     next->damagedRows.clear();
+    if (scenario == QStringLiteral("edge-rows"))
+    {
+        next->cell(0, 0).grapheme = U"顶";
+        next->cell(0, 0).displayWidth = 2;
+        next->cell(1, 0).grapheme.clear();
+        next->cell(1, 0).displayWidth = 0;
+        next->cell(63, 15).grapheme = U"Z";
+        next->cell(63, 15).selected = true;
+    }
     bool expectHits = true;
     if (scenario == QStringLiteral("selection") || scenario == QStringLiteral("clear-selection"))
     {
@@ -786,8 +806,10 @@ void TerminalItemTests::rowRasterCacheMatchesFullPaint()
         next->cell(5, 5).blink = true;
         expectHits = false;
     }
-    else if (scenario != QStringLiteral("sparse"))
+    else if (scenario != QStringLiteral("sparse") && scenario != QStringLiteral("edge-rows"))
     {
+        if (scenario == QStringLiteral("opacity"))
+            item->setBackgroundOpacity(0.45);
         if (scenario == QStringLiteral("font"))
             item->setFontFamily(QStringLiteral("Consolas"));
         if (scenario == QStringLiteral("font-size"))
@@ -829,10 +851,76 @@ void TerminalItemTests::rowRasterCacheMatchesFullPaint()
         || scenario == QStringLiteral("blink") || scenario == QStringLiteral("long-grapheme"))
         QCOMPARE(cacheMetrics.rowRasterPeakBytes, std::uint64_t{0});
     QVERIFY(cacheMetrics.rowRasterPeakBytes <= std::uint64_t{16} * 1024U * 1024U);
+    qputenv("ZTERMY_TEXTURE_UPLOAD_MODE", "factory");
     item->setRowRasterCacheEnabled(false);
     const QImage reference = capture();
     QVERIFY(!reference.isNull());
     QCOMPARE(cached, reference);
+}
+
+void TerminalItemTests::reusesTextureAndBoundsUploads()
+{
+    const QByteArray oldMode = qgetenv("ZTERMY_TEXTURE_UPLOAD_MODE");
+    const QByteArray oldMetrics = qgetenv("ZTERMY_TEXTURE_METRICS");
+    const auto restore = qScopeGuard([&] {
+        if (oldMode.isNull())
+            qunsetenv("ZTERMY_TEXTURE_UPLOAD_MODE");
+        else
+            qputenv("ZTERMY_TEXTURE_UPLOAD_MODE", oldMode);
+        if (oldMetrics.isNull())
+            qunsetenv("ZTERMY_TEXTURE_METRICS");
+        else
+            qputenv("ZTERMY_TEXTURE_METRICS", oldMetrics);
+    });
+    qputenv("ZTERMY_TEXTURE_UPLOAD_MODE", "bands");
+    qputenv("ZTERMY_TEXTURE_METRICS", "1");
+    QQuickWindow window;
+    ztermy::ui::configureTerminalTextureMetrics(window);
+    auto *item = new TestableTerminalItem(window.contentItem());
+    item->setFontPixelSize(18);
+    item->setCursorBlink(false);
+    item->setTerminalCursorVisible(false);
+    window.resize(840, 520);
+    item->setSize(window.size());
+    auto initial = snapshotAt(0, 0);
+    initial->columns = 64;
+    initial->rows = 16;
+    initial->cells.resize(std::size_t{64} * 16);
+    initial->cursor.visible = false;
+    item->setSnapshot(initial);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    const auto capture = [&] {
+        QTest::qWait(40);
+        return window.grabWindow();
+    };
+    QVERIFY(!capture().isNull());
+    if (window.rendererInterface()->graphicsApi() != QSGRendererInterface::Direct3D11)
+        QSKIP("Native texture counters require D3D11; pixel tests cover the factory fallback.");
+    const auto before = ztermy::ui::terminalTextureUploadSample();
+    auto next = std::make_shared<ztermy::terminal::TerminalSnapshot>(*initial);
+    next->cell(1, 2).grapheme = U"A";
+    next->cell(1, 10).grapheme = U"B";
+    item->setSnapshot(next);
+    const QImage sparse = capture();
+    QVERIFY(!sparse.isNull());
+    const auto after = ztermy::ui::terminalTextureUploadSample();
+    QCOMPARE(after.creations - before.creations, std::uint64_t{0});
+    QVERIFY(after.uploadRegions - before.uploadRegions <= 8);
+    QVERIFY(after.uploadBytes > before.uploadBytes);
+    const auto fullBytes = static_cast<std::uint64_t>(sparse.width()) * sparse.height() * 4U;
+    QVERIFY(after.uploadBytes - before.uploadBytes < fullBytes / 2);
+    item->setRowRasterCacheEnabled(false);
+    const QImage full = capture();
+    QCOMPARE(full, sparse);
+    const auto fallback = ztermy::ui::terminalTextureUploadSample();
+    QCOMPARE(fallback.creations - after.creations, std::uint64_t{0});
+    QCOMPARE(fallback.uploadBytes - after.uploadBytes, fullBytes);
+    window.resize(760, 480);
+    item->setSize(window.size());
+    QVERIFY(!capture().isNull());
+    const auto resized = ztermy::ui::terminalTextureUploadSample();
+    QVERIFY(resized.creations > fallback.creations);
 }
 
 void TerminalItemTests::skipsKeywordStylesWithoutRulesAndReportsScrollbarChanges()

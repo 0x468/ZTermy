@@ -4,6 +4,7 @@
 #include "ui/terminal/TerminalQuickSelect.h"
 #include "ui/terminal/TerminalRowReuseAnalysis.h"
 #include "ui/terminal/TerminalTextLayout.h"
+#include "ui/terminal/TerminalTextureUpload.h"
 
 #include <QElapsedTimer>
 #include <QFontMetricsF>
@@ -349,6 +350,8 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
     blinkPainter.setRenderHint(QPainter::TextAntialiasing);
     TerminalImageOverlay imageOverlay;
     std::vector<QRectF> imageProtectedRegions;
+    QRegion textureBands;
+    bool textureBandsAllowed = false;
 
     if (m_snapshot)
     {
@@ -424,6 +427,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         }
         std::size_t rasterHits = 0;
         std::size_t rasterMisses = 0;
+        textureBandsAllowed = compatibleRaster;
         if (collectPaintPhases)
         {
             const qint64 now = frameTimer.nsecsElapsed();
@@ -538,6 +542,12 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                 continue;
             }
             ++rasterMisses;
+            if (textureBandsAllowed)
+            {
+                const int top = qFloor((verticalPadding + row * cellHeightValue) * devicePixelRatio) - 1;
+                const int bottom = qCeil((verticalPadding + (row + 1) * cellHeightValue) * devicePixelRatio) + 2;
+                textureBands += QRect(0, top, pixelSize.width(), bottom - top).intersected(QRect(QPoint{}, pixelSize));
+            }
             if (cachedRow)
                 cachedRow->valid = false;
             activeStyleBits = std::numeric_limits<std::size_t>::max();
@@ -1082,7 +1092,13 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
             .overlayPaint = std::chrono::nanoseconds{overlayPaintNanoseconds},
         });
     }
-    QSGTexture *newTexture = window()->createTextureFromImage(image);
+    QSGTexture *newTexture =
+        prepareTerminalTexture(*window(), node->texture(), image, textureBands, textureBandsAllowed);
+    if (!newTexture)
+    {
+        newTexture = window()->createTextureFromImage(image);
+        recordFactoryTextureUpload(image);
+    }
     const qint64 textureNanoseconds = timingEnabled ? frameTimer.nsecsElapsed() - paintNanoseconds : 0;
     const terminal::TerminalDamageKind damage = cursorOnlyPaint ? terminal::TerminalDamageKind::partial
                                                 : m_snapshot    ? m_snapshot->damage
@@ -1101,7 +1117,9 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 #if !defined(NDEBUG)
     node->recordTiming(paintNanoseconds, textureNanoseconds, pixelSize, damage, damagedRowCount);
 #endif
-    node->setTexture(newTexture);
+    if (node->texture() != newTexture)
+        node->setTexture(newTexture);
+    node->markDirty(QSGNode::DirtyMaterial);
     node->setRect(boundingRect());
     node->setFiltering(QSGTexture::Linear);
     node->revision = m_revision;

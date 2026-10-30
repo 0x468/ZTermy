@@ -5,6 +5,7 @@
 #include "platform/windows/NativeWindow.h"
 #include "ui/WindowStateRuntimeSmoke.h"
 #include "ui/terminal/TerminalItem.h"
+#include "ui/terminal/TerminalTextureUpload.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -74,6 +75,7 @@ inline bool runTerminalSparseBenchmark(NativeWindow &window, const QString &dire
             item.setSnapshot(std::make_shared<terminal::TerminalSnapshot>(std::move(*initial)));
             processWindowEventsFor(200ms);
             item.resetPerformanceMetrics();
+            const auto textureBefore = terminalTextureUploadSample();
             diagnostics::LatencyHistogram snapshotLatency;
             qint64 snapshotNanoseconds = 0;
             constexpr int updates = 120;
@@ -100,6 +102,7 @@ inline bool runTerminalSparseBenchmark(NativeWindow &window, const QString &dire
             }
             processWindowEventsFor(100ms);
             const auto metrics = item.performanceMetrics();
+            const auto textureAfter = terminalTextureUploadSample();
             const auto latency = snapshotLatency.summary();
             const bool effectivelyVisible = item.isVisible();
             bool restoredLatest = true;
@@ -119,6 +122,7 @@ inline bool runTerminalSparseBenchmark(NativeWindow &window, const QString &dire
             passed = passed && casePassed;
             cases.append(QJsonObject{
                 {QStringLiteral("columns"), geometry.columns},
+                {QStringLiteral("textureUpload"), terminalTextureUploadDelta(textureBefore, textureAfter)},
                 {QStringLiteral("rows"), geometry.rows},
                 {QStringLiteral("visible"), visible},
                 {QStringLiteral("effectivelyVisible"), effectivelyVisible},
