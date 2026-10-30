@@ -6,10 +6,37 @@ Release assets are published through GitHub Releases.
 
 ## Unreleased
 
+## 0.5.4 — 2026-10-30
+
+- Prevent SGR mouse reports from leaking into the Shell when a TUI exits.
+- Support multiple shortcut bindings per action and Windows paste defaults,
+  including Ctrl+V, without leaking unhandled control sequences into the Shell.
+- Add run-only and persistent multiline-paste confirmation choices, and make
+  initial keyboard focus visible on both cancel and primary actions.
+- Preserve Tab click targets while terminal titles and progress update.
+- Detect unanswered SSH keepalive probes and enable keepalive defaults for new
+  connections while preserving existing explicit preferences. Freeze elapsed
+  connection time after disconnect, and correct authenticated jump-hop state
+  transitions that could terminate the process.
+- Keep category defaults in the unsaved settings draft so changes can be
+  discarded. Preserve inherited session appearance on unchanged dismissal.
+- Render script inputs before command insertion and execution, anchor sidebar
+  headers, and improve multiline script editing. Correct the taskbar identity
+  inherited when launching through the Windows 11 Explorer menu.
+- Use a strictly software-rendered installer by default, remove continuous
+  installer animations and improve renderer diagnostics. This reduces GPU
+  dependence; it is not a claim to fix a particular graphics-driver failure.
+- Defer hidden terminal raster work, stop hidden release-card animations and
+  reuse completed AI prose documents. Add bounded same-position text-row reuse
+  and conservative D3D11 texture-region updates, with full-render/upload
+  fallbacks for complex states and unsupported backends.
+- Update native keyboard acceptance for typography and history controls.
+
 - Use points for terminal font size with a 12 pt default; preserve the visual
   size of existing pixel-based settings during migration.
-- Add a live terminal-rendered font preview, font weight, line-height and
-  cell-width controls to global and session terminal appearance settings.
+- Add a terminal-rendered font preview in global settings, font weight,
+  line-height and cell-width controls. Session appearance changes preview
+  directly on the terminal. Show the running platform and build commit in About.
 
 - Extend title-tab hit targets to the top edge in maximized/fullscreen windows,
   including revealed auto-hidden chrome, without changing their visual shape.
