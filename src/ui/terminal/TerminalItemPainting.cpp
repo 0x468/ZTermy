@@ -258,7 +258,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
     const qreal devicePixelRatio = window()->effectiveDevicePixelRatio();
     const QSize pixelSize{std::max(1, qRound(width() * devicePixelRatio)),
                           std::max(1, qRound(height() * devicePixelRatio))};
-    if (node->revision == m_revision)
+    if (node->revision == m_raster.revision)
     {
         node->setRect(boundingRect());
         return node;
@@ -284,9 +284,10 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
     const terminal::TerminalColor defaultBackground = m_snapshot ? m_snapshot->defaultBackground : fallbackBackground;
 
     QColor defaultBackgroundColor = m_backgroundOverride.isValid() ? m_backgroundOverride : color(defaultBackground);
-    defaultBackgroundColor.setAlphaF(static_cast<float>(m_backgroundOpacity));
-    const bool cursorOnlyPaint = !m_fullInvalidationPending && !node->image.isNull() && node->pixelSize == pixelSize
-                                 && m_snapshot && m_snapshot->cursor.row < m_snapshot->rows && m_preeditText.isEmpty();
+    defaultBackgroundColor.setAlphaF(static_cast<float>(m_raster.backgroundOpacity));
+    const bool cursorOnlyPaint = !m_raster.fullInvalidationPending && !node->image.isNull()
+                                 && node->pixelSize == pixelSize && m_snapshot
+                                 && m_snapshot->cursor.row < m_snapshot->rows && m_preeditText.isEmpty();
     if (node->blinkNode)
         node->blinkNode->setRect(textBlinkVisible() ? node->blinkRect : QRectF{});
     if (cursorOnlyPaint)
@@ -305,8 +306,8 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 #if !defined(NDEBUG)
         node->recordTiming(paintNanoseconds, 0, pixelSize, terminal::TerminalDamageKind::partial, 1);
 #endif
-        node->revision = m_revision;
-        m_fullInvalidationPending = false;
+        node->revision = m_raster.revision;
+        m_raster.fullInvalidationPending = false;
         return node;
     }
     static const bool paintPhaseDiagnosticEnabled =
@@ -368,8 +369,9 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                             imageViewport);
         imageOverlay =
             renderTerminalImageOverlay(m_snapshot->images, imageCell, imageOrigin, imageViewport, devicePixelRatio);
-        const qreal ascent = m_fontAscent;
-        const std::vector<PreeditCluster> preeditClusters = layoutPreeditText(m_preeditText, m_font, cellWidthValue);
+        const qreal ascent = m_raster.fontAscent;
+        const std::vector<PreeditCluster> preeditClusters =
+            layoutPreeditText(m_preeditText, m_raster.font, cellWidthValue);
         const int insertedColumns = preeditColumnCount(preeditClusters);
         const int snapshotColumns = static_cast<int>(m_snapshot->columns);
         const bool terminalCursorPresent =
@@ -405,15 +407,16 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         const std::uint64_t rowStorage =
             rowBytes + sizeof(TerminalTextureNode::RasterRow)
             + m_snapshot->columns * (sizeof(terminal::TerminalCell) + (maximumCachedGrapheme + 8) * sizeof(char32_t));
-        const bool cacheEligible = m_rowRasterCacheEnabled && m_snapshot->images.empty() && preeditClusters.empty()
-                                   && m_keywordStyles.empty() && m_searchStyles.empty() && m_searchQuery.isEmpty()
-                                   && !m_quickSelectActive && !m_copyModeActive && rowBytes > 0
-                                   && rowStorage <= rasterBudget && m_snapshot->rows <= rasterBudget / rowStorage
+        const bool cacheEligible = m_raster.rowRasterCacheEnabled && m_snapshot->images.empty()
+                                   && preeditClusters.empty() && m_keywordStyles.empty() && m_searchStyles.empty()
+                                   && m_searchQuery.isEmpty() && !m_quickSelectActive && !m_copyModeActive
+                                   && rowBytes > 0 && rowStorage <= rasterBudget
+                                   && m_snapshot->rows <= rasterBudget / rowStorage
                                    && std::ranges::none_of(m_snapshot->cells, [](const auto &cell) {
                                           return cell.blink || cell.grapheme.size() > maximumCachedGrapheme;
                                       });
         const bool compatibleRaster =
-            cacheEligible && !node->rasterRows.empty() && node->rasterRevision == m_rowRasterRevision
+            cacheEligible && !node->rasterRows.empty() && node->rasterRevision == m_raster.rowRasterRevision
             && node->pixelSize == pixelSize && node->rasterDpr == devicePixelRatio
             && node->rasterColumns == m_snapshot->columns && node->rasterRows.size() == m_snapshot->rows
             && node->rasterForeground == m_snapshot->defaultForeground
@@ -794,7 +797,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
             node->rasterForeground = m_snapshot->defaultForeground;
             node->rasterBackground = m_snapshot->defaultBackground;
             node->rasterSearchSelection = m_snapshot->searchSelectionPresent;
-            node->rasterRevision = m_rowRasterRevision;
+            node->rasterRevision = m_raster.rowRasterRevision;
             node->rasterDpr = devicePixelRatio;
         }
         if (m_renderMetrics.enabled())
@@ -811,7 +814,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         }
         if (!cursorOnlyPaint && m_quickSelectActive)
         {
-            QFont labelFont = m_font;
+            QFont labelFont = m_raster.font;
             labelFont.setBold(true);
             labelFont.setPixelSize(std::max(10, fontPixelSize() - 1));
             painter.setFont(labelFont);
@@ -839,7 +842,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         }
         if (!cursorOnlyPaint && m_copyModeActive)
         {
-            QFont modeFont = m_font;
+            QFont modeFont = m_raster.font;
             modeFont.setBold(true);
             modeFont.setPixelSize(std::max(10, fontPixelSize() - 2));
             painter.setFont(modeFont);
@@ -868,7 +871,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
             if (!imageOverlay.image.isNull())
                 imageProtectedRegions.emplace_back(compositionLeft, compositionTop,
                                                    insertedColumns * cellWidthValue + 2.0, cellHeightValue);
-            QFont compositionFont = m_font;
+            QFont compositionFont = m_raster.font;
             compositionFont.setUnderline(true);
             painter.setFont(compositionFont);
             const PreeditCursorCell cursorCell = preeditCursorCell(preeditClusters, m_preeditCursorPosition);
@@ -939,10 +942,10 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                         glyphImage.fill(Qt::transparent);
                         QPainter glyphPainter(&glyphImage);
                         glyphPainter.setRenderHint(QPainter::TextAntialiasing);
-                        QFont cursorFont = m_font;
+                        QFont cursorFont = m_raster.font;
                         if (cell.bold)
                             cursorFont.setWeight(
-                                static_cast<QFont::Weight>(std::max(700, static_cast<int>(m_font.weight()))));
+                                static_cast<QFont::Weight>(std::max(700, static_cast<int>(m_raster.font.weight()))));
                         cursorFont.setItalic(cell.italic);
                         cursorFont.setUnderline(cell.underlineStyle == terminal::TerminalUnderlineStyle::single
                                                 && !cell.underlineColor);
@@ -1122,9 +1125,9 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
     node->markDirty(QSGNode::DirtyMaterial);
     node->setRect(boundingRect());
     node->setFiltering(QSGTexture::Linear);
-    node->revision = m_revision;
+    node->revision = m_raster.revision;
     node->pixelSize = pixelSize;
-    m_fullInvalidationPending = false;
+    m_raster.fullInvalidationPending = false;
     return node;
 }
 

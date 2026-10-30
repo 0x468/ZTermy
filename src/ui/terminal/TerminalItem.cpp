@@ -97,7 +97,7 @@ namespace ztermy::ui
 
 TerminalItem::TerminalItem(QQuickItem *parent) : QQuickItem(parent)
 {
-    m_rowRasterCacheEnabled = qEnvironmentVariableIntValue("ZTERMY_DISABLE_ROW_RASTER_CACHE") != 1;
+    m_raster.rowRasterCacheEnabled = qEnvironmentVariableIntValue("ZTERMY_DISABLE_ROW_RASTER_CACHE") != 1;
     m_statusText = tr("Starting local terminal...");
     setFlag(ItemHasContents, true);
     setFlag(ItemAcceptsInputMethod, true);
@@ -107,11 +107,11 @@ TerminalItem::TerminalItem(QQuickItem *parent) : QQuickItem(parent)
     setFlag(ItemAcceptsDrops, true);
     setActiveFocusOnTab(true);
 
-    m_font.setFamilies({QStringLiteral("Cascadia Mono"), QStringLiteral("Consolas")});
-    m_font.setPointSizeF(12.0);
-    m_font.setStyleHint(QFont::Monospace);
-    m_font.setFixedPitch(true);
-    configureLigatures(m_font, m_ligaturesEnabled);
+    m_raster.font.setFamilies({QStringLiteral("Cascadia Mono"), QStringLiteral("Consolas")});
+    m_raster.font.setPointSizeF(12.0);
+    m_raster.font.setStyleHint(QFont::Monospace);
+    m_raster.font.setFixedPitch(true);
+    configureLigatures(m_raster.font, m_ligaturesEnabled);
     refreshFontMetrics();
 
     initializeBlinkTimers();
@@ -166,17 +166,19 @@ QString TerminalItem::statusText() const
 
 QString TerminalItem::fontFamily() const
 {
-    return m_font.families().value(0);
+    return m_raster.font.families().value(0);
 }
 
 int TerminalItem::fontPixelSize() const noexcept
 {
-    return m_font.pixelSize() > 0 ? m_font.pixelSize() : qRound(fontPointSize() * config::terminalPixelsPerPoint);
+    return m_raster.font.pixelSize() > 0 ? m_raster.font.pixelSize()
+                                         : qRound(fontPointSize() * config::terminalPixelsPerPoint);
 }
 
 qreal TerminalItem::fontPointSize() const noexcept
 {
-    return m_font.pointSizeF() > 0 ? m_font.pointSizeF() : m_font.pixelSize() / config::terminalPixelsPerPoint;
+    return m_raster.font.pointSizeF() > 0 ? m_raster.font.pointSizeF()
+                                          : m_raster.font.pixelSize() / config::terminalPixelsPerPoint;
 }
 
 bool TerminalItem::ligaturesEnabled() const noexcept
@@ -186,7 +188,7 @@ bool TerminalItem::ligaturesEnabled() const noexcept
 
 qreal TerminalItem::backgroundOpacity() const noexcept
 {
-    return m_backgroundOpacity;
+    return m_raster.backgroundOpacity;
 }
 
 QString TerminalItem::cursorPreference() const
@@ -480,7 +482,7 @@ void TerminalItem::setFontFamily(const QString &family)
     const QString normalized = family.trimmed();
     if (normalized.isEmpty() || normalized.size() > 128 || fontFamily() == normalized)
         return;
-    m_font.setFamilies({normalized, QStringLiteral("Consolas")});
+    m_raster.font.setFamilies({normalized, QStringLiteral("Consolas")});
     refreshFontMetrics();
     m_reportedColumns = 0;
     m_reportedRows = 0;
@@ -492,9 +494,9 @@ void TerminalItem::setFontFamily(const QString &family)
 
 void TerminalItem::setFontPixelSize(const int pixelSize)
 {
-    if (pixelSize < 8 || pixelSize > 32 || m_font.pixelSize() == pixelSize)
+    if (pixelSize < 8 || pixelSize > 32 || m_raster.font.pixelSize() == pixelSize)
         return;
-    m_font.setPixelSize(pixelSize);
+    m_raster.font.setPixelSize(pixelSize);
     refreshFontMetrics();
     m_reportedColumns = 0;
     m_reportedRows = 0;
@@ -506,10 +508,10 @@ void TerminalItem::setFontPixelSize(const int pixelSize)
 
 void TerminalItem::setFontPointSize(const qreal points)
 {
-    if (!config::validTerminalTypography(points, fontWeight(), m_lineHeightScale, m_cellWidthScale)
+    if (!config::validTerminalTypography(points, fontWeight(), m_raster.lineHeightScale, m_raster.cellWidthScale)
         || qFuzzyCompare(fontPointSize(), points))
         return;
-    m_font.setPointSizeF(points);
+    m_raster.font.setPointSizeF(points);
     refreshFontMetrics();
     m_reportedColumns = m_reportedRows = 0;
     invalidateRenderer(true);
@@ -520,10 +522,10 @@ void TerminalItem::setFontPointSize(const qreal points)
 
 void TerminalItem::setFontWeight(const int weight)
 {
-    if (!config::validTerminalTypography(fontPointSize(), weight, m_lineHeightScale, m_cellWidthScale)
+    if (!config::validTerminalTypography(fontPointSize(), weight, m_raster.lineHeightScale, m_raster.cellWidthScale)
         || fontWeight() == weight)
         return;
-    m_font.setWeight(static_cast<QFont::Weight>(weight));
+    m_raster.font.setWeight(static_cast<QFont::Weight>(weight));
     refreshFontMetrics();
     m_reportedColumns = m_reportedRows = 0;
     invalidateRenderer(true);
@@ -534,10 +536,10 @@ void TerminalItem::setFontWeight(const int weight)
 
 void TerminalItem::setLineHeightScale(const qreal scale)
 {
-    if (!config::validTerminalTypography(fontPointSize(), fontWeight(), scale, m_cellWidthScale)
-        || qFuzzyCompare(m_lineHeightScale, scale))
+    if (!config::validTerminalTypography(fontPointSize(), fontWeight(), scale, m_raster.cellWidthScale)
+        || qFuzzyCompare(m_raster.lineHeightScale, scale))
         return;
-    m_lineHeightScale = scale;
+    m_raster.lineHeightScale = scale;
     refreshFontMetrics();
     m_reportedColumns = m_reportedRows = 0;
     invalidateRenderer(true);
@@ -548,10 +550,10 @@ void TerminalItem::setLineHeightScale(const qreal scale)
 
 void TerminalItem::setCellWidthScale(const qreal scale)
 {
-    if (!config::validTerminalTypography(fontPointSize(), fontWeight(), m_lineHeightScale, scale)
-        || qFuzzyCompare(m_cellWidthScale, scale))
+    if (!config::validTerminalTypography(fontPointSize(), fontWeight(), m_raster.lineHeightScale, scale)
+        || qFuzzyCompare(m_raster.cellWidthScale, scale))
         return;
-    m_cellWidthScale = scale;
+    m_raster.cellWidthScale = scale;
     refreshFontMetrics();
     m_reportedColumns = m_reportedRows = 0;
     invalidateRenderer(true);
@@ -567,7 +569,7 @@ void TerminalItem::setLigaturesEnabled(const bool enabled)
         return;
     }
     m_ligaturesEnabled = enabled;
-    configureLigatures(m_font, enabled);
+    configureLigatures(m_raster.font, enabled);
     refreshFontMetrics();
     invalidateRenderer(true);
     emit fontChanged();
@@ -576,11 +578,11 @@ void TerminalItem::setLigaturesEnabled(const bool enabled)
 void TerminalItem::setBackgroundOpacity(const qreal opacity)
 {
     const qreal normalized = std::clamp(opacity, 0.0, 1.0);
-    if (qFuzzyCompare(m_backgroundOpacity, normalized))
+    if (qFuzzyCompare(m_raster.backgroundOpacity, normalized))
     {
         return;
     }
-    m_backgroundOpacity = normalized;
+    m_raster.backgroundOpacity = normalized;
     invalidateRenderer(true);
     emit backgroundOpacityChanged();
 }
@@ -2214,7 +2216,7 @@ QRectF TerminalItem::inputCursorRectangle() const
     }
     if (!m_preeditText.isEmpty())
     {
-        const std::vector<PreeditCluster> clusters = layoutPreeditText(m_preeditText, m_font, cellWidth());
+        const std::vector<PreeditCluster> clusters = layoutPreeditText(m_preeditText, m_raster.font, cellWidth());
         const PreeditCursorCell cursorCell = preeditCursorCell(clusters, m_preeditCursorPosition);
         cursorX += cursorCell.column * cellWidth();
         return {cursorX, cursorY, cursorCell.width * cellWidth(), cellHeight()};
@@ -2237,18 +2239,18 @@ void TerminalItem::clearPreedit()
 
 void TerminalItem::setRowRasterCacheEnabled(const bool enabled)
 {
-    if (m_rowRasterCacheEnabled == enabled)
+    if (m_raster.rowRasterCacheEnabled == enabled)
         return;
-    m_rowRasterCacheEnabled = enabled;
+    m_raster.rowRasterCacheEnabled = enabled;
     invalidateRenderer(true);
 }
 
 void TerminalItem::invalidateRenderer(const bool full, const bool preserveRowRaster)
 {
     if (full && !preserveRowRaster)
-        ++m_rowRasterRevision;
-    m_fullInvalidationPending = m_fullInvalidationPending || full;
-    ++m_revision;
+        ++m_raster.rowRasterRevision;
+    m_raster.fullInvalidationPending = m_raster.fullInvalidationPending || full;
+    ++m_raster.revision;
     if (isVisible())
         update();
 }
@@ -2281,30 +2283,30 @@ terminal::TerminalCursorStyle TerminalItem::effectiveCursorStyle() const noexcep
 
 void TerminalItem::refreshFontMetrics()
 {
-    m_font.setLetterSpacing(QFont::AbsoluteSpacing, 0.0);
-    const QFontMetricsF metrics(m_font);
+    m_raster.font.setLetterSpacing(QFont::AbsoluteSpacing, 0.0);
+    const QFontMetricsF metrics(m_raster.font);
     const qreal naturalWidth = metrics.horizontalAdvance(QLatin1Char('M'));
-    m_cellWidth = naturalWidth * m_cellWidthScale;
-    m_font.setLetterSpacing(QFont::AbsoluteSpacing, m_cellWidth - naturalWidth);
+    m_raster.cellWidth = naturalWidth * m_raster.cellWidthScale;
+    m_raster.font.setLetterSpacing(QFont::AbsoluteSpacing, m_raster.cellWidth - naturalWidth);
     const qreal naturalHeight = std::ceil(metrics.height());
-    m_cellHeight = std::ceil(naturalHeight * m_lineHeightScale);
-    m_fontAscent = metrics.ascent() + (m_cellHeight - naturalHeight) / 2.0;
-    m_styledFontsReady.reset();
+    m_raster.cellHeight = std::ceil(naturalHeight * m_raster.lineHeightScale);
+    m_raster.fontAscent = metrics.ascent() + (m_raster.cellHeight - naturalHeight) / 2.0;
+    m_raster.styledFontsReady.reset();
 }
 
 const QFont &TerminalItem::styledFont(const std::size_t styleBits)
 {
-    QFont &font = m_styledFonts[styleBits];
-    if (!m_styledFontsReady.test(styleBits))
+    QFont &font = m_raster.styledFonts[styleBits];
+    if (!m_raster.styledFontsReady.test(styleBits))
     {
-        font = m_font;
+        font = m_raster.font;
         if ((styleBits & styleBold) != 0)
-            font.setWeight(static_cast<QFont::Weight>(std::max(700, static_cast<int>(m_font.weight()))));
+            font.setWeight(static_cast<QFont::Weight>(std::max(700, static_cast<int>(m_raster.font.weight()))));
         font.setItalic((styleBits & styleItalic) != 0);
         font.setUnderline((styleBits & styleUnderline) != 0);
         font.setStrikeOut((styleBits & styleStrikeOut) != 0);
         font.setOverline((styleBits & styleOverline) != 0);
-        m_styledFontsReady.set(styleBits);
+        m_raster.styledFontsReady.set(styleBits);
     }
     return font;
 }
@@ -2331,47 +2333,6 @@ void TerminalItem::refreshSearchStyles()
         .caseSensitive = m_searchCaseSensitive,
     }};
     m_searchStyles = highlightTerminalKeywords(*m_snapshot, searchRules);
-}
-
-TerminalFontPreview::TerminalFontPreview(QQuickItem *parent) : TerminalItem(parent)
-{
-    setReadOnly(true);
-    setActiveFocusOnTab(false);
-    setAcceptedMouseButtons(Qt::NoButton);
-    setTerminalCursorVisible(false);
-    setTextBlinkEnabled(false);
-    auto sample = std::make_shared<terminal::TerminalSnapshot>();
-    sample->columns = 64;
-    sample->rows = 4;
-    sample->defaultForeground = {.red = 220, .green = 220, .blue = 220};
-    sample->defaultBackground = {.red = 20, .green = 20, .blue = 20};
-    sample->cells.resize(static_cast<std::size_t>(sample->columns) * sample->rows);
-    const std::array<std::u32string_view, 4> lines{
-        U"PS C:\\Projects> git status --short",
-        U"AaBb 0123456789  {} [] ()  -> => != ===",
-        U"问君能有几多愁  Underneath the Stars",
-        U"Regular  Bold  Italic  https://example.com",
-    };
-    for (std::uint16_t row = 0; row < sample->rows; ++row)
-    {
-        std::uint16_t column = 0;
-        for (const char32_t character : lines[row])
-        {
-            const std::uint8_t width = character >= 0x2e80 && character <= 0x9fff ? 2 : 1;
-            if (column + width > sample->columns)
-                break;
-            auto &cell = sample->cell(column, row);
-            cell.grapheme = character;
-            cell.foreground = sample->defaultForeground;
-            cell.displayWidth = width;
-            cell.bold = row == 3 && column >= 9 && column < 13;
-            cell.italic = (row == 2 && column >= 16) || (row == 3 && column >= 15 && column < 21);
-            if (width == 2)
-                sample->cell(column + 1, row).displayWidth = 0;
-            column += width;
-        }
-    }
-    setSnapshot(std::move(sample));
 }
 
 } // namespace ztermy::ui

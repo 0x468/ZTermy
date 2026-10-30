@@ -8,9 +8,6 @@
 #include "application/ai/AiConversationModel.h"
 #include "application/ai/AiReadToolDispatcher.h"
 #include "application/ai/AiSecretStore.h"
-#include "application/ai/AiSftpListTool.h"
-#include "application/ai/AiSftpReadTool.h"
-#include "application/ai/AiTerminalOutputTool.h"
 #include "application/ai/AiTurnRunner.h"
 #include "application/ai/McpRuntimeManager.h"
 #include "application/forwarding/PortForwardingJob.h"
@@ -30,11 +27,7 @@
 #include "core/config/TerminalThemeCatalog.h"
 #include "domain/ai/AiCommandTracker.h"
 #include "domain/ai/AiContextBroker.h"
-#include "domain/ai/AiTerminalFrameTracker.h"
 #include "domain/ai/AiToolDispatchLedger.h"
-#include "domain/terminal/SemanticTerminalObserver.h"
-#include "domain/workbench/ScriptExecution.h"
-#include "domain/workbench/ScriptRecorder.h"
 #include "domain/workbench/TerminalWorkspaceTransfer.h"
 #include "infrastructure/ai/AiPermissionRuleStore.h"
 #include "infrastructure/ai/AiQuickMessageStore.h"
@@ -67,17 +60,14 @@
 #include <QVariantList>
 #include <QVariantMap>
 
-#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <expected>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <string_view>
-#include <unordered_set>
 #include <vector>
 
 namespace ztermy::ui

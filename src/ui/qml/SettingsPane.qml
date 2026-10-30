@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
+import "CredentialStorageChoices.js" as CredentialStorageChoices
 
 Rectangle {
     id: pane
@@ -331,15 +332,7 @@ Rectangle {
     }
 
     function credentialStorageToken() {
-        return credentialStorageTokenForIndex(credentialStorageBox.currentIndex);
-    }
-
-    function credentialStorageTokenForIndex(index) {
-        return index === 1 ? "portable" : index === 2 ? "session" : "system";
-    }
-
-    function credentialStorageLabel(token) {
-        return token === "portable" ? qsTr("Portable encrypted vault") : token === "session" ? qsTr("Session only") : qsTr("Windows Credential Manager");
+        return CredentialStorageChoices.tokenForIndex(credentialStorageBox.currentIndex);
     }
 
     function showCredentialResult(success, successMessage) {
@@ -821,92 +814,13 @@ Rectangle {
                 }
             }
 
-            SectionCard {
+            AboutSettingsPage {
                 Layout.fillWidth: true
                 visible: pane.currentCategory === "about"
-
-                RowLayout {
-                    objectName: "settingsApplicationBrandLockup"
-                    Layout.fillWidth: true
-                    Layout.minimumHeight: pane.compactLayout ? 116 : 188
-                    spacing: pane.compactLayout ? 16 : 36
-                    Accessible.name: qsTr("ztermy SSH Terminal")
-                    Accessible.role: Accessible.Graphic
-
-                    Image {
-                        Layout.preferredWidth: pane.compactLayout ? 92 : 168
-                        Layout.preferredHeight: pane.compactLayout ? 92 : 168
-                        Layout.alignment: Qt.AlignVCenter
-                        source: "image://ztermy-brand/app-icon/" + (Theme.dark ? "000001" : "000002") + "/" + (pane.compactLayout ? "compact" : "regular")
-                        sourceSize.width: pane.compactLayout ? 184 : 336
-                        sourceSize.height: pane.compactLayout ? 184 : 336
-                        fillMode: Image.PreserveAspectFit
-                        asynchronous: false
-                        cache: false
-                        smooth: true
-                        mipmap: true
-                    }
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        Layout.alignment: Qt.AlignVCenter
-                        spacing: pane.compactLayout ? 3 : 8
-
-                        Row {
-                            spacing: 0
-
-                            Text {
-                                text: qsTr("Z")
-                                color: "#2AA8FF"
-                                font.family: Theme.uiFont
-                                font.pixelSize: pane.compactLayout ? 38 : 72
-                                font.weight: Font.Bold
-                            }
-
-                            Text {
-                                text: qsTr("termy")
-                                color: Theme.text
-                                font.family: Theme.uiFont
-                                font.pixelSize: pane.compactLayout ? 38 : 72
-                                font.weight: Font.Bold
-                            }
-                        }
-
-                        Text {
-                            text: qsTr("SSH TERMINAL")
-                            color: Theme.textMuted
-                            font.family: Theme.uiFont
-                            font.pixelSize: pane.compactLayout ? 11 : 18
-                            font.letterSpacing: pane.compactLayout ? 3 : 6
-                            font.weight: Font.DemiBold
-                        }
-
-                        Text {
-                            objectName: "settingsRuntimeIdentity"
-                            Layout.fillWidth: true
-                            text: ApplicationInfo.platformDescription + " · " + ApplicationInfo.buildCommit
-                            color: Theme.textSubtle
-                            wrapMode: Text.WordWrap
-                            font.family: Theme.uiFont
-                            font.pixelSize: pane.compactLayout ? Theme.textCompact : Theme.textLabel
-
-                            TapHandler {
-                                objectName: "settingsBuildCommitCopy"
-                                onDoubleTapped: ApplicationInfo.copyBuildCommit()
-                            }
-                        }
-                    }
-                }
-            }
-
-            ReleaseIdentityCard {
-                objectName: "settingsReleaseIdentityCard"
-                Layout.fillWidth: true
-                visible: pane.currentCategory === "about"
-                compact: pane.compactLayout
-                codename: "汐"
-                version: Qt.application.version
-                verse: "半轮月，一道水"
+                compactLayout: pane.compactLayout
+                diagnostics: pane.diagnostics
+                onExportRequested: diagnosticReportDialog.open()
+                onStatusRequested: (text, failed, success) => pane.presentStatus(text, failed, success)
             }
 
             WindowBehaviorSettings {
@@ -922,15 +836,6 @@ Rectangle {
                 Layout.fillWidth: true
                 visible: pane.currentCategory === "windows"
                 controller: pane.controller
-            }
-
-            SettingsDiagnosticsCard {
-                Layout.fillWidth: true
-                visible: pane.currentCategory === "about"
-                diagnostics: pane.diagnostics
-                compactLayout: pane.compactLayout
-                onExportRequested: diagnosticReportDialog.open()
-                onStatusRequested: (text, failed, success) => pane.presentStatus(text, failed, success)
             }
 
             SectionCard {
@@ -3222,7 +3127,7 @@ Rectangle {
 
                         Text {
                             Layout.fillWidth: true
-                            text: qsTr("Active store: %1").arg(pane.credentialStorageLabel(pane.controller.effectiveCredentialStorage))
+                            text: qsTr("Active store: %1").arg(CredentialStorageChoices.label(pane.controller.effectiveCredentialStorage))
                             color: Theme.textSoft
                             font.family: Theme.uiFont
                             font.pixelSize: Theme.textLabel
@@ -3516,7 +3421,7 @@ Rectangle {
     ConfirmationDialog {
         id: removeAllCredentialsDialog
 
-        readonly property string selectedStorage: pane.credentialStorageTokenForIndex(credentialCleanupStorageBox.currentIndex)
+        readonly property string selectedStorage: CredentialStorageChoices.tokenForIndex(credentialCleanupStorageBox.currentIndex)
         readonly property bool clearsActiveStorage: selectedStorage === pane.controller.effectiveCredentialStorage
 
         heading: clearsActiveStorage ? qsTr("Clear the active credential store?") : qsTr("Clear retained credential copies?")

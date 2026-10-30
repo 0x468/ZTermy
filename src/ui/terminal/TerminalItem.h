@@ -3,9 +3,9 @@
 #include "ui/WheelAcceleration.h"
 
 #include "domain/terminal/TerminalEngine.h"
-#include "ui/terminal/TerminalFontStyles.h"
 #include "ui/terminal/TerminalKeywordHighlighter.h"
 #include "ui/terminal/TerminalQuickSelect.h"
+#include "ui/terminal/TerminalRasterState.h"
 #include "ui/terminal/TerminalRenderMetrics.h"
 
 #include <QByteArray>
@@ -19,8 +19,6 @@
 #include <QVariantList>
 #include <QtQmlIntegration/qqmlintegration.h>
 
-#include <array>
-#include <bitset>
 #include <cstddef>
 #include <cstdint>
 
@@ -119,9 +117,9 @@ public:
     [[nodiscard]] QString fontFamily() const;
     [[nodiscard]] int fontPixelSize() const noexcept;
     [[nodiscard]] qreal fontPointSize() const noexcept;
-    [[nodiscard]] int fontWeight() const noexcept { return m_font.weight(); }
-    [[nodiscard]] qreal lineHeightScale() const noexcept { return m_lineHeightScale; }
-    [[nodiscard]] qreal cellWidthScale() const noexcept { return m_cellWidthScale; }
+    [[nodiscard]] int fontWeight() const noexcept { return m_raster.font.weight(); }
+    [[nodiscard]] qreal lineHeightScale() const noexcept { return m_raster.lineHeightScale; }
+    [[nodiscard]] qreal cellWidthScale() const noexcept { return m_raster.cellWidthScale; }
     [[nodiscard]] bool hasPreeditText() const noexcept { return !m_preeditText.isEmpty(); }
     [[nodiscard]] bool ligaturesEnabled() const noexcept;
     [[nodiscard]] qreal backgroundOpacity() const noexcept;
@@ -298,8 +296,8 @@ private:
     [[nodiscard]] QRectF inputCursorRectangle() const;
     void clearPreedit();
     void notifyInputMethod() const;
-    [[nodiscard]] qreal cellWidth() const { return m_cellWidth; }
-    [[nodiscard]] qreal cellHeight() const { return m_cellHeight; }
+    [[nodiscard]] qreal cellWidth() const { return m_raster.cellWidth; }
+    [[nodiscard]] qreal cellHeight() const { return m_raster.cellHeight; }
     void refreshFontMetrics();
     [[nodiscard]] const QFont &styledFont(std::size_t styleBits);
     void refreshKeywordStyles();
@@ -329,14 +327,7 @@ private:
     void requestPasteBytes(const QByteArray &bytes);
 
     ztermy::terminal::TerminalSnapshotPtr m_snapshot;
-    QFont m_font;
-    qreal m_lineHeightScale = 1.0;
-    qreal m_cellWidthScale = 1.0;
-    qreal m_cellWidth = 1.0;
-    qreal m_cellHeight = 1.0;
-    qreal m_fontAscent = 0.0;
-    std::array<QFont, styledFontCount> m_styledFonts;
-    std::bitset<styledFontCount> m_styledFontsReady;
+    TerminalRasterState m_raster;
     std::vector<TerminalKeywordCellStyle> m_keywordStyles;
     std::vector<TerminalKeywordCellStyle> m_searchStyles;
     bool m_searchStylesDirty = false;
@@ -350,10 +341,6 @@ private:
     QString m_middleClickBehavior = QStringLiteral("disabled");
     QString m_wordDelimiters = QStringLiteral(" \t'\"│`|;,()[]{}<>$@:#~");
     QByteArray m_pendingMultilinePaste;
-    std::uint64_t m_revision = 0;
-    std::uint64_t m_rowRasterRevision = 0;
-    bool m_rowRasterCacheEnabled = true;
-    qreal m_backgroundOpacity = 1.0;
     quint16 m_reportedColumns = 0;
     quint16 m_reportedRows = 0;
     ztermy::terminal::TerminalPoint m_selectionAnchor;
@@ -387,7 +374,6 @@ private:
     bool m_keepSelectionAfterCopy = false;
     bool m_confirmMultilinePaste = true;
     bool m_searchCaseSensitive = false;
-    bool m_fullInvalidationPending = true;
     std::optional<bool> m_lastReportedFocus;
     QVariantList m_keywordHighlightRuleValues;
     std::vector<TerminalKeywordRule> m_keywordHighlightRules;
@@ -409,17 +395,6 @@ private:
     std::uint32_t m_pressedLinkId = 0;
     std::vector<TerminalQuickSelectTarget> m_quickSelectTargets;
     QPointF m_lastDoubleClickPosition;
-};
-
-// A bounded, immutable sample painted by the real terminal renderer. No PTY,
-// SSH session, worker, shell startup or per-cell QML objects are involved.
-class TerminalFontPreview : public TerminalItem
-{
-    Q_OBJECT
-    QML_NAMED_ELEMENT(TerminalFontPreview)
-
-public:
-    explicit TerminalFontPreview(QQuickItem *parent = nullptr);
 };
 
 } // namespace ztermy::ui

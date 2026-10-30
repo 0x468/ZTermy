@@ -23,6 +23,7 @@
 #include "ui/PasteOptionsRuntimeSmoke.h"
 #include "ui/ReleaseCardActivityRuntimeSmoke.h"
 #include "ui/RuntimeSmokeItems.h"
+#include "ui/SettingsFocusOrderRuntimeSmoke.h"
 #include "ui/SettingsResetRuntimeSmoke.h"
 #include "ui/SystemIntegrationRuntimeSmoke.h"
 #include "ui/TabRefreshRuntimeSmoke.h"
@@ -131,6 +132,7 @@ using ztermy::ui::sendText;
 using ztermy::ui::SurfaceAlphas;
 using ztermy::ui::terminalViewportHasFocus;
 using ztermy::ui::terminalViewportItem;
+using ztermy::ui::verifySettingsTabOrder;
 using ztermy::ui::visualQuickItem;
 
 using ztermy::ui::cloneMimeData;
@@ -1634,206 +1636,6 @@ struct ResizeHitRuntimeCase
     return searchFocused && pickerFocusRestored;
 }
 
-[[nodiscard]] bool verifySettingsTabOrder(ztermy::NativeWindow &window, ztermy::AppController &controller,
-                                          QQuickItem *rootObject)
-{
-    const auto verifyOrder = [&window, rootObject](const auto &order) {
-        return ztermy::ui::verifySettingsFocusOrder(window, rootObject, order);
-    };
-
-    QQuickItem *appearanceCategory = quickItem(rootObject, "settingsAppearanceCategory");
-    if (!focusItem(window, appearanceCategory, QStringLiteral("settingsAppearanceCategory")))
-    {
-        return false;
-    }
-    sendKey(window, Qt::Key_Space);
-    processWindowEventsFor(std::chrono::milliseconds{100});
-    auto *settingsPane = rootObject->findChild<QObject *>(QStringLiteral("settingsPane"));
-    if (settingsPane == nullptr || settingsPane->property("currentCategory").toString() != QStringLiteral("appearance"))
-    {
-        qCWarning(applicationLog) << "Appearance settings category did not activate from the keyboard";
-        return false;
-    }
-    if (!verifyOrder(std::array{"settingsLanguage", "settingsUiFont", "settingsThemeSystem", "settingsThemeFixed"})
-        || !verifyOrder(std::array{"settingsAccent", "settingsEffectsTier", "settingsBackdrop", "settingsOpacity",
-                                   "settingsReset", "settingsDiscard", "settingsApply"}))
-    {
-        return false;
-    }
-
-    QQuickItem *sftpCategory = quickItem(rootObject, "settingsSftpCategory");
-    if (!focusItem(window, sftpCategory, QStringLiteral("settingsSftpCategory")))
-    {
-        return false;
-    }
-    sendKey(window, Qt::Key_Space);
-    processWindowEventsFor(std::chrono::milliseconds{100});
-    if (settingsPane->property("currentCategory").toString() != QStringLiteral("sftp"))
-    {
-        qCWarning(applicationLog) << "SFTP settings category did not activate from the keyboard";
-        return false;
-    }
-    constexpr std::array sftpOrder{
-        "settingsSftpShowHidden", "settingsSftpConfirmDelete", "settingsReset", "settingsDiscard", "settingsApply",
-    };
-    if (!verifyOrder(sftpOrder))
-    {
-        return false;
-    }
-
-    QQuickItem *securityCategory = quickItem(rootObject, "settingsSecurityCategory");
-    if (!focusItem(window, securityCategory, QStringLiteral("settingsSecurityCategory")))
-    {
-        return false;
-    }
-    sendKey(window, Qt::Key_Space);
-    processWindowEventsFor(std::chrono::milliseconds{100});
-    if (settingsPane->property("currentCategory").toString() != QStringLiteral("security"))
-    {
-        qCWarning(applicationLog) << "Security settings category did not activate from the keyboard";
-        return false;
-    }
-    QQuickItem *portablePassword = quickItem(rootObject, "settingsPortableVaultPassword");
-    QQuickItem *portablePasswordConfirm = quickItem(rootObject, "settingsPortableVaultPasswordConfirm");
-    if (portablePassword == nullptr || portablePasswordConfirm == nullptr
-        || !portablePassword->setProperty("text", QStringLiteral("keyboard-vault-password"))
-        || !portablePasswordConfirm->setProperty("text", QStringLiteral("keyboard-vault-password")))
-    {
-        return false;
-    }
-    constexpr std::array securityOrder{
-        "settingsCredentialStorage",     "settingsCredentialRemoveSource",
-        "settingsPortableVaultPassword", "settingsPortableVaultPasswordConfirm",
-        "settingsPortableVaultAction",   "settingsCredentialCleanupStorage",
-        "settingsRemoveAllCredentials",
-    };
-    if (!verifyOrder(securityOrder))
-    {
-        return false;
-    }
-
-    QQuickItem *terminalCategory = quickItem(rootObject, "settingsTerminalCategory");
-    if (!focusItem(window, terminalCategory, QStringLiteral("settingsTerminalCategory")))
-    {
-        return false;
-    }
-    sendKey(window, Qt::Key_Space);
-    processWindowEventsFor(std::chrono::milliseconds{100});
-    if (settingsPane->property("currentCategory").toString() != QStringLiteral("terminal"))
-    {
-        qCWarning(applicationLog) << "Terminal settings category did not activate from the keyboard";
-        return false;
-    }
-    std::vector<const char *> terminalOrder{
-        "settingsFontFamily",
-        "settingsShowAllTerminalFonts",
-        "settingsFontSize",
-        "settingsLocalShell",
-        "settingsLocalShellRefresh",
-        "settingsCursor",
-        "settingsCursorBlink",
-        "settingsCopyOnSelect",
-        "settingsKeepSelectionAfterCopy",
-        "settingsMultilinePaste",
-        "settingsTerminalRightClick",
-        "settingsTerminalMiddleClick",
-        "settingsTerminalWordDelimiters",
-        "settingsTerminalWheelRows",
-        "settingsSelectionPopupEnabled",
-        "settingsSelectionPopupReset",
-        "settingsSelectionActionDirect-copy",
-        "settingsSelectionActionRetain-copy",
-        "settingsSelectionActionDown-copy",
-        "settingsSelectionActionDirect-ai",
-        "settingsSelectionActionRetain-ai",
-        "settingsSelectionActionUp-ai",
-        "settingsSelectionActionDown-ai",
-        "settingsSelectionActionDirect-search",
-        "settingsSelectionActionRetain-search",
-        "settingsSelectionActionUp-search",
-        "settingsSelectionActionDown-search",
-        "settingsSelectionActionDirect-highlight",
-        "settingsSelectionActionRetain-highlight",
-        "settingsSelectionActionUp-highlight",
-        "settingsSelectionActionDown-highlight",
-        "settingsSelectionActionDirect-unhighlight",
-        "settingsSelectionActionRetain-unhighlight",
-        "settingsSelectionActionUp-unhighlight",
-        "settingsReset",
-        "settingsDiscard",
-        "settingsApply",
-    };
-    QQuickItem *terminalLigatures = quickItem(rootObject, "settingsTerminalLigatures");
-    if (terminalLigatures != nullptr && terminalLigatures->isEnabled())
-    {
-        terminalOrder.insert(terminalOrder.begin() + 3, "settingsTerminalLigatures");
-    }
-    if (!verifyOrder(terminalOrder))
-    {
-        return false;
-    }
-
-    QQuickItem *shortcutsCategory = quickItem(rootObject, "settingsShortcutsCategory");
-    if (!focusItem(window, shortcutsCategory, QStringLiteral("settingsShortcutsCategory")))
-    {
-        return false;
-    }
-    sendKey(window, Qt::Key_Space);
-    processWindowEventsFor(std::chrono::milliseconds{100});
-    if (settingsPane->property("currentCategory").toString() != QStringLiteral("shortcuts"))
-    {
-        qCWarning(applicationLog) << "Shortcuts settings category did not activate from the keyboard";
-        return false;
-    }
-
-    QQuickItem *shortcutRecorder = visualQuickItem(rootObject, "shortcutRecorder_application.commandPalette");
-    if (!focusItem(window, shortcutRecorder, QStringLiteral("shortcutRecorder_application.commandPalette")))
-    {
-        return false;
-    }
-    sendKey(window, Qt::Key_Space);
-    const bool recordingStarted = settingsPane->property("shortcutRecording").toBool();
-    sendKey(window, Qt::Key_F, Qt::ControlModifier | Qt::ShiftModifier);
-    const bool conflictRejected = settingsPane->property("shortcutRecording").toBool();
-    sendKey(window, Qt::Key_P, Qt::ControlModifier | Qt::AltModifier);
-    const auto commandPaletteShortcut = [&controller]() {
-        const QVariantList actions = controller.actions();
-        for (const QVariant &entry : actions)
-        {
-            const QVariantMap action = entry.toMap();
-            if (action.value(QStringLiteral("id")).toString() == QStringLiteral("application.commandPalette"))
-            {
-                return action.value(QStringLiteral("shortcut")).toString();
-            }
-        }
-        return QString{};
-    };
-    const bool shortcutRecorded = !settingsPane->property("shortcutRecording").toBool()
-                                  && commandPaletteShortcut() == QStringLiteral("Ctrl+Alt+P");
-    const bool shortcutReset = controller.resetActionShortcut(QStringLiteral("application.commandPalette"))
-                               && commandPaletteShortcut() == QStringLiteral("Ctrl+Shift+P");
-    if (!recordingStarted || !conflictRejected || !shortcutRecorded || !shortcutReset)
-    {
-        qCWarning(applicationLog) << "Shortcut recorder keyboard route failed"
-                                  << "recordingStarted=" << recordingStarted << "conflictRejected=" << conflictRejected
-                                  << "shortcutRecorded=" << shortcutRecorded << "shortcutReset=" << shortcutReset
-                                  << "effectiveShortcut=" << commandPaletteShortcut();
-        return false;
-    }
-    if (!focusItem(window, terminalCategory, QStringLiteral("settingsTerminalCategory")))
-    {
-        return false;
-    }
-    sendKey(window, Qt::Key_Space);
-    processWindowEventsFor(std::chrono::milliseconds{100});
-    if (settingsPane->property("currentCategory").toString() != QStringLiteral("terminal"))
-    {
-        qCWarning(applicationLog) << "Terminal settings category was not restored after shortcut recording";
-        return false;
-    }
-    return true;
-}
-
 [[nodiscard]] bool verifyHostEditorTabOrder(ztermy::NativeWindow &window, QQuickItem *rootObject)
 {
     constexpr std::array<const char *, 14> passwordOrder{
@@ -2397,13 +2199,18 @@ struct ResizeHitRuntimeCase
     const bool editorCaptured = captureLayout(window, outputDirectory, QStringLiteral("new-host-editor"));
     QQuickItem *hostMasterScroll = quickItem(rootObject, "hostMasterScroll");
     QQuickItem *hostDetailPane = quickItem(rootObject, "hostDetailPane");
-    QQuickItem *hostDetailDismissRegion = quickItem(rootObject, "hostDetailDismissRegion");
+    // The persistent split editor no longer has a modal outside-click shield.
+    // Validate its actual geometry after the reveal animation has settled.
+    const bool editorSettled = processWindowEventsUntil(
+        [hostDetailPane] {
+            return hostDetailPane != nullptr && hostDetailPane->property("reveal").toReal() >= 0.999;
+        },
+        std::chrono::seconds{2});
     const bool editorUsesSplitLayout =
-        hostPane != nullptr && hostMasterScroll != nullptr && hostDetailPane != nullptr
-        && hostDetailDismissRegion != nullptr && hostDetailPane->isVisible() && hostMasterScroll->width() > 300.0
-        && hostDetailPane->width() >= 400.0
+        editorSettled && hostPane != nullptr && hostMasterScroll != nullptr && hostDetailPane != nullptr
+        && hostDetailPane->isVisible() && hostMasterScroll->width() > 300.0 && hostDetailPane->width() >= 399.0
         && qAbs(hostMasterScroll->width() + hostDetailPane->width() - hostPane->width()) <= 1.0
-        && qAbs(hostDetailDismissRegion->width() - hostMasterScroll->width()) <= 1.0;
+        && qAbs(hostDetailPane->x() - hostMasterScroll->width()) <= 1.0;
     if (!editorOpened || !editorCaptured || !editorUsesSplitLayout || !verifyHostEditorTabOrder(window, rootObject))
     {
         qCWarning(applicationLog) << "Enter did not open a keyboard-reachable host editor"
@@ -2491,8 +2298,21 @@ struct ResizeHitRuntimeCase
         return false;
     }
 
-    sendMouseClick(window, *hostDetailDismissRegion,
-                   QPointF{hostDetailDismissRegion->width() / 2.0, hostDetailDismissRegion->height() / 2.0});
+    if (!focusItem(window, quickItem(rootObject, "hostEditorClose"), QStringLiteral("hostEditorClose")))
+        return false;
+    sendKey(window, Qt::Key_Return);
+    auto *discardHostDialog = rootObject->findChild<QObject *>(QStringLiteral("hostDiscardChangesDialog"));
+    if (!processWindowEventsUntil(
+            [discardHostDialog] {
+                return discardHostDialog != nullptr && discardHostDialog->property("visible").toBool();
+            },
+            std::chrono::seconds{2}))
+        return false;
+    // Popup content belongs to the window overlay, not the page visual subtree.
+    QQuickItem *discardHostChanges = visualQuickItem(window.contentItem(), "hostDiscardChanges");
+    if (!focusItem(window, discardHostChanges, QStringLiteral("hostDiscardChanges")))
+        return false;
+    sendKey(window, Qt::Key_Return);
     processWindowEventsFor(std::chrono::milliseconds{250});
     const bool editorDismissed = !hostPane->property("editorExpanded").toBool() && hostDetailPane->width() <= 0.5
                                  && hostMasterScroll->width() >= hostPane->width() - 9.0;

@@ -303,6 +303,8 @@ add_library(ztermy_ssh_transport STATIC
     src/infrastructure/ssh/Libssh2Runtime.cpp
     src/infrastructure/ssh/Libssh2Runtime.h
     src/infrastructure/ssh/Libssh2Session.cpp
+    src/infrastructure/ssh/Libssh2ErrorMapping.cpp
+    src/infrastructure/ssh/Libssh2ErrorMapping.h
     src/infrastructure/ssh/Libssh2Session.h
     src/infrastructure/ssh/SshByteTransport.h
     src/infrastructure/ssh/SshDirectTcpipTransport.cpp
@@ -517,6 +519,8 @@ add_library(ztermy_terminal_engine STATIC
     src/domain/terminal/CommandBlockStore.cpp
     src/domain/terminal/CommandBlockStore.h
     src/domain/terminal/GhosttyTerminalEngine.cpp
+    src/domain/terminal/SemanticPromptNormalizer.cpp
+    src/domain/terminal/SemanticPromptNormalizer.h
     src/domain/terminal/GhosttyInputMapping.cpp
     src/domain/terminal/GhosttyImageSnapshot.cpp
     src/domain/terminal/GhosttyImageSnapshot.h
@@ -897,6 +901,9 @@ add_library(ztermy_terminal_ui STATIC
     src/ui/terminal/TerminalItem.cpp
     src/ui/terminal/TerminalItemBlink.cpp
     src/ui/terminal/TerminalItemPainting.cpp
+    src/ui/terminal/TerminalFontPreview.cpp
+    src/ui/terminal/TerminalFontPreview.h
+    src/ui/terminal/TerminalRasterState.h
     src/ui/terminal/TerminalTextureUpload.cpp
     src/ui/terminal/TerminalTextureUpload.h
     src/ui/terminal/TerminalImagePainter.cpp
@@ -1329,6 +1336,14 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS SettingsPane.qml
 )
 set_source_files_properties(
+    src/ui/qml/AboutSettingsPage.qml
+    PROPERTIES QT_RESOURCE_ALIAS AboutSettingsPage.qml
+)
+set_source_files_properties(
+    src/ui/qml/CredentialStorageChoices.js
+    PROPERTIES QT_RESOURCE_ALIAS CredentialStorageChoices.js
+)
+set_source_files_properties(
     src/ui/qml/SftpBrowser.qml
     PROPERTIES QT_RESOURCE_ALIAS SftpBrowser.qml
 )
@@ -1593,6 +1608,8 @@ qt_add_qml_module(ztermy
         src/ui/qml/SettingsCategoryButton.qml
         src/ui/qml/SettingsRowLabel.qml
         src/ui/qml/SettingsPane.qml
+        src/ui/qml/AboutSettingsPage.qml
+        src/ui/qml/CredentialStorageChoices.js
         src/ui/qml/SftpBrowser.qml
         src/ui/qml/SftpWorkspacePane.qml
         src/ui/qml/ShortcutSettings.qml

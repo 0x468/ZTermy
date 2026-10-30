@@ -1,5 +1,6 @@
 #include "domain/terminal/GhosttyTerminalEngine.h"
 #include "platform/windows/WindowsTerminalInput.h"
+#include "ui/terminal/TerminalFontPreview.h"
 #include "ui/terminal/TerminalItem.h"
 #include "ui/terminal/TerminalKeywordHighlighter.h"
 #include "ui/terminal/TerminalRenderMetrics.h"

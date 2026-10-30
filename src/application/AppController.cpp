@@ -5,8 +5,11 @@
 
 #include "application/ai/AiNativeToolCatalog.h"
 #include "application/ai/AiPrivacyDiagnostics.h"
+#include "application/ai/AiSftpListTool.h"
+#include "application/ai/AiSftpReadTool.h"
 #include "application/ai/AiSystemPromptBuilder.h"
 #include "application/ai/AiTerminalFrameTool.h"
+#include "application/ai/AiTerminalOutputTool.h"
 #include "application/ai/AiUserSkillTool.h"
 #include "application/ai/AiWaitCommandTool.h"
 #include "application/ssh/KeychainController.h"
@@ -16,9 +19,13 @@
 #include "domain/ai/AiContextCompactor.h"
 #include "domain/ai/AiContextSerializer.h"
 #include "domain/ai/AiProviderRecoveryPolicy.h"
+#include "domain/ai/AiTerminalFrameTracker.h"
 #include "domain/ssh/SshIdentityResolver.h"
 #include "domain/ssh/SshTarget.h"
+#include "domain/terminal/SemanticTerminalObserver.h"
 #include "domain/terminal/ShellPathQuoter.h"
+#include "domain/workbench/ScriptExecution.h"
+#include "domain/workbench/ScriptRecorder.h"
 #include "infrastructure/ai/AiTraceSanitizer.h"
 #include "infrastructure/ai/ProviderEndpointResolver.h"
 #include "infrastructure/ai/ProviderErrorParser.h"
@@ -27,6 +34,9 @@
 #include "infrastructure/workbench/QuickCommandStore.h"
 #include "platform/windows/WindowsProtectedClipboard.h"
 #include "ui/terminal/TerminalItem.h"
+#include <condition_variable>
+#include <mutex>
+#include <unordered_set>
 
 #include <QBuffer>
 #include <QClipboard>
